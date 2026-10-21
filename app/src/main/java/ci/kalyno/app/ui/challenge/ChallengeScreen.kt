@@ -1,7 +1,11 @@
 package ci.kalyno.app.ui.challenge
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -15,7 +19,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -25,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -32,7 +36,13 @@ import androidx.compose.ui.unit.sp
 import ci.kalyno.app.data.Challenge
 import ci.kalyno.app.data.ChallengeRepository
 import ci.kalyno.app.data.Feedback
+import ci.kalyno.app.data.Question
 import ci.kalyno.app.ui.theme.*
+import kotlinx.coroutines.delay
+
+// Temps entre l'affichage du message et le retournement de la carte
+private const val FLIP_DELAY_MS = 1100L
+private const val FLIP_DURATION_MS = 600
 
 @Composable
 fun ChallengeScreen(levelId: String, repository: ChallengeRepository, onExit: () -> Unit) {
@@ -58,14 +68,50 @@ private fun ChallengeContent(challenge: Challenge, onExit: () -> Unit) {
 
     if (index >= total) {
         ResultContent(score = score, total = total, onExit = onExit)
-        return
+    } else {
+        QuestionContent(
+            question = challenge.questions[index],
+            index = index,
+            total = total,
+            selected = selected,
+            onSelect = { choice ->
+                if (selected == null) {
+                    selected = choice
+                    if (choice == challenge.questions[index].correctIndex) score += 1
+                }
+            },
+            onNext = {
+                selected = null
+                index += 1
+            },
+            onExit = onExit
+        )
     }
+}
 
-    val question = challenge.questions[index]
+@Composable
+private fun QuestionContent(
+    question: Question,
+    index: Int,
+    total: Int,
+    selected: Int?,
+    onSelect: (Int) -> Unit,
+    onNext: () -> Unit,
+    onExit: () -> Unit
+) {
     val answered = selected != null
     val wasCorrect = selected == question.correctIndex
     val feedback = remember(index, selected) {
         selected?.let { if (it == question.correctIndex) Feedback.success() else Feedback.retry() }
+    }
+
+    // 1) le message apparaît, 2) la carte se retourne, 3) le bouton Suivant apparaît
+    var flipped by remember(index) { mutableStateOf(false) }
+    LaunchedEffect(index, selected) {
+        if (selected != null) {
+            delay(FLIP_DELAY_MS)
+            flipped = true
+        }
     }
 
     val done = index + if (answered) 1 else 0
@@ -87,17 +133,9 @@ private fun ChallengeContent(challenge: Challenge, onExit: () -> Unit) {
                 Text("✕", color = KalynoMuted, fontSize = 20.sp, fontWeight = FontWeight.Bold)
             }
             Spacer(Modifier.width(8.dp))
-            LinearProgressIndicator(
-                progress = { progress },
-                modifier = Modifier
-                    .weight(1f)
-                    .height(14.dp)
-                    .clip(RoundedCornerShape(7.dp)),
-                color = KalynoYellow,
-                trackColor = KalynoBlueSoft
-            )
+            FlameProgressBar(progress = progress, modifier = Modifier.weight(1f))
             Spacer(Modifier.width(12.dp))
-            Text("${done}/$total", color = KalynoMuted, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+            Text("$done/$total", color = KalynoMuted, fontSize = 14.sp, fontWeight = FontWeight.Bold)
         }
 
         Column(
@@ -107,30 +145,7 @@ private fun ChallengeContent(challenge: Challenge, onExit: () -> Unit) {
                 .verticalScroll(rememberScrollState())
                 .padding(top = 20.dp)
         ) {
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(24.dp),
-                color = Color.White,
-                border = BorderStroke(2.dp, KalynoOutline)
-            ) {
-                Column(modifier = Modifier.padding(24.dp)) {
-                    Text(
-                        text = "QUESTION ${index + 1}",
-                        color = KalynoBlue,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        letterSpacing = 1.sp
-                    )
-                    Spacer(Modifier.height(10.dp))
-                    Text(
-                        text = question.prompt,
-                        color = KalynoText,
-                        fontSize = 22.sp,
-                        lineHeight = 30.sp,
-                        fontWeight = FontWeight.ExtraBold
-                    )
-                }
-            }
+            FlipCard(flipped = flipped, question = question, index = index)
 
             Spacer(Modifier.height(20.dp))
 
@@ -142,12 +157,7 @@ private fun ChallengeContent(challenge: Challenge, onExit: () -> Unit) {
                         isCorrect = i == question.correctIndex,
                         isSelected = selected == i,
                         answered = answered,
-                        onClick = {
-                            if (selected == null) {
-                                selected = i
-                                if (i == question.correctIndex) score += 1
-                            }
-                        }
+                        onClick = { onSelect(i) }
                     )
                 }
             }
@@ -169,23 +179,156 @@ private fun ChallengeContent(challenge: Challenge, onExit: () -> Unit) {
                         fontWeight = FontWeight.Bold
                     )
                 }
-                Spacer(Modifier.height(12.dp))
-                Button(
-                    onClick = {
-                        selected = null
-                        index += 1
-                    },
-                    modifier = Modifier.fillMaxWidth().height(56.dp),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = KalynoBlue)
-                ) {
-                    Text(
-                        text = if (index == total - 1) "Voir mon résultat" else "Suivant",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold
-                    )
+                AnimatedVisibility(visible = flipped) {
+                    Column {
+                        Spacer(Modifier.height(12.dp))
+                        Button(
+                            onClick = onNext,
+                            modifier = Modifier.fillMaxWidth().height(56.dp),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = KalynoBlue)
+                        ) {
+                            Text(
+                                text = if (index == total - 1) "Voir mon résultat" else "Suivant",
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun FlameProgressBar(progress: Float, modifier: Modifier = Modifier) {
+    val pulse = rememberInfiniteTransition(label = "flame")
+    val scale by pulse.animateFloat(
+        initialValue = 0.92f,
+        targetValue = 1.12f,
+        animationSpec = infiniteRepeatable(tween(550), RepeatMode.Reverse),
+        label = "flame-scale"
+    )
+
+    BoxWithConstraints(modifier = modifier.height(32.dp)) {
+        val flameSize = 30.dp
+        val barHeight = 14.dp
+        val p = progress.coerceIn(0f, 1f)
+
+        Box(
+            modifier = Modifier
+                .align(Alignment.CenterStart)
+                .fillMaxWidth()
+                .height(barHeight)
+                .clip(RoundedCornerShape(7.dp))
+                .background(KalynoBlueSoft)
+        )
+        Box(
+            modifier = Modifier
+                .align(Alignment.CenterStart)
+                .fillMaxWidth(p)
+                .height(barHeight)
+                .clip(RoundedCornerShape(7.dp))
+                .background(KalynoYellow)
+        )
+        Box(
+            modifier = Modifier
+                .align(Alignment.CenterStart)
+                .offset(x = (maxWidth - flameSize) * p)
+                .size(flameSize)
+                .graphicsLayer {
+                    scaleX = scale
+                    scaleY = scale
+                },
+            contentAlignment = Alignment.Center
+        ) {
+            Text("🔥", fontSize = 22.sp)
+        }
+    }
+}
+
+@Composable
+private fun FlipCard(flipped: Boolean, question: Question, index: Int) {
+    val rotation by animateFloatAsState(
+        targetValue = if (flipped) 180f else 0f,
+        animationSpec = tween(FLIP_DURATION_MS),
+        label = "flip"
+    )
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .graphicsLayer {
+                rotationY = rotation
+                cameraDistance = 14f * density
+            }
+    ) {
+        if (rotation <= 90f) {
+            CardFace(
+                label = "QUESTION ${index + 1}",
+                labelColor = KalynoBlue,
+                background = Color.White,
+                stroke = KalynoOutline
+            ) {
+                Text(
+                    text = question.prompt,
+                    color = KalynoText,
+                    fontSize = 22.sp,
+                    lineHeight = 30.sp,
+                    fontWeight = FontWeight.ExtraBold
+                )
+            }
+        } else {
+            // Verso : on le re-retourne pour qu'il ne soit pas affiché en miroir
+            Box(modifier = Modifier.graphicsLayer { rotationY = 180f }) {
+                CardFace(
+                    label = "BONNE RÉPONSE",
+                    labelColor = KalynoCorrectText,
+                    background = KalynoCorrectSoft,
+                    stroke = KalynoCorrect
+                ) {
+                    Text(
+                        text = question.choices[question.correctIndex],
+                        color = KalynoCorrectText,
+                        fontSize = 24.sp,
+                        lineHeight = 32.sp,
+                        fontWeight = FontWeight.ExtraBold
+                    )
+                    question.explanation?.let {
+                        Spacer(Modifier.height(10.dp))
+                        Text(text = it, color = KalynoText, fontSize = 16.sp, lineHeight = 23.sp)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CardFace(
+    label: String,
+    labelColor: Color,
+    background: Color,
+    stroke: Color,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth().heightIn(min = 170.dp),
+        shape = RoundedCornerShape(24.dp),
+        color = background,
+        border = BorderStroke(2.dp, stroke)
+    ) {
+        Column(modifier = Modifier.padding(24.dp)) {
+            Text(
+                text = label,
+                color = labelColor,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.ExtraBold,
+                letterSpacing = 1.sp
+            )
+            Spacer(Modifier.height(10.dp))
+            content()
         }
     }
 }

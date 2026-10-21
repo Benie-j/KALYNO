@@ -4,7 +4,8 @@ data class Question(
     val id: String,
     val prompt: String,
     val choices: List<String>,
-    val correctIndex: Int
+    val correctIndex: Int,
+    val explanation: String? = null
 )
 
 data class Challenge(val title: String, val questions: List<Question>)
