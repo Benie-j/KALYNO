@@ -3,7 +3,7 @@ package ci.kalyno.app.ui
 import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
-import ci.kalyno.app.data.NoContentRepository
+import ci.kalyno.app.data.SupabaseChallengeRepository
 import ci.kalyno.app.ui.challenge.ChallengeScreen
 import ci.kalyno.app.ui.home.HomeScreen
 import ci.kalyno.app.ui.login.LoginScreen
@@ -12,7 +12,7 @@ import ci.kalyno.app.ui.login.LoginScreen
 fun KalynoApp() {
     var levelId by rememberSaveable { mutableStateOf<String?>(null) }
     var showLogin by rememberSaveable { mutableStateOf(false) }
-    val repository = remember { NoContentRepository() }
+    val repository = remember { SupabaseChallengeRepository() }
     val current = levelId
 
     when {

@@ -29,6 +29,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -38,6 +39,7 @@ import ci.kalyno.app.data.ChallengeRepository
 import ci.kalyno.app.data.ChallengeResult
 import ci.kalyno.app.data.Levels
 import ci.kalyno.app.data.Feedback
+import ci.kalyno.app.data.StreakStore
 import ci.kalyno.app.data.Question
 import ci.kalyno.app.ui.theme.*
 import kotlinx.coroutines.CancellationException
@@ -160,7 +162,9 @@ private fun ChallengeContent(challenge: Challenge, onExit: () -> Unit) {
     var selected by rememberSaveable { mutableStateOf<Int?>(null) }
 
     if (index >= total) {
-        ResultContent(score = score, total = total, onExit = onExit)
+        val context = LocalContext.current
+        val streak = remember { StreakStore(context.applicationContext).recordCompletion() }
+        ResultContent(score = score, total = total, streak = streak, onExit = onExit)
     } else {
         QuestionContent(
             question = challenge.questions[index],
@@ -488,7 +492,7 @@ private fun OptionRow(
 }
 
 @Composable
-private fun ResultContent(score: Int, total: Int, onExit: () -> Unit) {
+private fun ResultContent(score: Int, total: Int, streak: Int, onExit: () -> Unit) {
     Column(
         modifier = Modifier.fillMaxSize().padding(24.dp),
         verticalArrangement = Arrangement.Center,
@@ -499,6 +503,20 @@ private fun ResultContent(score: Int, total: Int, onExit: () -> Unit) {
         Text("Défi terminé !", color = KalynoText, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
         Spacer(Modifier.height(8.dp))
         Text("$score / $total", color = KalynoBlue, fontSize = 48.sp, fontWeight = FontWeight.ExtraBold)
+        Spacer(Modifier.height(12.dp))
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = KalynoYellow.copy(alpha = 0.3f)
+        ) {
+            Text(
+                text = if (streak <= 1) "🔥 Série lancée ! Reviens demain pour la garder." else "🔥 Série : $streak jours de suite !",
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                color = KalynoText,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center
+            )
+        }
         Spacer(Modifier.height(8.dp))
         Text(
             "Continue comme ça, on est ensemble !",
