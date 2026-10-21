@@ -8,7 +8,12 @@ data class Question(
     val explanation: String? = null
 )
 
-data class Challenge(val title: String, val questions: List<Question>)
+data class Challenge(
+    val id: String,
+    val levelId: String,
+    val title: String,
+    val questions: List<Question>
+)
 
 object Levels {
     const val BEPC = "3E"

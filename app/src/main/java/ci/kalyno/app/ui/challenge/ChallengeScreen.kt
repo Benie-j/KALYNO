@@ -35,9 +35,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ci.kalyno.app.data.Challenge
 import ci.kalyno.app.data.ChallengeRepository
+import ci.kalyno.app.data.ChallengeResult
+import ci.kalyno.app.data.Levels
 import ci.kalyno.app.data.Feedback
 import ci.kalyno.app.data.Question
 import ci.kalyno.app.ui.theme.*
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 
 // Temps entre l'affichage du message et le retournement de la carte
@@ -46,15 +49,105 @@ private const val FLIP_DURATION_MS = 600
 
 @Composable
 fun ChallengeScreen(levelId: String, repository: ChallengeRepository, onExit: () -> Unit) {
-    var challenge by remember { mutableStateOf<Challenge?>(null) }
-    LaunchedEffect(levelId) { challenge = repository.firstChallenge(levelId) }
+    var attempt by remember { mutableStateOf(0) }
+    var result by remember(levelId, attempt) { mutableStateOf<ChallengeResult?>(null) }
+
+    LaunchedEffect(levelId, attempt) {
+        result = try {
+            repository.firstChallenge(levelId)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            ChallengeResult.Failed("Impossible de charger le défi.")
+        }
+    }
 
     Box(modifier = Modifier.fillMaxSize().safeDrawingPadding()) {
-        val loaded = challenge
-        if (loaded == null) {
-            CircularProgressIndicator(modifier = Modifier.align(Alignment.Center), color = KalynoBlue)
-        } else {
-            ChallengeContent(loaded, onExit)
+        when (val r = result) {
+            null -> CircularProgressIndicator(
+                modifier = Modifier.align(Alignment.Center),
+                color = KalynoBlue
+            )
+            is ChallengeResult.Loaded -> {
+                // Garde-fou : on n'affiche jamais le contenu d'un autre niveau
+                if (r.challenge.levelId == levelId && r.challenge.questions.isNotEmpty()) {
+                    ChallengeContent(r.challenge, onExit)
+                } else {
+                    ComingSoon(levelId, onExit)
+                }
+            }
+            ChallengeResult.Empty -> ComingSoon(levelId, onExit)
+            is ChallengeResult.Failed -> MessageState(
+                emoji = "📡",
+                title = "Oups, ça n'a pas chargé",
+                text = r.message,
+                primaryLabel = "Réessayer",
+                onPrimary = { attempt += 1 },
+                secondaryLabel = "Retour à l'accueil",
+                onSecondary = onExit
+            )
+        }
+    }
+}
+
+@Composable
+private fun ComingSoon(levelId: String, onExit: () -> Unit) {
+    MessageState(
+        emoji = "🚀",
+        title = "Bientôt disponible",
+        text = "Les défis de ${Levels.label(levelId)} arrivent bientôt. Reviens vite !",
+        primaryLabel = "Retour à l'accueil",
+        onPrimary = onExit
+    )
+}
+
+@Composable
+private fun MessageState(
+    emoji: String,
+    title: String,
+    text: String,
+    primaryLabel: String,
+    onPrimary: () -> Unit,
+    secondaryLabel: String? = null,
+    onSecondary: () -> Unit = {}
+) {
+    Column(
+        modifier = Modifier.fillMaxSize().padding(24.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(emoji, fontSize = 64.sp)
+        Spacer(Modifier.height(12.dp))
+        Text(
+            text = title,
+            color = KalynoText,
+            fontSize = 26.sp,
+            fontWeight = FontWeight.ExtraBold,
+            textAlign = TextAlign.Center
+        )
+        Spacer(Modifier.height(8.dp))
+        Text(text = text, color = KalynoMuted, fontSize = 16.sp, textAlign = TextAlign.Center)
+        Spacer(Modifier.height(32.dp))
+        Button(
+            onClick = onPrimary,
+            modifier = Modifier.fillMaxWidth().height(56.dp),
+            shape = RoundedCornerShape(16.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = KalynoBlue)
+        ) {
+            Text(primaryLabel, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        }
+        if (secondaryLabel != null) {
+            Spacer(Modifier.height(12.dp))
+            Text(
+                text = secondaryLabel,
+                color = KalynoBlue,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(12.dp))
+                    .clickable(onClick = onSecondary)
+                    .padding(12.dp)
+            )
         }
     }
 }
