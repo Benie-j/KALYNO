@@ -1,0 +1,17 @@
+<resources>
+    <style name="Theme.KALYNO" parent="android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:colorAccent">@color/kalyno_blue</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:statusBarColor">@color/kalyno_background</item>
+        <item name="android:navigationBarColor">@color/kalyno_background</item>
+        <item name="android:windowLightNavigationBar">true</item>
+        <item name="android:windowBackground">@color/kalyno_background</item>
+    </style>
+
+    <style name="Theme.KALYNO.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/kalyno_background</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_kalyno_book</item>
+        <item name="postSplashScreenTheme">@style/Theme.KALYNO</item>
+    </style>
+</resources>

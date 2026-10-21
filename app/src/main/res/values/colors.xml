@@ -1,0 +1,9 @@
+<resources>
+    <color name="kalyno_blue">#2457C5</color>
+    <color name="kalyno_light_blue">#4778D8</color>
+    <color name="kalyno_green">#15966A</color>
+    <color name="kalyno_yellow">#FFC857</color>
+    <color name="kalyno_purple">#8457D9</color>
+    <color name="kalyno_background">#F5F8FF</color>
+    <color name="kalyno_text">#202B45</color>
+</resources>
