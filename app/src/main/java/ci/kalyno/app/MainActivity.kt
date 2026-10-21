@@ -56,7 +56,7 @@ class MainActivity : ComponentActivity() {
                 var showHome by remember { mutableStateOf(false) }
 
                 LaunchedEffect(Unit) {
-                    delay(3_000L)
+                    delay(1_500L)
                     showHome = true
                 }
 
