@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import ci.kalyno.app.ui.theme.KalynoBackground
 import ci.kalyno.app.ui.theme.KalynoBlue
+import ci.kalyno.app.ui.KalynoApp
 import ci.kalyno.app.ui.theme.KalynoTheme
 import ci.kalyno.app.ui.theme.KalynoYellow
 import ci.kalyno.app.ui.theme.KalynoText
@@ -64,7 +65,7 @@ class MainActivity : ComponentActivity() {
                     color = KalynoBackground
                 ) {
                     if (showHome) {
-                        FirstScreen()
+                        KalynoApp()
                     } else {
                         ComposeSplash()
                     }
@@ -175,17 +176,3 @@ private class PathBuilder {
     fun build() = path
 }
 
-@Composable
-private fun FirstScreen() {
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = "KALYNO",
-            color = KalynoText,
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold
-        )
-    }
-}
