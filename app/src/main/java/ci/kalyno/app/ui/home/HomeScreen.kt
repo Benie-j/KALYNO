@@ -24,7 +24,7 @@ import ci.kalyno.app.data.Levels
 import ci.kalyno.app.ui.theme.*
 
 @Composable
-fun HomeScreen(onLevelSelected: (String) -> Unit) {
+fun HomeScreen(onLevelSelected: (String) -> Unit, onLoginClick: () -> Unit) {
     var bacOpen by rememberSaveable { mutableStateOf(false) }
 
     Column(
@@ -36,7 +36,7 @@ fun HomeScreen(onLevelSelected: (String) -> Unit) {
         Text(
             text = "KALYNO",
             color = KalynoBlue,
-            fontSize = 22.sp,
+            fontSize = 18.sp,
             fontWeight = FontWeight.ExtraBold,
             letterSpacing = 1.sp
         )
@@ -52,20 +52,20 @@ fun HomeScreen(onLevelSelected: (String) -> Unit) {
             Text(
                 text = "C'est comment élément ?",
                 color = KalynoMuted,
-                fontSize = 16.sp,
+                fontSize = 14.sp,
                 fontWeight = FontWeight.Medium,
                 textAlign = TextAlign.Center
             )
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(6.dp))
             Text(
                 text = "Dis-nous, c'est quoi ton combat de cette année ?",
                 color = KalynoText,
-                fontSize = 28.sp,
-                lineHeight = 36.sp,
+                fontSize = 22.sp,
+                lineHeight = 29.sp,
                 fontWeight = FontWeight.ExtraBold,
                 textAlign = TextAlign.Center
             )
-            Spacer(Modifier.height(32.dp))
+            Spacer(Modifier.height(24.dp))
 
             ChoiceCard(
                 title = "BEPC",
@@ -76,7 +76,7 @@ fun HomeScreen(onLevelSelected: (String) -> Unit) {
                     onLevelSelected(Levels.BEPC)
                 }
             )
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(10.dp))
             ChoiceCard(
                 title = "BAC",
                 subtitle = "Choisis ta série",
@@ -88,8 +88,8 @@ fun HomeScreen(onLevelSelected: (String) -> Unit) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 14.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        .padding(top = 10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Levels.bacSeries.forEach { (id, label) ->
                         SeriesChip(
@@ -101,12 +101,26 @@ fun HomeScreen(onLevelSelected: (String) -> Unit) {
                 }
             }
         }
+
+        Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+            Text(
+                text = "Je suis un ancien",
+                color = KalynoBlue,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(KalynoBlueSoft)
+                    .clickable(onClick = onLoginClick)
+                    .padding(horizontal = 24.dp, vertical = 12.dp)
+            )
+        }
     }
 }
 
 @Composable
 private fun ChoiceCard(title: String, subtitle: String, selected: Boolean, onClick: () -> Unit) {
-    val shape = RoundedCornerShape(20.dp)
+    val shape = RoundedCornerShape(16.dp)
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -114,34 +128,34 @@ private fun ChoiceCard(title: String, subtitle: String, selected: Boolean, onCli
             .background(if (selected) KalynoBlue else Color.White)
             .border(BorderStroke(2.dp, if (selected) KalynoBlue else KalynoOutline), shape)
             .clickable(onClick = onClick)
-            .padding(horizontal = 22.dp, vertical = 18.dp)
+            .padding(horizontal = 18.dp, vertical = 14.dp)
     ) {
         Text(
             text = title,
             color = if (selected) Color.White else KalynoBlue,
-            fontSize = 24.sp,
+            fontSize = 18.sp,
             fontWeight = FontWeight.ExtraBold
         )
         Text(
             text = subtitle,
             color = if (selected) Color.White.copy(alpha = 0.85f) else KalynoMuted,
-            fontSize = 14.sp
+            fontSize = 12.sp
         )
     }
 }
 
 @Composable
 private fun SeriesChip(label: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    val shape = RoundedCornerShape(16.dp)
+    val shape = RoundedCornerShape(14.dp)
     Box(
         modifier = modifier
-            .height(60.dp)
+            .height(48.dp)
             .clip(shape)
             .background(KalynoBlueSoft)
             .border(2.dp, KalynoBlue, shape)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
-        Text(text = label, color = KalynoBlue, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
+        Text(text = label, color = KalynoBlue, fontSize = 15.sp, fontWeight = FontWeight.ExtraBold)
     }
 }
