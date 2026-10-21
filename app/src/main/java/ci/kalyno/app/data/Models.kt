@@ -23,4 +23,12 @@ object Levels {
         BEPC -> "BEPC · 3e"
         else -> bacSeries.firstOrNull { it.first == id }?.let { "BAC · ${it.second}" } ?: id
     }
+
+    fun emoji(id: String): String = when (id) {
+        BEPC -> "🎒"
+        "TLE_A" -> "📖"
+        "TLE_C" -> "📐"
+        "TLE_D" -> "🔬"
+        else -> "🎓"
+    }
 }

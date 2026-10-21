@@ -238,7 +238,9 @@ private fun QuestionContent(
                 .verticalScroll(rememberScrollState())
                 .padding(top = 20.dp)
         ) {
-            FlipCard(flipped = flipped, question = question, index = index)
+            key(index) {
+                FlipCard(flipped = flipped, question = question, index = index)
+            }
 
             Spacer(Modifier.height(20.dp))
 
@@ -265,7 +267,7 @@ private fun QuestionContent(
                     color = if (wasCorrect) KalynoCorrectSoft else KalynoRetrySoft
                 ) {
                     Text(
-                        text = feedback ?: "",
+                        text = (if (wasCorrect) "🎉  " else "💪  ") + (feedback ?: ""),
                         modifier = Modifier.padding(16.dp),
                         color = if (wasCorrect) KalynoCorrectText else KalynoRetryText,
                         fontSize = 17.sp,
@@ -359,7 +361,7 @@ private fun FlipCard(flipped: Boolean, question: Question, index: Int) {
     ) {
         if (rotation <= 90f) {
             CardFace(
-                label = "QUESTION ${index + 1}",
+                label = "🧠 QUESTION ${index + 1}",
                 labelColor = KalynoBlue,
                 background = Color.White,
                 stroke = KalynoOutline
@@ -376,7 +378,7 @@ private fun FlipCard(flipped: Boolean, question: Question, index: Int) {
             // Verso : on le re-retourne pour qu'il ne soit pas affiché en miroir
             Box(modifier = Modifier.graphicsLayer { rotationY = 180f }) {
                 CardFace(
-                    label = "BONNE RÉPONSE",
+                    label = "✅ BONNE RÉPONSE",
                     labelColor = KalynoCorrectText,
                     background = KalynoCorrectSoft,
                     stroke = KalynoCorrect
@@ -390,7 +392,7 @@ private fun FlipCard(flipped: Boolean, question: Question, index: Int) {
                     )
                     question.explanation?.let {
                         Spacer(Modifier.height(10.dp))
-                        Text(text = it, color = KalynoText, fontSize = 16.sp, lineHeight = 23.sp)
+                        Text(text = "💡 $it", color = KalynoText, fontSize = 16.sp, lineHeight = 23.sp)
                     }
                 }
             }
@@ -492,7 +494,7 @@ private fun ResultContent(score: Int, total: Int, onExit: () -> Unit) {
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text("🎉", fontSize = 64.sp)
+        Text(resultEmoji(score, total), fontSize = 64.sp)
         Spacer(Modifier.height(12.dp))
         Text("Défi terminé !", color = KalynoText, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
         Spacer(Modifier.height(8.dp))
@@ -514,4 +516,10 @@ private fun ResultContent(score: Int, total: Int, onExit: () -> Unit) {
             Text("Retour à l'accueil", fontSize = 18.sp, fontWeight = FontWeight.Bold)
         }
     }
+}
+
+private fun resultEmoji(score: Int, total: Int): String = when {
+    total > 0 && score * 10 >= total * 8 -> "🏆"
+    total > 0 && score * 2 >= total -> "🎉"
+    else -> "💪"
 }

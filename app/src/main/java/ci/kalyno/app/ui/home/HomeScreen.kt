@@ -49,6 +49,8 @@ fun HomeScreen(onLevelSelected: (String) -> Unit, onLoginClick: () -> Unit) {
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            Text("🎯", fontSize = 30.sp)
+            Spacer(Modifier.height(6.dp))
             Text(
                 text = "C'est comment élément ?",
                 color = KalynoMuted,
@@ -68,7 +70,7 @@ fun HomeScreen(onLevelSelected: (String) -> Unit, onLoginClick: () -> Unit) {
             Spacer(Modifier.height(24.dp))
 
             ChoiceCard(
-                title = "BEPC",
+                title = "🎒  BEPC",
                 subtitle = "Classe de 3e",
                 selected = false,
                 onClick = {
@@ -78,7 +80,7 @@ fun HomeScreen(onLevelSelected: (String) -> Unit, onLoginClick: () -> Unit) {
             )
             Spacer(Modifier.height(10.dp))
             ChoiceCard(
-                title = "BAC",
+                title = "🎓  BAC",
                 subtitle = "Choisis ta série",
                 selected = bacOpen,
                 onClick = { bacOpen = !bacOpen }
@@ -93,7 +95,7 @@ fun HomeScreen(onLevelSelected: (String) -> Unit, onLoginClick: () -> Unit) {
                 ) {
                     Levels.bacSeries.forEach { (id, label) ->
                         SeriesChip(
-                            label = label,
+                            label = "${Levels.emoji(id)} $label",
                             modifier = Modifier.weight(1f),
                             onClick = { onLevelSelected(id) }
                         )

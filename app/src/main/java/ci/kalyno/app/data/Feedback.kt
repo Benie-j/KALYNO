@@ -2,11 +2,11 @@ package ci.kalyno.app.data
 
 object Feedback {
     private val success = listOf(
-        "On est ensemble ! Bonne réponse ! 🔥",
+        "On est ensemble ! Bonne réponse !",
         "Tu gères ça, c'est ça même !",
         "Tu as tapé dans le mille, on est ensemble !",
         "Tu es en feu ! Continue comme ça !",
-        "Le boss, c'est toi ! 👏",
+        "Le boss, c'est toi !",
         "Tu as déchiré ça, c'est du lourd !",
         "Chapeau ! Tu as bien travaillé !",
         "Ça, c'est du travail bien fait !"

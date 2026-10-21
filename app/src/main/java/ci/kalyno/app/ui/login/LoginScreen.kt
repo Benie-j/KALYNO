@@ -55,7 +55,7 @@ fun LoginScreen(onBack: () -> Unit) {
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
-                text = "Content de te revoir !",
+                text = "👋 Content de te revoir !",
                 color = KalynoText,
                 fontSize = 22.sp,
                 fontWeight = FontWeight.ExtraBold,
