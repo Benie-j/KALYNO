@@ -1,7 +1,6 @@
 package ci.kalyno.app
 
 import android.os.Bundle
-import android.os.SystemClock
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Canvas
@@ -47,12 +46,7 @@ import kotlin.math.sin
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
-        val splash = installSplashScreen()
-        val startedAt = SystemClock.elapsedRealtime()
-
-        splash.setKeepOnScreenCondition {
-            SystemClock.elapsedRealtime() - startedAt < 2_000L
-        }
+        installSplashScreen()
 
         super.onCreate(savedInstanceState)
 
@@ -61,7 +55,7 @@ class MainActivity : ComponentActivity() {
                 var showHome by remember { mutableStateOf(false) }
 
                 LaunchedEffect(Unit) {
-                    delay(5_000L)
+                    delay(3_000L)
                     showHome = true
                 }
 
