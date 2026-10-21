@@ -11,7 +11,8 @@
 
     <style name="Theme.KALYNO.Starting" parent="Theme.SplashScreen">
         <item name="windowSplashScreenBackground">@color/kalyno_background</item>
-        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_kalyno_book</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_kalyno_splash_logo</item>
+        <item name="windowSplashScreenBrandingImage">@drawable/kalyno_branding_benie_groupe</item>
         <item name="postSplashScreenTheme">@style/Theme.KALYNO</item>
     </style>
 </resources>
