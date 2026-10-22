@@ -43,6 +43,8 @@ import ci.kalyno.app.ui.theme.KalynoTheme
 import ci.kalyno.app.ui.theme.KalynoYellow
 import ci.kalyno.app.ui.theme.KalynoText
 import kotlinx.coroutines.delay
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.ui.draw.scale
 import android.os.SystemClock
 import androidx.compose.runtime.SideEffect
 import kotlin.math.sin
@@ -86,7 +88,7 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun ComposeSplash() {
+private fun ComposeSplashOld() {
     val transition = rememberInfiniteTransition(label = "kalyno-wave")
     val phase by transition.animateFloat(
         initialValue = 0f,
@@ -186,3 +188,59 @@ private class PathBuilder {
     fun build() = path
 }
 
+
+@Composable
+private fun ComposeSplash() {
+    SideEffect { splashDrawn = true }
+
+    val transition = rememberInfiniteTransition(label = "kalyno-wave")
+    val phase by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = (2.0 * Math.PI).toFloat(),
+        animationSpec = infiniteRepeatable(
+            animation = tween(900, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "wave-phase"
+    )
+
+    var waveOn by remember { mutableStateOf(false) }
+    val amplitude by animateFloatAsState(
+        targetValue = if (waveOn) 8f else 0f,
+        animationSpec = tween(500),
+        label = "wave-amplitude"
+    )
+    LaunchedEffect(Unit) { waveOn = true }
+
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        Row(
+            modifier = Modifier.scale(0.8f),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            BookLogo()
+
+            Row(
+                modifier = Modifier.padding(start = 18.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                "KALYNO".forEachIndexed { index, letter ->
+                    val y = sin(phase + index * 0.65f) * amplitude
+
+                    Text(
+                        text = letter.toString(),
+                        color = KalynoBlue,
+                        fontSize = 34.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        modifier = Modifier.padding(
+                            top = (12f + y).dp,
+                            bottom = (12f - y).dp
+                        )
+                    )
+                }
+            }
+        }
+    }
+}
