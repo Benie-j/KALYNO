@@ -43,6 +43,7 @@ import ci.kalyno.app.ui.theme.KalynoTheme
 import ci.kalyno.app.ui.theme.KalynoYellow
 import ci.kalyno.app.ui.theme.KalynoText
 import kotlinx.coroutines.delay
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.ui.draw.scale
 import android.os.SystemClock
@@ -56,9 +57,9 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         splashStart = SystemClock.uptimeMillis()
         installSplashScreen().apply {
-            setKeepOnScreenCondition { SystemClock.uptimeMillis() - splashStart < 1500L }
+            setKeepOnScreenCondition { !splashDrawn && SystemClock.uptimeMillis() - splashStart < 400L }
             setOnExitAnimationListener { it.remove() }
-            setKeepOnScreenCondition { SystemClock.uptimeMillis() - splashStart < 1500L }
+            setKeepOnScreenCondition { !splashDrawn && SystemClock.uptimeMillis() - splashStart < 400L }
         }
 
         super.onCreate(savedInstanceState)
@@ -68,7 +69,7 @@ class MainActivity : ComponentActivity() {
                 var showHome by remember { mutableStateOf(false) }
 
                 LaunchedEffect(Unit) {
-                    delay(1_500L)
+                    delay(1_000L)
                     showHome = true
                 }
 
@@ -190,7 +191,7 @@ private class PathBuilder {
 
 
 @Composable
-private fun ComposeSplash() {
+private fun ComposeSplashV1() {
     SideEffect { splashDrawn = true }
 
     val transition = rememberInfiniteTransition(label = "kalyno-wave")
@@ -240,6 +241,68 @@ private fun ComposeSplash() {
                         )
                     )
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ComposeSplash() {
+    SideEffect { splashDrawn = true }
+
+    val transition = rememberInfiniteTransition(label = "kalyno-wave")
+    val phase by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = (2.0 * Math.PI).toFloat(),
+        animationSpec = infiniteRepeatable(
+            animation = tween(900, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "wave-phase"
+    )
+
+    var waveOn by remember { mutableStateOf(false) }
+    val amplitude by animateFloatAsState(
+        targetValue = if (waveOn) 8f else 0f,
+        animationSpec = tween(500),
+        label = "wave-amplitude"
+    )
+    LaunchedEffect(Unit) { waveOn = true }
+
+    BoxWithConstraints(
+        modifier = Modifier
+            .fillMaxSize()
+            .scale(0.8f)
+    ) {
+        val centerX = maxWidth / 2
+
+        Box(
+            modifier = Modifier
+                .align(Alignment.CenterStart)
+                .padding(start = centerX - 113.dp)
+        ) {
+            BookLogo()
+        }
+
+        Row(
+            modifier = Modifier
+                .align(Alignment.CenterStart)
+                .padding(start = centerX - 19.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            "KALYNO".forEachIndexed { index, letter ->
+                val y = sin(phase + index * 0.65f) * amplitude
+
+                Text(
+                    text = letter.toString(),
+                    color = KalynoBlue,
+                    fontSize = 34.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    modifier = Modifier.padding(
+                        top = (12f + y).dp,
+                        bottom = (12f - y).dp
+                    )
+                )
             }
         }
     }
