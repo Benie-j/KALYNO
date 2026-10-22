@@ -56,9 +56,9 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         splashStart = SystemClock.uptimeMillis()
         installSplashScreen().apply {
-            setKeepOnScreenCondition { !splashDrawn }
+            setKeepOnScreenCondition { SystemClock.uptimeMillis() - splashStart < 1500L }
             setOnExitAnimationListener { it.remove() }
-            setKeepOnScreenCondition { !splashDrawn && SystemClock.uptimeMillis() - splashStart < 50L }
+            setKeepOnScreenCondition { SystemClock.uptimeMillis() - splashStart < 1500L }
         }
 
         super.onCreate(savedInstanceState)
