@@ -8,6 +8,27 @@ android {
     namespace = "ci.kalyno.app"
     compileSdk = 36
 
+    signingConfigs {
+        create("release") {
+            val ksPath = System.getenv("KALYNO_KEYSTORE_PATH")
+            if (ksPath != null) {
+                storeFile = file(ksPath)
+                storePassword = System.getenv("KALYNO_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("KALYNO_KEY_ALIAS")
+                keyPassword = System.getenv("KALYNO_KEY_PASSWORD")
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            if (System.getenv("KALYNO_KEYSTORE_PATH") != null) {
+                signingConfig = signingConfigs.getByName("release")
+            }
+            isMinifyEnabled = false
+        }
+    }
+
     defaultConfig {
         applicationId = "ci.kalyno.app"
         minSdk = 23
