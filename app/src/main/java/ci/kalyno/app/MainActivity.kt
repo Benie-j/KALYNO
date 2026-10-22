@@ -43,11 +43,17 @@ import ci.kalyno.app.ui.theme.KalynoTheme
 import ci.kalyno.app.ui.theme.KalynoYellow
 import ci.kalyno.app.ui.theme.KalynoText
 import kotlinx.coroutines.delay
+import androidx.compose.runtime.SideEffect
 import kotlin.math.sin
+
+private var splashDrawn = false
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
-        installSplashScreen()
+        installSplashScreen().apply {
+            setKeepOnScreenCondition { !splashDrawn }
+            setOnExitAnimationListener { it.remove() }
+        }
 
         super.onCreate(savedInstanceState)
 
