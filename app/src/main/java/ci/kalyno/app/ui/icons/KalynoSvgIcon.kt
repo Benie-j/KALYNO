@@ -35,10 +35,12 @@ fun KalynoSvgIcon(
         val paint = Paint().apply {
             colorFilter = PorterDuffColorFilter(tint.toArgb(), PorterDuff.Mode.SRC_IN)
         }
-        val save = canvas.saveLayer(0f, 0f, size.width, size.height, paint)
+        val canvasWidth = drawContext.size.width
+        val canvasHeight = drawContext.size.height
+        val save = canvas.saveLayer(0f, 0f, canvasWidth, canvasHeight, paint)
         canvas.scale(
-            size.width.toPx() / (document.documentWidth.takeIf { it > 0f } ?: 24f),
-            size.height.toPx() / (document.documentHeight.takeIf { it > 0f } ?: 24f)
+            canvasWidth / (document.documentWidth.takeIf { it > 0f } ?: 24f),
+            canvasHeight / (document.documentHeight.takeIf { it > 0f } ?: 24f)
         )
         document.renderToCanvas(canvas)
         canvas.restoreToCount(save)
