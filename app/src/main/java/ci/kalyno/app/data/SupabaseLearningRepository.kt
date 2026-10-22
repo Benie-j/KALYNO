@@ -112,8 +112,10 @@ class SupabaseLearningRepository {
                             LearningSubject(
                                 id = subjectId,
                                 name = subject.optString("name", ""),
-                                emoji = subject.optString("emoji", "📘")
-                                    .ifBlank { "📘" },
+                                emoji = subject.optString("emoji")
+                                    .takeUnless {
+                                        it.isBlank() || it.equals("null", ignoreCase = true)
+                                    } ?: "📘",
                                 chapters = chapters
                             )
                         )
