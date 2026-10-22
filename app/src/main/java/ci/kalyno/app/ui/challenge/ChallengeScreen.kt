@@ -1,5 +1,7 @@
 package ci.kalyno.app.ui.challenge
 
+import ci.kalyno.app.ui.icons.KalynoSvgIcon
+
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -92,7 +94,7 @@ fun ChallengeScreen(
                 }
             }
             is ChallengeResult.Failed -> MessageState(
-                emoji = "📡",
+                iconName = "radio-tower",
                 title = "Oups, ça n'a pas chargé",
                 text = r.message,
                 primaryLabel = "Réessayer",
@@ -107,7 +109,7 @@ fun ChallengeScreen(
 @Composable
 private fun ComingSoon(levelId: String, onExit: () -> Unit) {
     MessageState(
-        emoji = "🚀",
+        iconName = "rocket",
         title = "Bientôt disponible",
         text = "Les défis de ${Levels.label(levelId)} arrivent bientôt. Reviens vite !",
         primaryLabel = "Retour à l'accueil",
@@ -117,7 +119,7 @@ private fun ComingSoon(levelId: String, onExit: () -> Unit) {
 
 @Composable
 private fun MessageState(
-    emoji: String,
+    iconName: String,
     title: String,
     text: String,
     primaryLabel: String,
@@ -130,7 +132,7 @@ private fun MessageState(
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(emoji, fontSize = 64.sp)
+        KalynoSvgIcon(name = iconName, size = 64.dp)
         Spacer(Modifier.height(12.dp))
         Text(
             text = title,
@@ -283,7 +285,7 @@ private fun QuestionContent(
                     color = if (wasCorrect) KalynoCorrectSoft else KalynoRetrySoft
                 ) {
                     Text(
-                        text = (if (wasCorrect) "🎉  " else "💪  ") + (feedback ?: ""),
+                        text = (if (wasCorrect) "Correct : " else "À revoir : ") + (feedback ?: ""),
                         modifier = Modifier.padding(16.dp),
                         color = if (wasCorrect) KalynoCorrectText else KalynoRetryText,
                         fontSize = 17.sp,
@@ -354,7 +356,7 @@ private fun FlameProgressBar(progress: Float, modifier: Modifier = Modifier) {
                 },
             contentAlignment = Alignment.Center
         ) {
-            Text("🔥", fontSize = 22.sp)
+            KalynoSvgIcon(name = "flame", size = 22.dp)
         }
     }
 }
@@ -377,7 +379,7 @@ private fun FlipCard(flipped: Boolean, question: Question, index: Int) {
     ) {
         if (rotation <= 90f) {
             CardFace(
-                label = "🧠 QUESTION ${index + 1}",
+                label = "QUESTION ${index + 1}",
                 labelColor = KalynoBlue,
                 background = Color.White,
                 stroke = KalynoOutline
@@ -394,7 +396,7 @@ private fun FlipCard(flipped: Boolean, question: Question, index: Int) {
             // Verso : on le re-retourne pour qu'il ne soit pas affiché en miroir
             Box(modifier = Modifier.graphicsLayer { rotationY = 180f }) {
                 CardFace(
-                    label = "✅ BONNE RÉPONSE",
+                    label = "BONNE RÉPONSE",
                     labelColor = KalynoCorrectText,
                     background = KalynoCorrectSoft,
                     stroke = KalynoCorrect
@@ -408,7 +410,7 @@ private fun FlipCard(flipped: Boolean, question: Question, index: Int) {
                     )
                     question.explanation?.let {
                         Spacer(Modifier.height(10.dp))
-                        Text(text = "💡 $it", color = KalynoText, fontSize = 16.sp, lineHeight = 23.sp)
+                        Text(text = it, color = KalynoText, fontSize = 16.sp, lineHeight = 23.sp)
                     }
                 }
             }
@@ -510,7 +512,7 @@ private fun ResultContent(score: Int, total: Int, streak: Int, onExit: () -> Uni
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(resultEmoji(score, total), fontSize = 64.sp)
+        KalynoSvgIcon(name = resultIcon(score, total), size = 64.dp)
         Spacer(Modifier.height(12.dp))
         Text("Défi terminé !", color = KalynoText, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
         Spacer(Modifier.height(8.dp))
@@ -521,7 +523,7 @@ private fun ResultContent(score: Int, total: Int, streak: Int, onExit: () -> Uni
             color = KalynoYellow.copy(alpha = 0.3f)
         ) {
             Text(
-                text = if (streak <= 1) "🔥 Série lancée ! Reviens demain pour la garder." else "🔥 Série : $streak jours de suite !",
+                text = if (streak <= 1) "Série lancée ! Reviens demain pour la garder." else "Série : $streak jours de suite !",
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
                 color = KalynoText,
                 fontSize = 15.sp,
@@ -548,8 +550,8 @@ private fun ResultContent(score: Int, total: Int, streak: Int, onExit: () -> Uni
     }
 }
 
-private fun resultEmoji(score: Int, total: Int): String = when {
-    total > 0 && score * 10 >= total * 8 -> "🏆"
-    total > 0 && score * 2 >= total -> "🎉"
-    else -> "💪"
+private fun resultIcon(score: Int, total: Int): String = when {
+    total > 0 && score * 10 >= total * 8 -> "trophy"
+    total > 0 && score * 2 >= total -> "party-popper"
+    else -> "dumbbell"
 }

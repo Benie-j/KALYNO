@@ -32,15 +32,16 @@ import ci.kalyno.app.data.SupabaseLearningRepository
 import ci.kalyno.app.data.LearningSubject
 import ci.kalyno.app.data.LearningCard
 import ci.kalyno.app.ui.theme.*
+import ci.kalyno.app.ui.icons.KalynoSvgIcon
 import kotlinx.coroutines.CancellationException
 
-private data class TabItem(val emoji: String, val label: String)
+private data class TabItem(val icon: String, val label: String)
 
 private val TABS = listOf(
-    TabItem("🏠", "Accueil"),
-    TabItem("🧠", "Dojo"),
-    TabItem("📚", "Explorer"),
-    TabItem("👤", "Profil")
+    TabItem("home", "Accueil"),
+    TabItem("brain", "Dojo"),
+    TabItem("book-open", "Explorer"),
+    TabItem("user-round", "Profil")
 )
 
 @Composable
@@ -60,7 +61,7 @@ fun MainScreen(
                     NavigationBarItem(
                         selected = tab == index,
                         onClick = { tab = index },
-                        icon = { Text(item.emoji, fontSize = 22.sp) },
+                        icon = { KalynoSvgIcon(name = item.icon, size = 24.dp, tint = if (tab == index) KalynoBlue else KalynoMuted) },
                         label = {
                             Text(
                                 item.label,
