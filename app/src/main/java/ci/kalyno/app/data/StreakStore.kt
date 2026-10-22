@@ -20,6 +20,13 @@ class StreakStore(context: Context) {
         return updated
     }
 
+    /** Série en cours, sans rien modifier (0 si elle est interrompue). */
+    fun current(): Int {
+        val today = System.currentTimeMillis() / DAY_MS
+        val last = prefs.getLong(KEY_LAST_DAY, -1L)
+        return if (last >= today - 1) prefs.getInt(KEY_STREAK, 0) else 0
+    }
+
     private companion object {
         const val DAY_MS = 86_400_000L
         const val KEY_LAST_DAY = "last_day"

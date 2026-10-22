@@ -50,7 +50,12 @@ private const val FLIP_DELAY_MS = 1100L
 private const val FLIP_DURATION_MS = 600
 
 @Composable
-fun ChallengeScreen(levelId: String, repository: ChallengeRepository, onExit: () -> Unit) {
+fun ChallengeScreen(
+    levelId: String,
+    repository: ChallengeRepository,
+    onExit: () -> Unit,
+    onUnavailable: (() -> Unit)? = null
+) {
     var attempt by remember { mutableStateOf(0) }
     var result by remember(levelId, attempt) { mutableStateOf<ChallengeResult?>(null) }
 
@@ -78,7 +83,14 @@ fun ChallengeScreen(levelId: String, repository: ChallengeRepository, onExit: ()
                     ComingSoon(levelId, onExit)
                 }
             }
-            ChallengeResult.Empty -> ComingSoon(levelId, onExit)
+            ChallengeResult.Empty -> {
+                if (onUnavailable != null) {
+                    // Aucune démo publiée : on passe directement au tableau de bord
+                    LaunchedEffect(Unit) { onUnavailable() }
+                } else {
+                    ComingSoon(levelId, onExit)
+                }
+            }
             is ChallengeResult.Failed -> MessageState(
                 emoji = "📡",
                 title = "Oups, ça n'a pas chargé",
@@ -86,7 +98,7 @@ fun ChallengeScreen(levelId: String, repository: ChallengeRepository, onExit: ()
                 primaryLabel = "Réessayer",
                 onPrimary = { attempt += 1 },
                 secondaryLabel = "Retour à l'accueil",
-                onSecondary = onExit
+                onSecondary = onUnavailable ?: onExit
             )
         }
     }
