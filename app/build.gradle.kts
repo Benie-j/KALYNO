@@ -1,4 +1,5 @@
 plugins {
+    id("org.jetbrains.kotlin.kapt")
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
@@ -52,6 +53,9 @@ android {
 }
 
 dependencies {
+    implementation("androidx.room:room-runtime:2.7.1")
+    implementation("androidx.room:room-ktx:2.7.1")
+    kapt("androidx.room:room-compiler:2.7.1")
     implementation("com.caverock:androidsvg-aar:1.4")
     implementation("androidx.core:core-ktx:1.17.0")
     implementation("androidx.core:core-splashscreen:1.0.1")
