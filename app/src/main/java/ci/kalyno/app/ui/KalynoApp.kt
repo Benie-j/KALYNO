@@ -10,6 +10,7 @@ import ci.kalyno.app.ui.challenge.ChallengeScreen
 import ci.kalyno.app.ui.home.HomeScreen
 import ci.kalyno.app.ui.login.LoginScreen
 import ci.kalyno.app.ui.main.MainScreen
+import ci.kalyno.app.ui.onboarding.NicknameScreen
 
 @Composable
 fun KalynoApp() {
@@ -18,12 +19,14 @@ fun KalynoApp() {
     val repository = remember { SupabaseChallengeRepository() }
 
     var level by remember { mutableStateOf(prefs.level) }
+    var nickname by remember { mutableStateOf(prefs.nickname) }
     var demoDone by remember { mutableStateOf(prefs.demoDone) }
     // Vrai quand aucune démo n'est publiée : on passe au tableau de bord sans la marquer comme faite
     var skipDemo by remember { mutableStateOf(false) }
     var showLogin by rememberSaveable { mutableStateOf(false) }
 
     val current = level
+    val name = nickname
 
     when {
         showLogin -> {
@@ -37,6 +40,16 @@ fun KalynoApp() {
             },
             onLoginClick = { showLogin = true }
         )
+        name == null -> {
+            BackHandler {
+                prefs.level = null
+                level = null
+            }
+            NicknameScreen(onConfirm = {
+                prefs.nickname = it
+                nickname = it
+            })
+        }
         !demoDone && !skipDemo -> ChallengeScreen(
             levelId = current,
             repository = repository,
@@ -48,6 +61,7 @@ fun KalynoApp() {
         )
         else -> MainScreen(
             levelId = current,
+            nickname = name,
             onChangeLevel = {
                 prefs.level = null
                 level = null

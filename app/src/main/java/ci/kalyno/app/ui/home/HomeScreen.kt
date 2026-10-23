@@ -70,7 +70,7 @@ fun HomeScreen(onLevelSelected: (String) -> Unit, onLoginClick: () -> Unit) {
             Spacer(Modifier.height(24.dp))
 
             ChoiceCard(
-                title = "🎒  BEPC",
+                title = "🎒  3e BEPC",
                 subtitle = "Classe de 3e",
                 selected = false,
                 onClick = {
@@ -80,7 +80,7 @@ fun HomeScreen(onLevelSelected: (String) -> Unit, onLoginClick: () -> Unit) {
             )
             Spacer(Modifier.height(10.dp))
             ChoiceCard(
-                title = "🎓  BAC",
+                title = "🎓  Terminale",
                 subtitle = "Choisis ta série",
                 selected = bacOpen,
                 onClick = { bacOpen = !bacOpen }

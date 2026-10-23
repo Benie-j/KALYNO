@@ -47,6 +47,7 @@ private val TABS = listOf(
 @Composable
 fun MainScreen(
     levelId: String,
+    nickname: String,
     onChangeLevel: () -> Unit,
     onLoginClick: () -> Unit
 ) {
@@ -85,7 +86,7 @@ fun MainScreen(
                 .padding(padding)
         ) {
             when (tab) {
-                0 -> DashboardScreen(levelId)
+                0 -> PersonalDashboard(levelId, nickname)
                 1 -> DojoScreen(levelId)
                 2 -> ExplorerScreen(levelId)
                 else -> ProfileScreen(levelId, onChangeLevel, onLoginClick)

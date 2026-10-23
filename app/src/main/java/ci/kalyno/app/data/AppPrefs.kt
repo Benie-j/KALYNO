@@ -14,6 +14,15 @@ class AppPrefs(context: Context) {
             editor.apply()
         }
 
+    /** Pseudo choisi à l'onboarding (null tant qu'il n'est pas saisi). */
+    var nickname: String?
+        get() = prefs.getString(KEY_NICKNAME, null)
+        set(value) {
+            val editor = prefs.edit()
+            if (value == null) editor.remove(KEY_NICKNAME) else editor.putString(KEY_NICKNAME, value)
+            editor.apply()
+        }
+
     /** Vrai une fois la démo (défi de découverte) terminée ou quittée. */
     var demoDone: Boolean
         get() = prefs.getBoolean(KEY_DEMO_DONE, false)
@@ -23,6 +32,7 @@ class AppPrefs(context: Context) {
 
     private companion object {
         const val KEY_LEVEL = "level"
+        const val KEY_NICKNAME = "nickname"
         const val KEY_DEMO_DONE = "demo_done"
     }
 }
