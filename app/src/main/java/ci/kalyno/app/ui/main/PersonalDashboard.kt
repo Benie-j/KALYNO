@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ci.kalyno.app.data.Levels
 import ci.kalyno.app.data.dashboard.DashboardUiState
+import ci.kalyno.app.data.dashboard.MissionStatus
 import ci.kalyno.app.data.dashboard.MissionUi
 import ci.kalyno.app.ui.icons.KalynoSvgIcon
 import ci.kalyno.app.ui.theme.*
@@ -76,7 +77,7 @@ fun PersonalDashboard(
         }
 
         GreetingCard(nickname = state.nickname)
-        MissionCard(state = state, onStart = onStartMission, onRetry = onRetry)
+        MissionCard(state = state, onStart = onStartMission, onRetry = onRetry, onReview = onReviewUrgent)
         UrgentCard(state = state, onReview = onReviewUrgent)
     }
 }
@@ -112,7 +113,12 @@ private fun GreetingCard(nickname: String) {
 // ---------- b) Mission du jour ----------
 
 @Composable
-private fun MissionCard(state: DashboardUiState, onStart: () -> Unit, onRetry: () -> Unit) {
+private fun MissionCard(
+    state: DashboardUiState,
+    onStart: () -> Unit,
+    onRetry: () -> Unit,
+    onReview: () -> Unit
+) {
     val mission = state.mission
 
     DashCard {
@@ -120,6 +126,17 @@ private fun MissionCard(state: DashboardUiState, onStart: () -> Unit, onRetry: (
         Spacer(Modifier.height(10.dp))
 
         when {
+            state.missionStatus == MissionStatus.BACKLOG -> Column {
+                Text(
+                    text = "Tes révisions en retard d'abord ! Tes nouvelles cartes se débloquent dès que tu les as rattrapées.",
+                    color = KalynoText,
+                    fontSize = 15.sp,
+                    lineHeight = 22.sp
+                )
+                Spacer(Modifier.height(12.dp))
+                PrimaryButton("Voir mes révisions", onReview)
+            }
+
             mission != null -> MissionContent(mission, onStart)
 
             state.loading -> Row(verticalAlignment = Alignment.CenterVertically) {
@@ -150,29 +167,50 @@ private fun MissionCard(state: DashboardUiState, onStart: () -> Unit, onRetry: (
 
 @Composable
 private fun MissionContent(mission: MissionUi, onStart: () -> Unit) {
-    Text(
-        text = "${mission.subjectEmoji} ${mission.subjectName}",
-        color = KalynoBlue,
-        fontSize = 13.sp,
-        fontWeight = FontWeight.Bold
-    )
-    Spacer(Modifier.height(2.dp))
-    Text(
-        text = mission.chapterTitle,
-        color = KalynoText,
-        fontSize = 20.sp,
-        lineHeight = 26.sp,
-        fontWeight = FontWeight.ExtraBold
-    )
-    Spacer(Modifier.height(6.dp))
-    Text(
-        text = buildString {
-            append(if (mission.toDiscover == 1) "1 carte à découvrir" else "${mission.toDiscover} cartes à découvrir")
-            if (mission.minutes > 0) append(" · environ ${mission.minutes} min")
-        },
-        color = KalynoMuted,
-        fontSize = 14.sp
-    )
+    val done = mission.items.isEmpty()
+
+    if (mission.subjectName.isNotBlank()) {
+        Text(
+            text = "${mission.subjectEmoji} ${mission.subjectName}".trim(),
+            color = KalynoBlue,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Bold
+        )
+        Spacer(Modifier.height(2.dp))
+    }
+    if (done) {
+        Text(
+            text = "🎉 Mission accomplie !",
+            color = KalynoText,
+            fontSize = 20.sp,
+            lineHeight = 26.sp,
+            fontWeight = FontWeight.ExtraBold
+        )
+        Spacer(Modifier.height(6.dp))
+        Text(
+            text = "Reviens demain pour de nouvelles cartes.",
+            color = KalynoMuted,
+            fontSize = 14.sp
+        )
+    } else {
+        Text(
+            text = mission.chapterTitle,
+            color = KalynoText,
+            fontSize = 20.sp,
+            lineHeight = 26.sp,
+            fontWeight = FontWeight.ExtraBold
+        )
+        Spacer(Modifier.height(6.dp))
+        Text(
+            text = buildString {
+                val n = mission.items.size
+                append(if (n == 1) "1 carte à découvrir" else "$n cartes à découvrir")
+                if (mission.minutes > 0) append(" · environ ${mission.minutes} min")
+            },
+            color = KalynoMuted,
+            fontSize = 14.sp
+        )
+    }
 
     Spacer(Modifier.height(14.dp))
     LinearProgressIndicator(
@@ -186,14 +224,16 @@ private fun MissionContent(mission: MissionUi, onStart: () -> Unit) {
     )
     Spacer(Modifier.height(6.dp))
     Text(
-        text = "${mission.done}/${mission.total} cartes vues",
+        text = "${mission.doneToday}/${mission.targetToday} cartes découvertes aujourd'hui",
         color = KalynoMuted,
         fontSize = 12.sp,
         fontWeight = FontWeight.Medium
     )
 
-    Spacer(Modifier.height(16.dp))
-    PrimaryButton("Démarrer ma Mission", onStart)
+    if (!done) {
+        Spacer(Modifier.height(16.dp))
+        PrimaryButton("Démarrer ma Mission", onStart)
+    }
 }
 
 // ---------- c) Alerte Révisions Urgentes (SRS) ----------

@@ -26,6 +26,7 @@ class DashboardRepository(context: Context) {
 
     data class Snapshot(
         val mission: MissionUi?,
+        val missionStatus: MissionStatus,
         val urgentTotal: Int,
         val urgentTopics: List<UrgentTopic>,
         val urgentItems: List<ReviewItem>
@@ -96,17 +97,57 @@ class DashboardRepository(context: Context) {
                     count = list.size
                 )
             }
-            .take(MAX_TOPICS)
+            .take(SrsConfig.MAX_TOPICS)
 
         // ----- Mission du jour -----
+        val dueCount = urgentItems.size
+        val startOfToday = SrsEngine.startOfDay(now)
+        val introducedToday = dao.countIntroducedSince(studentId, startOfToday)
+        val allowedToday = SrsConfig.newCardQuota(dueCount)
         val introduced = dao.progressedCardIds(studentId).toSet()
-        val mission = content?.let { buildMission(it, coefficients, introduced) }
+        val lastIntroduced = dao.lastIntroductionBySubject(studentId).associate { it.subjectId to it.lastIntroducedAt }
+
+        val remainingQuota = (allowedToday - introducedToday).coerceAtLeast(0)
+        val mission = content?.let {
+            buildMission(
+                subjects = it,
+                coefficients = coefficients,
+                introduced = introduced,
+                lastIntroduced = lastIntroduced,
+                now = now,
+                startOfToday = startOfToday,
+                remainingQuota = remainingQuota,
+                doneToday = introducedToday,
+                targetToday = maxOf(allowedToday, introducedToday)
+            )
+        }
+        val status = when {
+            content == null -> MissionStatus.EMPTY
+            introducedToday > 0 && remainingQuota == 0 -> MissionStatus.DONE_TODAY
+            allowedToday == 0 -> MissionStatus.BACKLOG
+            mission != null && mission.items.isNotEmpty() -> MissionStatus.READY
+            introducedToday > 0 -> MissionStatus.DONE_TODAY
+            else -> MissionStatus.EMPTY
+        }
 
         Snapshot(
-            mission = mission,
+            mission = when (status) {
+                MissionStatus.READY -> mission
+                MissionStatus.DONE_TODAY -> mission ?: MissionUi(
+                    subjectName = "",
+                    subjectEmoji = "",
+                    chapterTitle = "",
+                    minutes = 0,
+                    doneToday = introducedToday,
+                    targetToday = maxOf(allowedToday, introducedToday),
+                    items = emptyList()
+                )
+                else -> null
+            },
+            missionStatus = status,
             urgentTotal = urgentItems.size,
             urgentTopics = topics,
-            urgentItems = urgentItems.take(SESSION_SIZE)
+            urgentItems = urgentItems.take(SrsConfig.SESSION_SIZE)
         )
     }
 
@@ -152,40 +193,62 @@ class DashboardRepository(context: Context) {
         cards.chunked(300).forEach { dao.upsertFlashcards(it) }
     }
 
+    /**
+     * Choisit la matière du jour puis les cartes à découvrir :
+     * - on reste sur la matière déjà commencée aujourd'hui (mission stable dans la journée) ;
+     * - sinon, score = coefficient × (1 + jours depuis la dernière nouvelle carte de la matière),
+     *   ce qui fait tourner les matières tout en favorisant les gros coefficients ;
+     * - les cartes sont prises chapitre par chapitre, dans la limite du quota restant.
+     */
     private fun buildMission(
         subjects: List<LearningSubject>,
         coefficients: Map<String, Float>,
-        introduced: Set<String>
+        introduced: Set<String>,
+        lastIntroduced: Map<String, Long>,
+        now: Long,
+        startOfToday: Long,
+        remainingQuota: Int,
+        doneToday: Int,
+        targetToday: Int
     ): MissionUi? {
-        var bestSubject: LearningSubject? = null
-        var bestChapter: LearningChapter? = null
-        var bestCoefficient = 0f
+        class Candidate(
+            val subject: LearningSubject,
+            val chapters: List<Pair<LearningChapter, List<ReviewItem>>>
+        )
 
-        for (s in subjects) for (ch in s.chapters) {
-            val usable = ch.cards.mapNotNull { itemFrom(it, s.name, ch.title) }
-            if (usable.isEmpty() || usable.all { it.cardId in introduced }) continue
-            val coefficient = coefficients[s.id] ?: 1f
-            if (bestSubject == null || coefficient > bestCoefficient) {
-                bestSubject = s
-                bestChapter = ch
-                bestCoefficient = coefficient
+        val candidates = subjects.mapNotNull { s ->
+            val chapters = s.chapters.mapNotNull { ch ->
+                val remaining = ch.cards
+                    .mapNotNull { itemFrom(it, s.name, ch.title) }
+                    .filter { it.cardId !in introduced }
+                if (remaining.isEmpty()) null else ch to remaining
             }
+            if (chapters.isEmpty()) null else Candidate(s, chapters)
         }
+        if (candidates.isEmpty()) return null
 
-        val subject = bestSubject ?: return null
-        val chapter = bestChapter ?: return null
-        val usable = chapter.cards.mapNotNull { itemFrom(it, subject.name, chapter.title) }
-        val remaining = usable.filter { it.cardId !in introduced }
+        val startedToday = candidates
+            .filter { (lastIntroduced[it.subject.id] ?: 0L) >= startOfToday }
+            .maxByOrNull { lastIntroduced[it.subject.id] ?: 0L }
+
+        val chosen = startedToday ?: candidates.maxByOrNull { c ->
+            val last = lastIntroduced[c.subject.id]
+            val daysSince = if (last == null) SrsConfig.NEVER_STUDIED_DAYS
+            else ((now - last) / DAY_MS).toInt().coerceAtLeast(0)
+            (coefficients[c.subject.id] ?: 1f) * (1 + daysSince)
+        } ?: return null
+
+        val items = chosen.chapters.flatMap { it.second }.take(remainingQuota)
+        val firstChapter = chosen.chapters.first().first
 
         return MissionUi(
-            subjectName = subject.name,
-            subjectEmoji = subject.emoji,
-            chapterTitle = chapter.title,
-            minutes = chapter.capsules.sumOf { it.minutes },
-            toDiscover = minOf(remaining.size, SESSION_SIZE),
-            done = usable.size - remaining.size,
-            total = usable.size,
-            items = remaining.take(SESSION_SIZE)
+            subjectName = chosen.subject.name,
+            subjectEmoji = chosen.subject.emoji,
+            chapterTitle = firstChapter.title,
+            minutes = firstChapter.capsules.sumOf { it.minutes },
+            doneToday = doneToday,
+            targetToday = targetToday,
+            items = items
         )
     }
 
@@ -228,7 +291,6 @@ class DashboardRepository(context: Context) {
     }
 
     private companion object {
-        const val SESSION_SIZE = 10
-        const val MAX_TOPICS = 3
+        const val DAY_MS = 24 * 60 * 60 * 1000L
     }
 }

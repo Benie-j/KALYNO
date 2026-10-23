@@ -58,6 +58,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                         error = null,
                         streak = streakStore.current(),
                         mission = snapshot.mission,
+                        missionStatus = snapshot.missionStatus,
                         urgentTotal = snapshot.urgentTotal,
                         urgentTopics = snapshot.urgentTopics,
                         urgentItems = snapshot.urgentItems
