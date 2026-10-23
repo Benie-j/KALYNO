@@ -4,39 +4,38 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ci.kalyno.app.data.Levels
-import ci.kalyno.app.data.StreakStore
+import ci.kalyno.app.data.dashboard.DashboardUiState
+import ci.kalyno.app.data.dashboard.MissionUi
+import ci.kalyno.app.ui.icons.KalynoSvgIcon
 import ci.kalyno.app.ui.theme.*
 
-/**
- * Dashboard élève : salutation personnalisée, série, mission du jour,
- * révisions urgentes (SRS) et maîtrise du programme.
- */
+/** Dashboard élève : tout le contenu vient de [DashboardUiState] (ViewModel). */
 @Composable
 fun PersonalDashboard(
     levelId: String,
-    nickname: String,
-    urgentCount: Int = 0,
-    mission: String? = null,
-    masteryPercent: Int = 0
+    state: DashboardUiState,
+    onStartMission: () -> Unit,
+    onReviewUrgent: () -> Unit,
+    onRetry: () -> Unit
 ) {
-    val context = LocalContext.current.applicationContext
-    val streak = remember { StreakStore(context).current() }
-
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -44,6 +43,7 @@ fun PersonalDashboard(
             .padding(horizontal = 20.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
+        // ----- En-tête : inchangé (nom + classe + série) -----
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
@@ -64,7 +64,7 @@ fun PersonalDashboard(
                 )
             }
             Text(
-                text = "🔥 $streak",
+                text = "🔥 ${state.streak}",
                 color = KalynoText,
                 fontSize = 15.sp,
                 fontWeight = FontWeight.Bold,
@@ -75,96 +75,231 @@ fun PersonalDashboard(
             )
         }
 
-        Text(
-            text = "Bonjour, $nickname !",
-            color = KalynoText,
-            fontSize = 26.sp,
-            lineHeight = 32.sp,
-            fontWeight = FontWeight.ExtraBold
-        )
-
-        MissionCard(mission)
-        UrgentReviewCard(urgentCount)
-        MasteryCard(levelId, masteryPercent)
+        GreetingCard(nickname = state.nickname)
+        MissionCard(state = state, onStart = onStartMission, onRetry = onRetry)
+        UrgentCard(state = state, onReview = onReviewUrgent)
     }
 }
 
+// ---------- a) Salutation ----------
+
 @Composable
-private fun MissionCard(mission: String?) {
+private fun GreetingCard(nickname: String) {
     DashCard {
-        CardLabel("🎯 MISSION DU JOUR", KalynoBlue)
-        Spacer(Modifier.height(8.dp))
-        Text(
-            text = mission
-                ?: "Ta prochaine étape apparaîtra ici dès que les premiers chapitres seront publiés.",
-            color = KalynoText,
-            fontSize = 16.sp,
-            lineHeight = 23.sp,
-            fontWeight = FontWeight.Medium
-        )
-    }
-}
-
-@Composable
-private fun UrgentReviewCard(urgentCount: Int) {
-    val calm = urgentCount == 0
-    val textColor = if (calm) KalynoCorrectText else KalynoRetryText
-
-    DashCard(
-        background = if (calm) KalynoCorrectSoft else KalynoRetrySoft,
-        stroke = if (calm) KalynoCorrect else KalynoRetry
-    ) {
-        CardLabel(
-            if (calm) "✅ RÉVISIONS URGENTES (SRS)" else "🚨 RÉVISIONS URGENTES (SRS)",
-            textColor
-        )
-        Spacer(Modifier.height(8.dp))
-        Text(
-            text = when {
-                calm -> "Rien d'urgent à réviser pour l'instant."
-                urgentCount == 1 -> "1 notion à réviser en urgence"
-                else -> "$urgentCount notions à réviser en urgence"
-            },
-            color = textColor,
-            fontSize = 16.sp,
-            fontWeight = FontWeight.Bold
-        )
-    }
-}
-
-@Composable
-private fun MasteryCard(levelId: String, percent: Int) {
-    val value = percent.coerceIn(0, 100)
-
-    DashCard {
-        CardLabel("📈 MAÎTRISE DU PROGRAMME", KalynoBlue)
-        Spacer(Modifier.height(8.dp))
-        Text(
-            text = "$value %",
-            color = KalynoBlue,
-            fontSize = 32.sp,
-            fontWeight = FontWeight.ExtraBold
-        )
-        Text(
-            text = "du programme ${Levels.label(levelId)}",
-            color = KalynoMuted,
-            fontSize = 13.sp
-        )
-        Spacer(Modifier.height(12.dp))
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(12.dp)
-                .clip(RoundedCornerShape(6.dp))
-                .background(KalynoBlueSoft)
-        ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
             Box(
                 modifier = Modifier
-                    .fillMaxWidth(value / 100f)
-                    .fillMaxHeight()
-                    .background(KalynoBlue)
+                    .size(52.dp)
+                    .clip(CircleShape)
+                    .background(KalynoBlueSoft),
+                contentAlignment = Alignment.Center
+            ) {
+                KalynoSvgIcon(name = "user-round", size = 28.dp, tint = KalynoBlue)
+            }
+            Spacer(Modifier.width(14.dp))
+            Text(
+                text = if (nickname.isBlank()) "Bonjour !" else "Bonjour, $nickname !",
+                color = KalynoText,
+                fontSize = 22.sp,
+                lineHeight = 28.sp,
+                fontWeight = FontWeight.ExtraBold,
+                modifier = Modifier.weight(1f)
             )
         }
+    }
+}
+
+// ---------- b) Mission du jour ----------
+
+@Composable
+private fun MissionCard(state: DashboardUiState, onStart: () -> Unit, onRetry: () -> Unit) {
+    val mission = state.mission
+
+    DashCard {
+        CardLabel("🎯 MISSION DU JOUR", KalynoBlue)
+        Spacer(Modifier.height(10.dp))
+
+        when {
+            mission != null -> MissionContent(mission, onStart)
+
+            state.loading -> Row(verticalAlignment = Alignment.CenterVertically) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(22.dp),
+                    strokeWidth = 3.dp,
+                    color = KalynoBlue
+                )
+                Spacer(Modifier.width(12.dp))
+                Text("Préparation de ta mission…", color = KalynoMuted, fontSize = 15.sp)
+            }
+
+            state.error != null -> Column {
+                Text(state.error, color = KalynoText, fontSize = 15.sp, lineHeight = 21.sp)
+                Spacer(Modifier.height(12.dp))
+                PrimaryButton("Réessayer", onRetry)
+            }
+
+            else -> Text(
+                text = "Pas de nouvelle mission pour l'instant. Reviens dès que de nouveaux chapitres seront publiés.",
+                color = KalynoMuted,
+                fontSize = 15.sp,
+                lineHeight = 22.sp
+            )
+        }
+    }
+}
+
+@Composable
+private fun MissionContent(mission: MissionUi, onStart: () -> Unit) {
+    Text(
+        text = "${mission.subjectEmoji} ${mission.subjectName}",
+        color = KalynoBlue,
+        fontSize = 13.sp,
+        fontWeight = FontWeight.Bold
+    )
+    Spacer(Modifier.height(2.dp))
+    Text(
+        text = mission.chapterTitle,
+        color = KalynoText,
+        fontSize = 20.sp,
+        lineHeight = 26.sp,
+        fontWeight = FontWeight.ExtraBold
+    )
+    Spacer(Modifier.height(6.dp))
+    Text(
+        text = buildString {
+            append(if (mission.toDiscover == 1) "1 carte à découvrir" else "${mission.toDiscover} cartes à découvrir")
+            if (mission.minutes > 0) append(" · environ ${mission.minutes} min")
+        },
+        color = KalynoMuted,
+        fontSize = 14.sp
+    )
+
+    Spacer(Modifier.height(14.dp))
+    LinearProgressIndicator(
+        progress = { mission.progress },
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(12.dp)
+            .clip(RoundedCornerShape(6.dp)),
+        color = KalynoBlue,
+        trackColor = KalynoBlueSoft
+    )
+    Spacer(Modifier.height(6.dp))
+    Text(
+        text = "${mission.done}/${mission.total} cartes vues",
+        color = KalynoMuted,
+        fontSize = 12.sp,
+        fontWeight = FontWeight.Medium
+    )
+
+    Spacer(Modifier.height(16.dp))
+    PrimaryButton("Démarrer ma Mission", onStart)
+}
+
+// ---------- c) Alerte Révisions Urgentes (SRS) ----------
+
+@Composable
+private fun UrgentCard(state: DashboardUiState, onReview: () -> Unit) {
+    val urgent = state.urgentTotal > 0
+
+    if (!urgent) {
+        DashCard(background = KalynoCorrectSoft, stroke = KalynoCorrect) {
+            CardLabel("✅ RÉVISIONS URGENTES (SRS)", KalynoCorrectText)
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = if (state.loading) "Analyse de tes révisions…" else "Rien d'urgent à réviser pour l'instant.",
+                color = KalynoCorrectText,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+        return
+    }
+
+    DashCard(background = KalynoRetrySoft, stroke = KalynoRetry) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(KalynoRetry),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = state.urgentTotal.toString(),
+                    color = KalynoText,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.ExtraBold
+                )
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                CardLabel("🚨 ALERTE RÉVISIONS URGENTES ! (SRS)", KalynoRetryText)
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = if (state.urgentTotal == 1) "1 notion à sauver maintenant" else "${state.urgentTotal} notions à sauver maintenant",
+                    color = KalynoRetryText,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+
+        if (state.urgentTopics.isNotEmpty()) {
+            Spacer(Modifier.height(12.dp))
+            state.urgentTopics.forEach { topic ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("•", color = KalynoRetryText, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold)
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = topic.label,
+                        color = KalynoText,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Text(
+                        text = "×${topic.count}",
+                        color = KalynoRetryText,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+        }
+
+        Spacer(Modifier.height(14.dp))
+        Button(
+            onClick = onReview,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(52.dp),
+            shape = RoundedCornerShape(14.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = KalynoRetry, contentColor = KalynoText)
+        ) {
+            Text("Réviser Urgemment", fontSize = 16.sp, fontWeight = FontWeight.ExtraBold)
+        }
+    }
+}
+
+// ---------- Éléments communs ----------
+
+@Composable
+private fun PrimaryButton(label: String, onClick: () -> Unit) {
+    Button(
+        onClick = onClick,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(52.dp),
+        shape = RoundedCornerShape(14.dp),
+        colors = ButtonDefaults.buttonColors(containerColor = KalynoBlue, contentColor = Color.White)
+    ) {
+        Text(label, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold)
     }
 }
 

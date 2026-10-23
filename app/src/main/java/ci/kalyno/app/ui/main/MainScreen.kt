@@ -34,6 +34,8 @@ import ci.kalyno.app.data.LearningCard
 import ci.kalyno.app.ui.theme.*
 import ci.kalyno.app.ui.icons.KalynoSvgIcon
 import kotlinx.coroutines.CancellationException
+import androidx.lifecycle.viewmodel.compose.viewModel
+import ci.kalyno.app.ui.review.ReviewSessionScreen
 
 private data class TabItem(val icon: String, val label: String)
 
@@ -51,45 +53,66 @@ fun MainScreen(
     onChangeLevel: () -> Unit,
     onLoginClick: () -> Unit
 ) {
-    var tab by rememberSaveable { mutableStateOf(0) }
-    BackHandler(enabled = tab != 0) { tab = 0 }
+    val viewModel: DashboardViewModel = viewModel(key = "dashboard-$levelId")
+    val state by viewModel.state.collectAsState()
+    LaunchedEffect(levelId, nickname) { viewModel.load(levelId, nickname) }
 
-    Scaffold(
-        containerColor = KalynoBackground,
-        bottomBar = {
-            NavigationBar(containerColor = Color.White) {
-                TABS.forEachIndexed { index, item ->
-                    NavigationBarItem(
-                        selected = tab == index,
-                        onClick = { tab = index },
-                        icon = { KalynoSvgIcon(name = item.icon, size = 24.dp, tint = if (tab == index) KalynoBlue else KalynoMuted) },
-                        label = {
-                            Text(
-                                item.label,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold
+    var tab by rememberSaveable { mutableStateOf(0) }
+    val session = state.session
+
+    if (session != null) {
+        BackHandler { viewModel.closeSession(false) }
+        ReviewSessionScreen(
+            session = session,
+            onRate = { cardId, rating -> viewModel.rate(cardId, rating) },
+            onClose = { completed -> viewModel.closeSession(completed) }
+        )
+    } else {
+        BackHandler(enabled = tab != 0) { tab = 0 }
+
+        Scaffold(
+            containerColor = KalynoBackground,
+            bottomBar = {
+                NavigationBar(containerColor = Color.White) {
+                    TABS.forEachIndexed { index, item ->
+                        NavigationBarItem(
+                            selected = tab == index,
+                            onClick = { tab = index },
+                            icon = { KalynoSvgIcon(name = item.icon, size = 24.dp, tint = if (tab == index) KalynoBlue else KalynoMuted) },
+                            label = {
+                                Text(
+                                    item.label,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            },
+                            colors = NavigationBarItemDefaults.colors(
+                                selectedTextColor = KalynoBlue,
+                                unselectedTextColor = KalynoMuted,
+                                indicatorColor = KalynoBlueSoft
                             )
-                        },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedTextColor = KalynoBlue,
-                            unselectedTextColor = KalynoMuted,
-                            indicatorColor = KalynoBlueSoft
                         )
-                    )
+                    }
                 }
             }
-        }
-    ) { padding ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-        ) {
-            when (tab) {
-                0 -> PersonalDashboard(levelId, nickname)
-                1 -> DojoScreen(levelId)
-                2 -> ExplorerScreen(levelId)
-                else -> ProfileScreen(levelId, onChangeLevel, onLoginClick)
+        ) { padding ->
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+            ) {
+                when (tab) {
+                    0 -> PersonalDashboard(
+                        levelId = levelId,
+                        state = state,
+                        onStartMission = viewModel::startMission,
+                        onReviewUrgent = viewModel::startUrgentReview,
+                        onRetry = viewModel::retry
+                    )
+                    1 -> DojoScreen(levelId)
+                    2 -> ExplorerScreen(levelId)
+                    else -> ProfileScreen(levelId, onChangeLevel, onLoginClick)
+                }
             }
         }
     }
@@ -482,143 +505,6 @@ private fun ErrorContent(
         Spacer(Modifier.height(12.dp))
 
         SoftButton("Réessayer", onRetry)
-    }
-}
-
-// ---------- Accueil ----------
-
-@Composable
-private fun DashboardScreen(levelId: String) {
-    val context = LocalContext.current.applicationContext
-    val streak = remember { StreakStore(context).current() }
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp, vertical = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Column {
-                Text(
-                    text = "KALYNO",
-                    color = KalynoBlue,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    letterSpacing = 1.sp
-                )
-                Text(
-                    text = "${Levels.emoji(levelId)} ${Levels.label(levelId)}",
-                    color = KalynoMuted,
-                    fontSize = 13.sp
-                )
-            }
-
-            Text(
-                text = "🔥 $streak",
-                color = KalynoText,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(KalynoYellow.copy(alpha = 0.3f))
-                    .padding(horizontal = 14.dp, vertical = 8.dp)
-            )
-        }
-
-        MissionCard(mission = null)
-        RescueCard(urgentCount = 0)
-        MasteryCard(levelId = levelId, percent = 0)
-    }
-}
-
-@Composable
-private fun MissionCard(mission: String?) {
-    DashCard {
-        CardLabel("🎯 MISSION DU JOUR", KalynoBlue)
-        Spacer(Modifier.height(8.dp))
-        Text(
-            text = mission
-                ?: "Ta prochaine étape apparaîtra ici dès que les premiers chapitres seront publiés.",
-            color = KalynoText,
-            fontSize = 16.sp,
-            lineHeight = 23.sp,
-            fontWeight = FontWeight.Medium
-        )
-    }
-}
-
-@Composable
-private fun RescueCard(urgentCount: Int) {
-    val calm = urgentCount == 0
-    val textColor = if (calm) KalynoCorrectText else KalynoRetryText
-
-    DashCard(
-        background = if (calm) KalynoCorrectSoft else KalynoRetrySoft,
-        stroke = if (calm) KalynoCorrect else KalynoRetry
-    ) {
-        CardLabel(
-            if (calm) "✅ ZONE DE SAUVETAGE" else "🚨 ZONE DE SAUVETAGE",
-            textColor
-        )
-
-        Spacer(Modifier.height(8.dp))
-
-        Text(
-            text = when {
-                calm -> "Rien d'urgent à réviser pour l'instant."
-                urgentCount == 1 -> "1 notion à sauver aujourd'hui"
-                else -> "$urgentCount notions à sauver aujourd'hui"
-            },
-            color = textColor,
-            fontSize = 16.sp,
-            fontWeight = FontWeight.Bold
-        )
-    }
-}
-
-@Composable
-private fun MasteryCard(levelId: String, percent: Int) {
-    val value = percent.coerceIn(0, 100)
-
-    DashCard {
-        CardLabel("📈 MAÎTRISE DU PROGRAMME", KalynoBlue)
-        Spacer(Modifier.height(8.dp))
-
-        Text(
-            text = "$value %",
-            color = KalynoBlue,
-            fontSize = 32.sp,
-            fontWeight = FontWeight.ExtraBold
-        )
-
-        Text(
-            text = "du programme ${Levels.label(levelId)}",
-            color = KalynoMuted,
-            fontSize = 13.sp
-        )
-
-        Spacer(Modifier.height(12.dp))
-
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(12.dp)
-                .clip(RoundedCornerShape(6.dp))
-                .background(KalynoBlueSoft)
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth(value / 100f)
-                    .fillMaxHeight()
-                    .background(KalynoYellow)
-            )
-        }
     }
 }
 
