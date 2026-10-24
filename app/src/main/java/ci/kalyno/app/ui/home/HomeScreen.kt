@@ -24,7 +24,7 @@ import ci.kalyno.app.data.Levels
 import ci.kalyno.app.ui.theme.*
 
 @Composable
-fun HomeScreen(onLevelSelected: (String) -> Unit, onLoginClick: () -> Unit) {
+fun HomeScreen(onLevelSelected: (String) -> Unit, onLoginClick: () -> Unit, canLogin: Boolean = true) {
     var bacOpen by rememberSaveable { mutableStateOf(false) }
 
     Column(
@@ -104,7 +104,7 @@ fun HomeScreen(onLevelSelected: (String) -> Unit, onLoginClick: () -> Unit) {
             }
         }
 
-        Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+        if (canLogin) Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
             Text(
                 text = "Je suis un ancien",
                 color = KalynoBlue,

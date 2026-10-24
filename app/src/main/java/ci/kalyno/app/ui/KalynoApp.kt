@@ -62,6 +62,7 @@ fun KalynoApp() {
 
     val current = level
     val name = nickname
+    val accountLabel = if (auth.signedIn) (authStore.userName() ?: authStore.userEmail()) else null
 
     when {
         showLogin -> {
@@ -84,7 +85,8 @@ fun KalynoApp() {
                 prefs.level = it
                 level = it
             },
-            onLoginClick = { showLogin = true }
+            onLoginClick = { showLogin = true },
+            canLogin = !auth.signedIn
         )
         name == null -> {
             BackHandler {
@@ -123,7 +125,10 @@ fun KalynoApp() {
                 level = null
                 skipDemo = false
             },
-            onLoginClick = { showLogin = true }
+            onLoginClick = { showLogin = true },
+            signedIn = auth.signedIn,
+            accountLabel = accountLabel,
+            onLogoutClick = { authViewModel.signOut() }
         )
     }
 }

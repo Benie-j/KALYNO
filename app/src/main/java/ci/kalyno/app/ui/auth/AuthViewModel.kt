@@ -75,13 +75,14 @@ class AuthViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 _state.update { AuthUiState(signedIn = true, restored = remote) }
             } catch (e: GetCredentialCancellationException) {
-                // L'élève a fermé la fenêtre : ce n'est pas une erreur
-                _state.update { it.copy(loading = false) }
+                // Fenêtre fermée par l'élève, ou compte refusé par Google (signature de l'app non reconnue)
+                Log.w(TAG, "Credential Manager annulé: ${e.message}", e)
+                fail("Connexion Google interrompue (annulée, ou signature de l'app non reconnue par Google).")
             } catch (e: NoCredentialException) {
                 fail("Aucun compte Google trouvé sur ce téléphone. Ajoute-en un dans les réglages.")
             } catch (e: GetCredentialException) {
                 Log.w(TAG, "Credential Manager: ${e.type}", e)
-                fail("Connexion Google impossible. Réessaie dans un instant.")
+                fail("Connexion Google impossible (${e.javaClass.simpleName}). Réessaie dans un instant.")
             } catch (e: AuthException) {
                 fail(e.message ?: "Connexion impossible.")
             } catch (e: CancellationException) {
@@ -102,6 +103,12 @@ class AuthViewModel(app: Application) : AndroidViewModel(app) {
     } catch (e: Exception) {
         Log.w(TAG, "Profil cloud indisponible", e)
         null
+    }
+
+    /** Déconnexion : efface la session locale. Le mode invité reste disponible. */
+    fun signOut() {
+        store.signOut()
+        _state.value = AuthUiState(signedIn = false)
     }
 
     fun fail(message: String) {

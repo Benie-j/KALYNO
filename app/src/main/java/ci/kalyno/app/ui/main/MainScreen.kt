@@ -51,7 +51,10 @@ fun MainScreen(
     levelId: String,
     nickname: String,
     onChangeLevel: () -> Unit,
-    onLoginClick: () -> Unit
+    onLoginClick: () -> Unit,
+    signedIn: Boolean = false,
+    accountLabel: String? = null,
+    onLogoutClick: () -> Unit = {}
 ) {
     val viewModel: DashboardViewModel = viewModel(key = "dashboard-$levelId")
     val state by viewModel.state.collectAsState()
@@ -111,7 +114,7 @@ fun MainScreen(
                     )
                     1 -> DojoScreen(levelId)
                     2 -> ExplorerScreen(levelId)
-                    else -> ProfileScreen(levelId, onChangeLevel, onLoginClick)
+                    else -> ProfileScreen(levelId, onChangeLevel, onLoginClick, signedIn, accountLabel, onLogoutClick)
                 }
             }
         }
@@ -514,7 +517,10 @@ private fun ErrorContent(
 private fun ProfileScreen(
     levelId: String,
     onChangeLevel: () -> Unit,
-    onLoginClick: () -> Unit
+    onLoginClick: () -> Unit,
+    signedIn: Boolean,
+    accountLabel: String?,
+    onLogoutClick: () -> Unit
 ) {
     val context = LocalContext.current.applicationContext
     val streak = remember { StreakStore(context).current() }
@@ -568,15 +574,33 @@ private fun ProfileScreen(
             CardLabel("☁️ MON COMPTE", KalynoBlue)
             Spacer(Modifier.height(8.dp))
 
-            Text(
-                text = "Connecte-toi avec Google pour retrouver ta progression si tu changes de téléphone.",
-                color = KalynoMuted,
-                fontSize = 14.sp,
-                lineHeight = 20.sp
-            )
+            if (signedIn) {
+                Text(
+                    text = "✅ Connecté" + (accountLabel?.let { " : $it" } ?: ""),
+                    color = KalynoText,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = "Ta progression est sauvegardée et retrouvée si tu changes de téléphone.",
+                    color = KalynoMuted,
+                    fontSize = 14.sp,
+                    lineHeight = 20.sp
+                )
+                Spacer(Modifier.height(12.dp))
+                SoftButton("Se déconnecter", onLogoutClick)
+            } else {
+                Text(
+                    text = "Connecte-toi avec Google pour retrouver ta progression si tu changes de téléphone.",
+                    color = KalynoMuted,
+                    fontSize = 14.sp,
+                    lineHeight = 20.sp
+                )
 
-            Spacer(Modifier.height(12.dp))
-            SoftButton("Se connecter avec Google", onLoginClick)
+                Spacer(Modifier.height(12.dp))
+                SoftButton("Se connecter avec Google", onLoginClick)
+            }
         }
     }
 }
