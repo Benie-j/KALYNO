@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -18,11 +19,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ci.kalyno.app.ui.theme.*
 
+/** Connexion pour un élève qui a déjà un compte (même flux Google que l'inscription). */
 @Composable
-fun LoginScreen(onBack: () -> Unit) {
-    // TEMPORAIRE : la vraie connexion Google sera branchée avec le back-end
-    var showSoon by remember { mutableStateOf(false) }
-
+fun LoginScreen(
+    onBack: () -> Unit,
+    onGoogleClick: () -> Unit,
+    isLoading: Boolean = false,
+    errorMessage: String? = null
+) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -78,21 +82,33 @@ fun LoginScreen(onBack: () -> Unit) {
                     .clip(shape)
                     .background(Color.White)
                     .border(2.dp, KalynoOutline, shape)
-                    .clickable { showSoon = true },
+                    .clickable(enabled = !isLoading, onClick = onGoogleClick),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = "Continuer avec Google",
-                    color = KalynoText,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold
-                )
+                if (isLoading) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            strokeWidth = 2.5.dp,
+                            color = KalynoBlue
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Text("Connexion…", color = KalynoText, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    }
+                } else {
+                    Text(
+                        text = "Continuer avec Google",
+                        color = KalynoText,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
 
-            if (showSoon) {
+            if (errorMessage != null) {
                 Spacer(Modifier.height(12.dp))
                 Text(
-                    text = "La connexion Google sera activée très bientôt.",
+                    text = errorMessage,
                     color = KalynoRetryText,
                     fontSize = 13.sp,
                     textAlign = TextAlign.Center
