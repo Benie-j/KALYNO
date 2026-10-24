@@ -3,6 +3,7 @@ package ci.kalyno.app.data.dashboard
 import androidx.room.Dao
 import androidx.room.Query
 import androidx.room.Upsert
+import ci.kalyno.app.data.srs.CardProgressEntity
 import ci.kalyno.app.data.srs.FlashcardEntity
 import ci.kalyno.app.data.srs.SubjectEntity
 
@@ -49,4 +50,22 @@ interface DashboardDao {
             "GROUP BY f.subjectId"
     )
     suspend fun lastIntroductionBySubject(studentId: String): List<SubjectActivity>
+
+    // ----- Synchronisation cloud -----
+
+    @Upsert
+    suspend fun upsertProgress(items: List<CardProgressEntity>)
+
+    /** Révisions plus récentes que [since], de la plus ancienne à la plus récente. */
+    @Query(
+        "SELECT * FROM card_progress WHERE studentId = :studentId AND lastReviewedAt > :since " +
+            "ORDER BY lastReviewedAt ASC LIMIT :limit"
+    )
+    suspend fun progressReviewedSince(studentId: String, since: Long, limit: Int): List<CardProgressEntity>
+
+    @Query("SELECT * FROM card_progress WHERE studentId = :studentId AND flashcardId IN (:ids)")
+    suspend fun progressByIds(studentId: String, ids: List<String>): List<CardProgressEntity>
+
+    @Query("SELECT id FROM flashcards WHERE id IN (:ids)")
+    suspend fun existingFlashcardIds(ids: List<String>): List<String>
 }

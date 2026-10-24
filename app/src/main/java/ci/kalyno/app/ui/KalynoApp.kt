@@ -44,6 +44,16 @@ fun KalynoApp() {
         }
     }
 
+    // Compte retrouvé sur un nouveau téléphone : on reprend classe, pseudo et parcours
+    LaunchedEffect(auth.restored) {
+        auth.restored?.let {
+            level = it.levelId
+            nickname = it.nickname
+            demoDone = true
+            authViewModel.consumeRestored()
+        }
+    }
+
     val startGoogle: () -> Unit = {
         activityContext.findActivity()?.let { authViewModel.signInWithGoogle(it) }
     }

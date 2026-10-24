@@ -5,6 +5,7 @@ import ci.kalyno.app.data.LearningCard
 import ci.kalyno.app.data.LearningChapter
 import ci.kalyno.app.data.LearningSubject
 import ci.kalyno.app.data.SupabaseLearningRepository
+import ci.kalyno.app.data.cloud.CloudSync
 import ci.kalyno.app.data.srs.CardProgressEntity
 import ci.kalyno.app.data.srs.FlashcardEntity
 import ci.kalyno.app.data.srs.ReviewLogEntity
@@ -23,6 +24,7 @@ class DashboardRepository(context: Context) {
     private val srs = db.srsDao()
     private val dao = db.dashboardDao()
     private val remote = SupabaseLearningRepository()
+    private val cloud = CloudSync(context)
 
     data class Snapshot(
         val mission: MissionUi?,
@@ -57,6 +59,16 @@ class DashboardRepository(context: Context) {
             content.orEmpty().flatMap { s ->
                 s.chapters.flatMap { ch -> ch.cards.map { c -> c.id to Triple(s, ch, c) } }
             }.toMap()
+
+        // ----- Synchronisation du compte (si connecté) -----
+        try {
+            cloud.syncProgress(studentId)
+            cloud.pushProfile()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // Hors ligne ou erreur serveur : la progression reste locale et partira plus tard.
+        }
 
         // ----- Révisions urgentes (SRS) -----
         val levelSubjects = dao.subjectsForLevel(levelId)

@@ -19,8 +19,24 @@ class SupabaseAuthApi {
      * Le compte est créé automatiquement à la première connexion (inscription = connexion).
      */
     suspend fun signInWithGoogleIdToken(idToken: String, rawNonce: String): AuthSession =
+        requestSession(
+            grantType = "id_token",
+            body = JSONObject()
+                .put("provider", "google")
+                .put("id_token", idToken)
+                .put("nonce", rawNonce)
+        )
+
+    /** Renouvelle la session avant l'expiration du jeton d'accès. */
+    suspend fun refresh(refreshToken: String): AuthSession =
+        requestSession(
+            grantType = "refresh_token",
+            body = JSONObject().put("refresh_token", refreshToken)
+        )
+
+    private suspend fun requestSession(grantType: String, body: JSONObject): AuthSession =
         withContext(Dispatchers.IO) {
-            val connection = URL("${SupabaseConfig.BASE_URL}/auth/v1/token?grant_type=id_token")
+            val connection = URL("${SupabaseConfig.BASE_URL}/auth/v1/token?grant_type=$grantType")
                 .openConnection() as HttpURLConnection
             try {
                 connection.requestMethod = "POST"
@@ -30,13 +46,7 @@ class SupabaseAuthApi {
                 connection.setRequestProperty("apikey", SupabaseConfig.PUBLISHABLE_KEY)
                 connection.setRequestProperty("Content-Type", "application/json")
                 connection.setRequestProperty("Accept", "application/json")
-
-                val body = JSONObject()
-                    .put("provider", "google")
-                    .put("id_token", idToken)
-                    .put("nonce", rawNonce)
-                    .toString()
-                connection.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
+                connection.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
 
                 val code = connection.responseCode
                 val stream = if (code in 200..299) connection.inputStream else connection.errorStream
