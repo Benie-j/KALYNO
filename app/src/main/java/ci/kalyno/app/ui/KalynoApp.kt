@@ -55,7 +55,9 @@ fun KalynoApp() {
     }
 
     val startGoogle: () -> Unit = {
-        activityContext.findActivity()?.let { authViewModel.signInWithGoogle(it) }
+        val activity = activityContext.findActivity()
+        if (activity != null) authViewModel.signInWithGoogle(activity)
+        else authViewModel.fail("Impossible d'ouvrir la fenêtre Google (écran introuvable).")
     }
 
     val current = level

@@ -102,7 +102,7 @@ class AuthViewModel(app: Application) : AndroidViewModel(app) {
         null
     }
 
-    private fun fail(message: String) {
+    fun fail(message: String) {
         _state.update { it.copy(loading = false, error = message) }
     }
 
