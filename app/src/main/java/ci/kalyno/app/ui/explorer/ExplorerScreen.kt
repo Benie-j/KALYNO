@@ -221,6 +221,15 @@ private fun ExplorerHome(
             .padding(top = 20.dp, bottom = 28.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
+        ui.banner?.let { banner ->
+            val target = ui.chapters.firstOrNull { it.id == banner.chapterId }
+            ExplorerHeroBanner(
+                banner = banner,
+                onClick = target?.let { chapter -> { onOpenLesson(chapter) } },
+                modifier = Modifier.padding(horizontal = 20.dp)
+            )
+        }
+
         DisciplinesSection(
             disciplines = ui.disciplines,
             pressedId = ui.pressedDisciplineId,
@@ -262,9 +271,9 @@ private fun ExplorerHome(
             )
 
             ui.chapters.isEmpty() -> KalynoEmptyState(
-                emoji = "📚",
-                title = "Aucun chapitre publié",
-                text = "Les matières et les chapitres apparaîtront ici dès leur publication."
+                emoji = "🌱",
+                title = "Bientôt du nouveau !",
+                text = "De nouveaux parcours préparés par tes professeurs arrivent bientôt..."
             )
 
             ui.filter == ExplorerFilter.COMMUNITY -> CommunityBanner(
@@ -284,12 +293,6 @@ private fun ExplorerHome(
                 ExplorerFilter.FOR_YOU -> {
                     ForYouSection(chapters = visible, onStart = onStart, onOpen = onOpenLesson)
                     NewPathsSection(chapters = visible, onOpen = onOpenLesson)
-                    CommunityBanner(
-                        progress = ui.subjectProgress,
-                        levelLabel = Levels.label(levelId),
-                        onOpenLeaderboard = onOpenLeaderboard,
-                        modifier = Modifier.padding(horizontal = 20.dp)
-                    )
                 }
 
                 ExplorerFilter.CHALLENGES -> ChallengesSection(
@@ -461,7 +464,7 @@ private fun FilterChips(selected: ExplorerFilter, onSelect: (ExplorerFilter) -> 
         contentPadding = PaddingValues(horizontal = 20.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        items(ExplorerFilter.entries.toList(), key = { it.name }) { filter ->
+        items(ExplorerFilter.entries.filter { it != ExplorerFilter.COMMUNITY }, key = { it.name }) { filter ->
             val isSelected = filter == selected
             val container by animateColorAsState(
                 targetValue = if (isSelected) KalynoBlue else Color.White,
@@ -617,7 +620,16 @@ private fun CourseCard(
     modifier: Modifier = Modifier
 ) {
     KalynoCard(modifier = modifier, onClick = onOpen) {
-        KalynoPill(text = "${chapter.subjectEmoji} ${chapter.subjectName}")
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            KalynoPill(
+                text = "${chapter.subjectEmoji} ${chapter.subjectName}",
+                modifier = Modifier.weight(1f, fill = false)
+            )
+            SmartTagPill(chapter.tag)
+        }
         Spacer(Modifier.height(12.dp))
         Text(
             text = chapter.title,
@@ -713,6 +725,10 @@ private fun PathCard(chapter: ExplorerChapter, onClick: () -> Unit, modifier: Mo
             color = KalynoMuted,
             fontSize = 12.sp
         )
+        if (!chapter.tag.isNullOrBlank()) {
+            Spacer(Modifier.height(8.dp))
+            SmartTagPill(chapter.tag)
+        }
     }
 }
 

@@ -39,7 +39,9 @@ data class LearningChapter(
     val id: String,
     val title: String,
     val capsules: List<LearningCapsule>,
-    val cards: List<LearningCard>
+    val cards: List<LearningCard>,
+    /** Smart Tag choisi par l'admin ("urgent", "populaire", texte libre…) ; null si absent. */
+    val tag: String? = null
 )
 
 data class LearningSubject(
@@ -65,11 +67,7 @@ class SupabaseLearningRepository {
                         val subject = subjects.getJSONObject(i)
                         val subjectId = subject.getString("id")
 
-                        val chapterRows = getArray(
-                            "chapters?select=id,title,position" +
-                                "&subject_id=eq.${enc(subjectId)}" +
-                                "&status=eq.published&order=position.asc"
-                        )
+                        val chapterRows = loadChapterRows(subjectId)
 
                         val chapters = buildList {
                             for (j in 0 until chapterRows.length()) {
@@ -108,7 +106,8 @@ class SupabaseLearningRepository {
                                         id = chapterId,
                                         title = chapter.optString("title", ""),
                                         capsules = capsules,
-                                        cards = cards
+                                        cards = cards,
+                                        tag = chapter.textOrNull("tag")
                                     )
                                 )
                             }
@@ -131,6 +130,62 @@ class SupabaseLearningRepository {
                 throw e
             }
         }
+
+    /** Bannière « à la une » de l'admin pour cette classe. Table facultative : jamais d'erreur visible. */
+    suspend fun loadBanner(levelId: String): ExplorerBanner? = withContext(Dispatchers.IO) {
+        try {
+            val rows = getArray(
+                "explorer_banners?select=id,title,subtitle,button_label,chapter_id,level_id" +
+                    "&is_active=eq.true&or=(level_id.is.null,level_id.eq.${enc(levelId)})" +
+                    "&order=position.asc&limit=1"
+            )
+            if (rows.length() == 0) {
+                null
+            } else {
+                val row = rows.getJSONObject(0)
+                val title = row.textOrNull("title")
+                if (title == null) {
+                    null
+                } else {
+                    ExplorerBanner(
+                        id = row.optString("id"),
+                        title = title,
+                        subtitle = row.textOrNull("subtitle"),
+                        buttonLabel = row.textOrNull("button_label"),
+                        chapterId = row.textOrNull("chapter_id")
+                    )
+                }
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    /** Faux dès qu'on sait que la table `chapters` n'a pas (encore) la colonne `tag`. */
+    @Volatile
+    private var chapterTagSupported = true
+
+    /** Charge les chapitres publiés avec leur Smart Tag ; repli sans `tag` si le back-end ne le connaît pas. */
+    private fun loadChapterRows(subjectId: String): JSONArray {
+        val filter = "&subject_id=eq.${enc(subjectId)}&status=eq.published&order=position.asc"
+        if (chapterTagSupported) {
+            try {
+                return getArray("chapters?select=id,title,position,tag$filter")
+            } catch (e: IOException) {
+                if (e.message?.startsWith("Supabase HTTP 400") == true) {
+                    chapterTagSupported = false
+                } else {
+                    throw e
+                }
+            }
+        }
+        return getArray("chapters?select=id,title,position$filter")
+    }
+
+    private fun JSONObject.textOrNull(key: String): String? =
+        optString(key).takeUnless { it.isBlank() || it.equals("null", ignoreCase = true) }
 
     /** Faux dès qu'on sait que la table `capsules` n'a pas (encore) la colonne `kind`. */
     @Volatile

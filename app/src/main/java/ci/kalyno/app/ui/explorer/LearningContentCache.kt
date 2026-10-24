@@ -56,6 +56,7 @@ class LearningContentCache(context: Context) {
                                 JSONObject().apply {
                                     put("id", ch.id)
                                     put("title", ch.title)
+                                    put("tag", ch.tag ?: JSONObject.NULL)
                                     put("capsules", JSONArray().apply {
                                         ch.capsules.forEach { cap ->
                                             put(
@@ -111,6 +112,7 @@ class LearningContentCache(context: Context) {
         return LearningChapter(
             id = ch.getString("id"),
             title = ch.optString("title", ""),
+            tag = if (ch.isNull("tag")) null else ch.optString("tag").takeIf { it.isNotBlank() },
             capsules = List(capsules.length()) { k ->
                 val cap = capsules.getJSONObject(k)
                 val capId = cap.getString("id")

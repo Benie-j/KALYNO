@@ -3,6 +3,7 @@ package ci.kalyno.app.ui.explorer
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import ci.kalyno.app.data.ExplorerBanner
 import ci.kalyno.app.data.LearningCapsule
 import ci.kalyno.app.data.LearningCard
 import ci.kalyno.app.data.LearningSubject
@@ -43,7 +44,9 @@ data class ExplorerChapter(
     val minutes: Int,
     val discovered: Int,
     val capsules: List<LearningCapsule>,
-    val items: List<ReviewItem>
+    val items: List<ReviewItem>,
+    /** Smart Tag admin ("urgent", "populaire"…), null si absent. */
+    val tag: String? = null
 ) {
     val questionCount: Int get() = items.size
     val progress: Float
@@ -94,7 +97,9 @@ data class ExplorerUiState(
     /** Discipline touchée : se colore immédiatement, avant l'ouverture de sa page. */
     val pressedDisciplineId: String? = null,
     val openDisciplineId: String? = null,
-    val openLessonId: String? = null
+    val openLessonId: String? = null,
+    /** Bannière « à la une » publiée par l'admin (null = rien à afficher). */
+    val banner: ExplorerBanner? = null
 ) {
     val route: ExplorerRoute
         get() = when {
@@ -224,6 +229,7 @@ class ExplorerViewModel(app: Application) : AndroidViewModel(app) {
             // 2) Réseau : source de vérité (synchronisée avec l'admin)
             try {
                 val subjects = remote.loadPublishedContent(level)
+                val banner = remote.loadBanner(level)
                 withContext(Dispatchers.IO) { cache.write(level, subjects) }
                 val chapters = withContext(Dispatchers.IO) { toChapters(subjects) }
                 _state.update {
@@ -233,7 +239,8 @@ class ExplorerViewModel(app: Application) : AndroidViewModel(app) {
                             error = null,
                             offline = false,
                             chapters = chapters,
-                            disciplines = toDisciplines(subjects)
+                            disciplines = toDisciplines(subjects),
+                            banner = banner
                         )
                     )
                 }
@@ -290,7 +297,8 @@ class ExplorerViewModel(app: Application) : AndroidViewModel(app) {
                     else (items.size * 1.5).roundToInt().coerceAtLeast(if (items.isEmpty()) 0 else 1),
                     discovered = items.count { it.cardId in introduced },
                     capsules = chapter.capsules,
-                    items = items
+                    items = items,
+                    tag = chapter.tag
                 )
             }
         }
