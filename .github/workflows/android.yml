@@ -41,8 +41,7 @@ jobs:
       - name: Tests unitaires
         run: gradle testDebugUnitTest
 
-      - name: Compile KALYNO
-        run: gradle assembleDebug
+      
 
       - name: Upload APK
         uses: actions/upload-artifact@v6
@@ -55,7 +54,7 @@ jobs:
       - name: Prepare release keystore
         run: echo "${{ secrets.KALYNO_KEYSTORE_BASE64 }}" | base64 -d > "$RUNNER_TEMP/kalyno-release.jks"
 
-      - name: Compile release APK
+      - name: Compile KALYNO release APK
         env:
           KALYNO_KEYSTORE_PATH: ${{ runner.temp }}/kalyno-release.jks
           KALYNO_KEYSTORE_PASSWORD: ${{ secrets.KALYNO_KEYSTORE_PASSWORD }}
@@ -69,6 +68,6 @@ jobs:
       - name: Upload release APK
         uses: actions/upload-artifact@v6
         with:
-          name: KALYNO-release
-          path: app/build/outputs/apk/release/app-release.apk
+          name: KALYNO
+          path: app/build/outputs/apk/release/Kalyno.apk
           if-no-files-found: error
