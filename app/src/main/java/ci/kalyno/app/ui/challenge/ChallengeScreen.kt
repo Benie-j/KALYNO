@@ -176,9 +176,12 @@ private fun ChallengeContent(challenge: Challenge, onExit: () -> Unit) {
     var selected by rememberSaveable { mutableStateOf<Int?>(null) }
 
     if (index >= total) {
+        // Plus d'écran « Défi terminé » : on enregistre la série et on passe à la suite
         val context = LocalContext.current
-        val streak = remember { StreakStore(context.applicationContext).recordCompletion() }
-        ResultContent(score = score, total = total, streak = streak, onExit = onExit)
+        LaunchedEffect(Unit) {
+            StreakStore(context.applicationContext).recordCompletion()
+            onExit()
+        }
     } else {
         QuestionContent(
             question = challenge.questions[index],
@@ -302,7 +305,7 @@ private fun QuestionContent(
                             colors = ButtonDefaults.buttonColors(containerColor = KalynoBlue)
                         ) {
                             Text(
-                                text = if (index == total - 1) "Voir mon résultat" else "Suivant",
+                                text = if (index == total - 1) "Terminer" else "Suivant",
                                 fontSize = 18.sp,
                                 fontWeight = FontWeight.Bold
                             )
@@ -503,55 +506,4 @@ private fun OptionRow(
             Text("✓", color = KalynoCorrect, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold)
         }
     }
-}
-
-@Composable
-private fun ResultContent(score: Int, total: Int, streak: Int, onExit: () -> Unit) {
-    Column(
-        modifier = Modifier.fillMaxSize().padding(24.dp),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        KalynoSvgIcon(name = resultIcon(score, total), size = 64.dp)
-        Spacer(Modifier.height(12.dp))
-        Text("Défi terminé !", color = KalynoText, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
-        Spacer(Modifier.height(8.dp))
-        Text("$score / $total", color = KalynoBlue, fontSize = 48.sp, fontWeight = FontWeight.ExtraBold)
-        Spacer(Modifier.height(12.dp))
-        Surface(
-            shape = RoundedCornerShape(16.dp),
-            color = KalynoYellow.copy(alpha = 0.3f)
-        ) {
-            Text(
-                text = if (streak <= 1) "Série lancée ! Reviens demain pour la garder." else "Série : $streak jours de suite !",
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-                color = KalynoText,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center
-            )
-        }
-        Spacer(Modifier.height(8.dp))
-        Text(
-            "Continue comme ça, on est ensemble !",
-            color = KalynoMuted,
-            fontSize = 16.sp,
-            textAlign = TextAlign.Center
-        )
-        Spacer(Modifier.height(32.dp))
-        Button(
-            onClick = onExit,
-            modifier = Modifier.fillMaxWidth().height(56.dp),
-            shape = RoundedCornerShape(16.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = KalynoBlue)
-        ) {
-            Text("Retour à l'accueil", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-        }
-    }
-}
-
-private fun resultIcon(score: Int, total: Int): String = when {
-    total > 0 && score * 10 >= total * 8 -> "trophy"
-    total > 0 && score * 2 >= total -> "party-popper"
-    else -> "dumbbell"
 }
