@@ -8,7 +8,9 @@ data class ReviewItem(
     val choices: List<String>,
     val correctIndex: Int?,
     val answer: String,
-    val explanation: String?
+    val explanation: String?,
+    /** Indice optionnel affiché dans un bloc orange (null tant que le back-end n'en fournit pas). */
+    val hint: String? = null
 )
 
 enum class MissionStatus {

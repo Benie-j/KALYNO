@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import ci.kalyno.app.data.StreakStore
 import ci.kalyno.app.data.dashboard.DashboardRepository
 import ci.kalyno.app.data.dashboard.DashboardUiState
+import ci.kalyno.app.data.dashboard.ReviewItem
 import ci.kalyno.app.data.dashboard.ReviewSession
 import ci.kalyno.app.data.dashboard.StudentId
 import ci.kalyno.app.data.srs.ReviewRating
@@ -90,6 +91,14 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                     items = mission.items
                 )
             )
+        }
+    }
+
+    /** Lance une session sur une sélection de cartes (ex. un chapitre choisi dans Explorer). */
+    fun startCustomSession(title: String?, items: List<ReviewItem>) {
+        if (items.isEmpty()) return
+        _state.update {
+            it.copy(session = ReviewSession(id = UUID.randomUUID().toString(), title = title, items = items))
         }
     }
 
