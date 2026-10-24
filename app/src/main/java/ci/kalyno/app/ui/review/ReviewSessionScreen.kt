@@ -188,6 +188,10 @@ private fun ColumnScope.CardStep(
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             RatingButton("J'ai oublié", KalynoRetry, KalynoText, Modifier.weight(1f)) { onRate(ReviewRating.OUBLIE) }
             RatingButton("J'ai hésité", KalynoBlueSoft, KalynoBlue, Modifier.weight(1f)) { onRate(ReviewRating.HESITE) }
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            RatingButton("J'ai su", KalynoCorrectSoft, KalynoCorrectText, Modifier.weight(1f)) { onRate(ReviewRating.SU) }
             RatingButton("Trop facile", KalynoBlue, Color.White, Modifier.weight(1f)) { onRate(ReviewRating.TROP_FACILE) }
         }
     }

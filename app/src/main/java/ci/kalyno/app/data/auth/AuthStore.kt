@@ -54,6 +54,7 @@ class AuthStore(context: Context) {
         // Un autre compte se connecte : les repères de synchronisation de l'ancien ne valent plus
         if (prefs.getString(KEY_USER_ID, null) != session.userId) {
             editor.remove(KEY_LAST_PUSH).remove(KEY_LAST_PULL).remove(KEY_PROFILE_SIGNATURE)
+                .remove(KEY_LOG_PUSH_ID).remove(KEY_LOG_PULL_AT)
         }
         editor
             .putString(KEY_USER_ID, session.userId)
@@ -78,6 +79,8 @@ class AuthStore(context: Context) {
             .remove(KEY_LAST_PUSH)
             .remove(KEY_LAST_PULL)
             .remove(KEY_PROFILE_SIGNATURE)
+            .remove(KEY_LOG_PUSH_ID)
+            .remove(KEY_LOG_PULL_AT)
             .apply()
     }
 
@@ -93,6 +96,20 @@ class AuthStore(context: Context) {
 
     fun setLastPullAt(value: Long) {
         prefs.edit().putLong(KEY_LAST_PULL, value).apply()
+    }
+
+    /** Dernier identifiant local d'historique déjà envoyé au cloud. */
+    fun lastLogPushId(): Long = prefs.getLong(KEY_LOG_PUSH_ID, 0L)
+
+    fun setLastLogPushId(value: Long) {
+        prefs.edit().putLong(KEY_LOG_PUSH_ID, value).apply()
+    }
+
+    /** Instant de la dernière révision récupérée depuis le cloud. */
+    fun lastLogPullAt(): Long = prefs.getLong(KEY_LOG_PULL_AT, 0L)
+
+    fun setLastLogPullAt(value: Long) {
+        prefs.edit().putLong(KEY_LOG_PULL_AT, value).apply()
     }
 
     fun profileSignature(): String? = prefs.getString(KEY_PROFILE_SIGNATURE, null)
@@ -112,5 +129,7 @@ class AuthStore(context: Context) {
         const val KEY_LAST_PUSH = "sync_last_push"
         const val KEY_LAST_PULL = "sync_last_pull"
         const val KEY_PROFILE_SIGNATURE = "sync_profile_signature"
+        const val KEY_LOG_PUSH_ID = "sync_log_push_id"
+        const val KEY_LOG_PULL_AT = "sync_log_pull_at"
     }
 }

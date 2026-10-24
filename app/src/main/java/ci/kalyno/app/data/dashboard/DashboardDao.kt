@@ -1,10 +1,13 @@
 package ci.kalyno.app.data.dashboard
 
 import androidx.room.Dao
+import androidx.room.Insert
+import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Upsert
 import ci.kalyno.app.data.srs.CardProgressEntity
 import ci.kalyno.app.data.srs.FlashcardEntity
+import ci.kalyno.app.data.srs.ReviewLogEntity
 import ci.kalyno.app.data.srs.SubjectEntity
 
 /** Dernière introduction d'une nouvelle carte pour une matière. */
@@ -68,4 +71,17 @@ interface DashboardDao {
 
     @Query("SELECT id FROM flashcards WHERE id IN (:ids)")
     suspend fun existingFlashcardIds(ids: List<String>): List<String>
+
+    // ----- Historique des révisions -----
+
+    /** Révisions enregistrées après [afterId] (identifiant local croissant), de la plus ancienne à la plus récente. */
+    @Query(
+        "SELECT * FROM review_log WHERE studentId = :studentId AND logId > :afterId " +
+            "ORDER BY logId ASC LIMIT :limit"
+    )
+    suspend fun logsAfter(studentId: String, afterId: Long, limit: Int): List<ReviewLogEntity>
+
+    /** Doublons ignorés grâce à l'index unique (élève, carte, instant). */
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertLogs(items: List<ReviewLogEntity>)
 }

@@ -20,7 +20,9 @@ data class CardWithContext(
     val dueDate: Long,
     val easeFactor: Float,
     val intervalDays: Int,
-    val repetitions: Int
+    val repetitions: Int,
+    val stability: Double = 0.0,
+    val lastReviewedAt: Long? = null
 )
 
 @Dao
@@ -42,7 +44,7 @@ interface SrsDao {
     @Update
     suspend fun updateProgress(progress: CardProgressEntity)
 
-    @Insert
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun logReview(log: ReviewLogEntity)
 
     /**
@@ -58,7 +60,9 @@ interface SrsDao {
             p.dueDate AS dueDate,
             p.easeFactor AS easeFactor,
             p.intervalDays AS intervalDays,
-            p.repetitions AS repetitions
+            p.repetitions AS repetitions,
+            p.stability AS stability,
+            p.lastReviewedAt AS lastReviewedAt
         FROM card_progress p
         INNER JOIN flashcards f ON f.id = p.flashcardId
         INNER JOIN subjects s ON s.id = f.subjectId
@@ -80,7 +84,9 @@ interface SrsDao {
             p.dueDate AS dueDate,
             p.easeFactor AS easeFactor,
             p.intervalDays AS intervalDays,
-            p.repetitions AS repetitions
+            p.repetitions AS repetitions,
+            p.stability AS stability,
+            p.lastReviewedAt AS lastReviewedAt
         FROM card_progress p
         INNER JOIN flashcards f ON f.id = p.flashcardId
         INNER JOIN subjects s ON s.id = f.subjectId

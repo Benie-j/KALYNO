@@ -1,6 +1,7 @@
 package ci.kalyno.app.data.dashboard
 
 import android.content.Context
+import androidx.room.withTransaction
 import ci.kalyno.app.data.LearningCard
 import ci.kalyno.app.data.LearningChapter
 import ci.kalyno.app.data.LearningSubject
@@ -14,6 +15,7 @@ import ci.kalyno.app.data.srs.SrsEngine
 import ci.kalyno.app.data.srs.SubjectEntity
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import java.net.URLEncoder
@@ -25,13 +27,16 @@ class DashboardRepository(context: Context) {
     private val dao = db.dashboardDao()
     private val remote = SupabaseLearningRepository()
     private val cloud = CloudSync(context)
+    private val exams = ExamSchedule(context)
 
     data class Snapshot(
         val mission: MissionUi?,
         val missionStatus: MissionStatus,
         val urgentTotal: Int,
         val urgentTopics: List<UrgentTopic>,
-        val urgentItems: List<ReviewItem>
+        val urgentItems: List<ReviewItem>,
+        /** Jours restants avant l'examen publié par l'admin (null si aucune date). */
+        val examDaysLeft: Int?
     )
 
     /**
@@ -41,6 +46,9 @@ class DashboardRepository(context: Context) {
      */
     suspend fun load(levelId: String, studentId: String): Snapshot = withContext(Dispatchers.IO) {
         val now = System.currentTimeMillis()
+
+        // La date d'examen se charge en parallèle du contenu
+        val examLookup = async { exams.refresh(levelId) }
 
         var content: List<LearningSubject>? = null
         var coefficients: Map<String, Float> = emptyMap()
@@ -159,30 +167,42 @@ class DashboardRepository(context: Context) {
             missionStatus = status,
             urgentTotal = urgentItems.size,
             urgentTopics = topics,
-            urgentItems = urgentItems.take(SrsConfig.SESSION_SIZE)
+            urgentItems = urgentItems.take(SrsConfig.SESSION_SIZE),
+            examDaysLeft = examLookup.await()
+                ?.let { SrsEngine.daysUntil(now, it) }
+                ?.takeIf { it >= 0 }
         )
     }
 
-    /** Enregistre l'évaluation de l'élève et fait avancer la carte dans le moteur SRS. */
-    suspend fun rate(studentId: String, cardId: String, rating: ReviewRating) =
+    /**
+     * Enregistre l'évaluation de l'élève et fait avancer la carte dans le moteur SRS.
+     * La date d'examen de la classe ([levelId]) plafonne l'intervalle : aucune carte ne
+     * sera programmée après le jour J.
+     */
+    suspend fun rate(studentId: String, cardId: String, rating: ReviewRating, levelId: String?) =
         withContext(Dispatchers.IO) {
             val now = System.currentTimeMillis()
-            val current = srs.getProgress(studentId, cardId)
-                ?: CardProgressEntity(studentId = studentId, flashcardId = cardId, dueDate = now)
-                    .also { srs.initProgress(it) }
+            val cap = SrsEngine.examIntervalCap(now, levelId?.let { exams.cached(it) })
 
-            val next = SrsEngine.computeNextProgress(current, rating, now)
-            srs.updateProgress(next)
-            srs.logReview(
-                ReviewLogEntity(
-                    studentId = studentId,
-                    flashcardId = cardId,
-                    rating = rating,
-                    intervalBefore = current.intervalDays,
-                    intervalAfter = next.intervalDays,
-                    reviewedAt = now
+            // Progression et historique s'écrivent ensemble ou pas du tout
+            db.withTransaction {
+                val current = srs.getProgress(studentId, cardId)
+                    ?: CardProgressEntity(studentId = studentId, flashcardId = cardId, dueDate = now)
+                        .also { srs.initProgress(it) }
+
+                val next = SrsEngine.computeNextProgress(current, rating, now, maxIntervalDays = cap)
+                srs.updateProgress(next)
+                srs.logReview(
+                    ReviewLogEntity(
+                        studentId = studentId,
+                        flashcardId = cardId,
+                        rating = rating,
+                        intervalBefore = current.intervalDays,
+                        intervalAfter = next.intervalDays,
+                        reviewedAt = now
+                    )
                 )
-            )
+            }
         }
 
     private suspend fun sync(

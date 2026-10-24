@@ -1,5 +1,6 @@
 package ci.kalyno.app.data.srs
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 import androidx.room.Index
@@ -42,13 +43,15 @@ data class FlashcardEntity(
 )
 
 /**
- * L'évaluation donnée par l'élève à la fin d'une carte.
- * Pilote directement le calcul SM-2.
+ * L'évaluation donnée par l'élève à la fin d'une carte (4 notes).
+ * [grade] est la note FSRS correspondante : 1 = Again, 2 = Hard, 3 = Good, 4 = Easy.
+ * Room enregistre le nom de l'énumération : l'ordre peut évoluer sans migration.
  */
-enum class ReviewRating {
-    OUBLIE,       // "J'ai oublié"
-    HESITE,       // "J'ai hésité"
-    TROP_FACILE   // "Trop facile"
+enum class ReviewRating(val grade: Int) {
+    OUBLIE(1),       // "J'ai oublié"
+    HESITE(2),       // "J'ai hésité"
+    SU(3),           // "J'ai su"
+    TROP_FACILE(4)   // "Trop facile"
 }
 
 /**
@@ -72,14 +75,19 @@ data class CardProgressEntity(
     val studentId: String,
     val flashcardId: String,
 
-    // -- Paramètres SM-2 --
-    val easeFactor: Float = 2.5f,      // facteur de facilité, jamais < 1.3
+    // -- Anciens champs SM-2 (conservés : le cloud et les anciennes versions les lisent) --
+    val easeFactor: Float = 2.5f,      // dérivé de la difficulté FSRS, entre 1,3 et 3,0
     val intervalDays: Int = 0,         // intervalle courant, en jours
     val repetitions: Int = 0,          // nombre de révisions réussies d'affilée
 
     // -- Planification --
     val dueDate: Long,                 // timestamp epoch (ms) de la prochaine échéance
-    val lastReviewedAt: Long? = null
+    val lastReviewedAt: Long? = null,
+
+    // -- Mémoire FSRS (0 = carte créée avant FSRS : reprise automatique depuis l'intervalle et l'ease) --
+    @ColumnInfo(defaultValue = "0") val stability: Double = 0.0,   // jours pour tomber à 90 % de rétention
+    @ColumnInfo(defaultValue = "0") val difficulty: Double = 0.0,  // 1 (facile) à 10 (difficile)
+    @ColumnInfo(defaultValue = "0") val lapses: Int = 0            // nombre d'oublis après apprentissage
 )
 
 /**
@@ -88,7 +96,13 @@ data class CardProgressEntity(
  */
 @Entity(
     tableName = "review_log",
-    indices = [Index("studentId"), Index("flashcardId"), Index("reviewedAt")]
+    indices = [
+        Index("studentId"),
+        Index("flashcardId"),
+        Index("reviewedAt"),
+        // Une même révision ne peut exister qu'une fois : la synchro cloud peut rejouer sans doublon
+        Index(value = ["studentId", "flashcardId", "reviewedAt"], unique = true)
+    ]
 )
 data class ReviewLogEntity(
     @PrimaryKey(autoGenerate = true) val logId: Long = 0,

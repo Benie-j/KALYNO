@@ -6,6 +6,8 @@ import ci.kalyno.app.data.auth.AuthStore
 import ci.kalyno.app.data.auth.SupabaseAuthApi
 import ci.kalyno.app.data.dashboard.KalynoDatabase
 import ci.kalyno.app.data.srs.CardProgressEntity
+import ci.kalyno.app.data.srs.ReviewLogEntity
+import ci.kalyno.app.data.srs.ReviewRating
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
@@ -18,7 +20,7 @@ import org.json.JSONObject
 data class RemoteProfile(val nickname: String, val levelId: String)
 
 /**
- * Synchronisation du compte : profil et progression SRS.
+ * Synchronisation du compte : profil, progression SRS et historique des révisions.
  *
  * - Local d'abord : Room reste la source de travail, le cloud sert de sauvegarde et de reprise.
  * - Une carte en conflit : la révision la plus récente gagne.
@@ -67,6 +69,9 @@ class CloudSync(context: Context) {
         val userId = store.userId() ?: return@withContext
         pull(studentId, userId, token)
         push(studentId, userId, token)
+        // L'historique sert aux quotas du jour et à la série : on le restaure puis on envoie le local
+        pullLogs(studentId, userId, token)
+        pushLogs(studentId, userId, token)
     }
 
     private suspend fun pull(studentId: String, userId: String, token: String) {
@@ -79,7 +84,8 @@ class CloudSync(context: Context) {
                 SupabaseRest.request(
                     "GET",
                     "student_card_progress?user_id=eq.$userId&last_reviewed_at=gt.$since" +
-                        "&select=flashcard_id,ease_factor,interval_days,repetitions,due_date,last_reviewed_at" +
+                        "&select=flashcard_id,ease_factor,interval_days,repetitions,due_date,last_reviewed_at," +
+                        "stability,difficulty,lapses" +
                         "&order=last_reviewed_at.asc&limit=$PAGE_SIZE",
                     token
                 )
@@ -107,7 +113,10 @@ class CloudSync(context: Context) {
                     intervalDays = r.getInt("interval_days"),
                     repetitions = r.getInt("repetitions"),
                     dueDate = r.getLong("due_date"),
-                    lastReviewedAt = reviewedAt
+                    lastReviewedAt = reviewedAt,
+                    stability = r.optDouble("stability", 0.0),
+                    difficulty = r.optDouble("difficulty", 0.0),
+                    lapses = r.optInt("lapses", 0)
                 )
             }
             if (toSave.isNotEmpty()) dao.upsertProgress(toSave)
@@ -139,6 +148,9 @@ class CloudSync(context: Context) {
                         .put("repetitions", p.repetitions)
                         .put("due_date", p.dueDate)
                         .put("last_reviewed_at", p.lastReviewedAt ?: 0L)
+                        .put("stability", p.stability)
+                        .put("difficulty", p.difficulty)
+                        .put("lapses", p.lapses)
                 )
             }
             SupabaseRest.request(
@@ -148,6 +160,74 @@ class CloudSync(context: Context) {
             since = rows.last().lastReviewedAt ?: since
             store.setLastPushAt(since)
             if (rows.size < PUSH_BATCH) break
+        }
+    }
+
+    /** Récupère l'historique des révisions faites ailleurs (nouveau téléphone). Les doublons sont ignorés. */
+    private suspend fun pullLogs(studentId: String, userId: String, token: String) {
+        var since = store.lastLogPullAt()
+
+        while (true) {
+            val rows = JSONArray(
+                SupabaseRest.request(
+                    "GET",
+                    "student_review_log?user_id=eq.$userId&reviewed_at=gt.$since" +
+                        "&select=flashcard_id,rating,interval_before,interval_after,reviewed_at" +
+                        "&order=reviewed_at.asc&limit=$PAGE_SIZE",
+                    token
+                )
+            )
+            if (rows.length() == 0) break
+
+            val items = (0 until rows.length()).mapNotNull { i ->
+                val r = rows.getJSONObject(i)
+                val rating = runCatching { ReviewRating.valueOf(r.getString("rating")) }.getOrNull()
+                    ?: return@mapNotNull null
+                ReviewLogEntity(
+                    studentId = studentId,
+                    flashcardId = r.getString("flashcard_id"),
+                    rating = rating,
+                    intervalBefore = r.getInt("interval_before"),
+                    intervalAfter = r.getInt("interval_after"),
+                    reviewedAt = r.getLong("reviewed_at")
+                )
+            }
+            if (items.isNotEmpty()) dao.insertLogs(items)
+
+            since = rows.getJSONObject(rows.length() - 1).getLong("reviewed_at")
+            store.setLastLogPullAt(since)
+            if (rows.length() < PAGE_SIZE) break
+        }
+    }
+
+    /** Envoie l'historique local pas encore envoyé ; le serveur ignore les doublons. */
+    private suspend fun pushLogs(studentId: String, userId: String, token: String) {
+        var afterId = store.lastLogPushId()
+
+        while (true) {
+            val rows = dao.logsAfter(studentId, afterId, LOG_PUSH_BATCH)
+            if (rows.isEmpty()) break
+
+            val body = JSONArray()
+            rows.forEach { l ->
+                body.put(
+                    JSONObject()
+                        .put("user_id", userId)
+                        .put("flashcard_id", l.flashcardId)
+                        .put("rating", l.rating.name)
+                        .put("grade", l.rating.grade)
+                        .put("interval_before", l.intervalBefore)
+                        .put("interval_after", l.intervalAfter)
+                        .put("reviewed_at", l.reviewedAt)
+                )
+            }
+            SupabaseRest.request(
+                "POST", "student_review_log", token, body.toString(), "resolution=ignore-duplicates,return=minimal"
+            )
+
+            afterId = rows.last().logId
+            store.setLastLogPushId(afterId)
+            if (rows.size < LOG_PUSH_BATCH) break
         }
     }
 
@@ -171,6 +251,7 @@ class CloudSync(context: Context) {
     private companion object {
         const val PAGE_SIZE = 500
         const val PUSH_BATCH = 200
+        const val LOG_PUSH_BATCH = 500
         const val EXPIRY_MARGIN_MS = 60_000L
         val tokenLock = Mutex()
     }

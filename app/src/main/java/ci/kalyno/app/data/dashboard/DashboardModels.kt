@@ -57,5 +57,7 @@ data class DashboardUiState(
     val urgentTotal: Int = 0,
     val urgentTopics: List<UrgentTopic> = emptyList(),
     val urgentItems: List<ReviewItem> = emptyList(),
+    /** Jours avant l'examen publié par l'admin ; null tant qu'aucune date n'est publiée. */
+    val examDaysLeft: Int? = null,
     val session: ReviewSession? = null
 )

@@ -61,7 +61,8 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                         missionStatus = snapshot.missionStatus,
                         urgentTotal = snapshot.urgentTotal,
                         urgentTopics = snapshot.urgentTopics,
-                        urgentItems = snapshot.urgentItems
+                        urgentItems = snapshot.urgentItems,
+                        examDaysLeft = snapshot.examDaysLeft
                     )
                 }
             } catch (e: CancellationException) {
@@ -104,7 +105,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             writeLock.withLock {
                 try {
-                    repository.rate(studentId, cardId, rating)
+                    repository.rate(studentId, cardId, rating, loadedLevel)
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {

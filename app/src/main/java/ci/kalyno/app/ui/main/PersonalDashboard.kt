@@ -64,16 +64,34 @@ fun PersonalDashboard(
                     fontSize = 13.sp
                 )
             }
-            Text(
-                text = "🔥 ${state.streak}",
-                color = KalynoText,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(KalynoYellow.copy(alpha = 0.25f))
-                    .padding(horizontal = 14.dp, vertical = 8.dp)
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                val examDays = state.examDaysLeft
+                if (examDays != null) {
+                    Text(
+                        text = if (examDays == 0) "📅 Jour J" else "📅 J-$examDays",
+                        color = KalynoBlue,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(20.dp))
+                            .background(KalynoBlueSoft)
+                            .padding(horizontal = 14.dp, vertical = 8.dp)
+                    )
+                }
+                Text(
+                    text = "🔥 ${state.streak}",
+                    color = KalynoText,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(KalynoYellow.copy(alpha = 0.25f))
+                        .padding(horizontal = 14.dp, vertical = 8.dp)
+                )
+            }
         }
 
         GreetingCard(nickname = state.nickname)
