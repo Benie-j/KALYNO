@@ -55,14 +55,16 @@ class AuthViewModel(app: Application) : AndroidViewModel(app) {
     /** Inscription et connexion : le compte est créé à la première connexion Google. */
     fun signInWithGoogle(activity: Activity) {
         if (_state.value.loading) return
-        _state.update { it.copy(loading = true, error = null) }
+        _state.update { it.copy(loading = true, error = "Étape 1/3 : ouverture de Google…") }
 
         viewModelScope.launch {
             try {
                 val rawNonce = UUID.randomUUID().toString()
                 val idToken = requestGoogleIdToken(activity, sha256Hex(rawNonce))
+                _state.update { it.copy(error = "Étape 2/3 : échange avec Supabase…") }
                 val session = api.signInWithGoogleIdToken(idToken, rawNonce)
                 store.saveSession(session)
+                _state.update { it.copy(error = "Étape 3/3 : compte créé, chargement du profil…") }
 
                 // Compte déjà connu : on reprend classe, pseudo et parcours sur ce téléphone
                 val remote = fetchProfileOrNull()
