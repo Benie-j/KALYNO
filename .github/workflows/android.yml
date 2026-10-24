@@ -43,7 +43,7 @@ jobs:
       - name: Prepare release keystore
         run: echo "${{ secrets.KALYNO_KEYSTORE_BASE64 }}" | base64 -d > "$RUNNER_TEMP/kalyno-release.jks"
 
-      - name: Compile KALYNO release APK
+      - name: Compile KALYNO 
         env:
           KALYNO_KEYSTORE_PATH: ${{ runner.temp }}/kalyno-release.jks
           KALYNO_KEYSTORE_PASSWORD: ${{ secrets.KALYNO_KEYSTORE_PASSWORD }}
@@ -52,11 +52,11 @@ jobs:
         run: gradle assembleRelease
 
       - name: Verify release signature
-        run: $ANDROID_HOME/build-tools/36.0.0/apksigner verify --print-certs app/build/outputs/apk/release/Kalyno.apk
+        run: $ANDROID_HOME/build-tools/36.0.0/apksigner verify --print-certs app/build/outputs/apk/release/app-release.apk
 
       - name: Upload release APK
         uses: actions/upload-artifact@v6
         with:
           name: KALYNO
-          path: app/build/outputs/apk/release/Kalyno.apk
+          path: app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
