@@ -13,6 +13,7 @@ import ci.kalyno.app.data.dashboard.StudentId
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -51,6 +52,34 @@ data class ExplorerChapter(
 
 data class SubjectProgress(val name: String, val emoji: String, val progress: Float)
 
+/** Une discipline (= matière publiée par l'admin) affichée en mini-carte dans Explorer. */
+data class Discipline(
+    val id: String,
+    val name: String,
+    val emoji: String,
+    val lessonCount: Int
+)
+
+/**
+ * Navigation interne à l'onglet Explorer (aucune dépendance à un NavHost).
+ * [depth] sert à choisir le sens de l'animation de transition.
+ */
+sealed interface ExplorerRoute {
+    val depth: Int
+
+    data object Home : ExplorerRoute {
+        override val depth = 0
+    }
+
+    data class DisciplineLessons(val disciplineId: String) : ExplorerRoute {
+        override val depth = 1
+    }
+
+    data class LessonDetail(val lessonId: String) : ExplorerRoute {
+        override val depth = 2
+    }
+}
+
 data class ExplorerUiState(
     val loading: Boolean = true,
     /** Renseigné uniquement s'il n'y a rien à afficher (ni réseau, ni cache). */
@@ -59,8 +88,25 @@ data class ExplorerUiState(
     val offline: Boolean = false,
     val chapters: List<ExplorerChapter> = emptyList(),
     val query: String = "",
-    val filter: ExplorerFilter = ExplorerFilter.FOR_YOU
+    val filter: ExplorerFilter = ExplorerFilter.FOR_YOU,
+    /** Disciplines publiées (ordre défini par l'admin). */
+    val disciplines: List<Discipline> = emptyList(),
+    /** Discipline touchée : se colore immédiatement, avant l'ouverture de sa page. */
+    val pressedDisciplineId: String? = null,
+    val openDisciplineId: String? = null,
+    val openLessonId: String? = null
 ) {
+    val route: ExplorerRoute
+        get() = when {
+            openLessonId != null -> ExplorerRoute.LessonDetail(openLessonId)
+            openDisciplineId != null -> ExplorerRoute.DisciplineLessons(openDisciplineId)
+            else -> ExplorerRoute.Home
+        }
+
+    /** Leçons (= chapitres publiés) d'une discipline, dans l'ordre de l'admin. */
+    fun lessonsOf(disciplineId: String): List<ExplorerChapter> =
+        chapters.filter { it.subjectId == disciplineId }
+
     val visibleChapters: List<ExplorerChapter>
         get() {
             val q = query.trim()
@@ -88,6 +134,9 @@ data class ExplorerUiState(
 // ---------------------------------------------------------------------------
 // ViewModel (online-first : réseau d'abord, cache JSON en secours)
 // ---------------------------------------------------------------------------
+
+/** Durée du retour visuel (carte verte) avant d'ouvrir la page de la discipline. */
+private const val PRESS_FEEDBACK_MS = 140L
 
 class ExplorerViewModel(app: Application) : AndroidViewModel(app) {
 
@@ -119,6 +168,40 @@ class ExplorerViewModel(app: Application) : AndroidViewModel(app) {
 
     fun onFilterChange(value: ExplorerFilter) = _state.update { it.copy(filter = value) }
 
+    // ----- Navigation Explorer -> Discipline -> Leçon -----
+
+    /**
+     * Micro-interaction : la carte devient verte instantanément, puis la page de la discipline
+     * s'ouvre après un très court délai (le temps de percevoir le retour visuel).
+     */
+    fun onDisciplineClick(id: String) {
+        val st = _state.value
+        if (st.pressedDisciplineId != null || st.openDisciplineId != null) return
+        _state.update { it.copy(pressedDisciplineId = id) }
+        viewModelScope.launch {
+            delay(PRESS_FEEDBACK_MS)
+            _state.update { if (it.pressedDisciplineId == id) it.copy(openDisciplineId = id) else it }
+        }
+    }
+
+    fun onLessonClick(id: String) = _state.update { it.copy(openLessonId = id) }
+
+    /** Gère le retour système / flèche. Renvoie false si on est déjà sur l'accueil Explorer. */
+    fun onBack(): Boolean {
+        val st = _state.value
+        return when {
+            st.openLessonId != null -> {
+                _state.update { it.copy(openLessonId = null) }
+                true
+            }
+            st.openDisciplineId != null || st.pressedDisciplineId != null -> {
+                _state.update { it.copy(openDisciplineId = null, pressedDisciplineId = null) }
+                true
+            }
+            else -> false
+        }
+    }
+
     fun refresh(silent: Boolean) {
         val level = levelId ?: return
         job?.cancel()
@@ -132,7 +215,9 @@ class ExplorerViewModel(app: Application) : AndroidViewModel(app) {
                 val cached = withContext(Dispatchers.IO) { cache.read(level) }
                 if (cached != null && cached.isNotEmpty()) {
                     val chapters = withContext(Dispatchers.IO) { toChapters(cached) }
-                    _state.update { it.copy(chapters = chapters, loading = false) }
+                    _state.update {
+                        sanitized(it.copy(chapters = chapters, disciplines = toDisciplines(cached), loading = false))
+                    }
                 }
             }
 
@@ -142,7 +227,15 @@ class ExplorerViewModel(app: Application) : AndroidViewModel(app) {
                 withContext(Dispatchers.IO) { cache.write(level, subjects) }
                 val chapters = withContext(Dispatchers.IO) { toChapters(subjects) }
                 _state.update {
-                    it.copy(loading = false, error = null, offline = false, chapters = chapters)
+                    sanitized(
+                        it.copy(
+                            loading = false,
+                            error = null,
+                            offline = false,
+                            chapters = chapters,
+                            disciplines = toDisciplines(subjects)
+                        )
+                    )
                 }
             } catch (e: CancellationException) {
                 throw e
@@ -163,6 +256,21 @@ class ExplorerViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     // ----- Mapping contenu -> UI -----
+
+    private fun toDisciplines(subjects: List<LearningSubject>): List<Discipline> =
+        subjects.map { Discipline(it.id, it.name, it.emoji, it.chapters.size) }
+
+    /** Si l'admin dépublie la leçon / discipline ouverte, on revient proprement en arrière. */
+    private fun sanitized(st: ExplorerUiState): ExplorerUiState {
+        var next = st
+        if (next.openLessonId != null && next.chapters.none { it.id == next.openLessonId }) {
+            next = next.copy(openLessonId = null)
+        }
+        if (next.openDisciplineId != null && next.disciplines.none { it.id == next.openDisciplineId }) {
+            next = next.copy(openDisciplineId = null, pressedDisciplineId = null)
+        }
+        return next
+    }
 
     private suspend fun toChapters(subjects: List<LearningSubject>): List<ExplorerChapter> {
         val introduced = runCatching { dao.progressedCardIds(studentId).toHashSet() }

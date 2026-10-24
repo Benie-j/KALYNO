@@ -64,6 +64,7 @@ class LearningContentCache(context: Context) {
                                                     put("title", cap.title)
                                                     put("body", cap.body)
                                                     put("minutes", cap.minutes)
+                                                    put("kind", cap.kind)
                                                 }
                                             )
                                         }
@@ -118,7 +119,8 @@ class LearningContentCache(context: Context) {
                     title = cap.optString("title", ""),
                     body = cap.optString("body", ""),
                     minutes = cap.optInt("minutes", 0),
-                    cards = cardList.filter { it.capsuleId == capId }
+                    cards = cardList.filter { it.capsuleId == capId },
+                    kind = cap.optString("kind", "text")
                 )
             },
             cards = cardList

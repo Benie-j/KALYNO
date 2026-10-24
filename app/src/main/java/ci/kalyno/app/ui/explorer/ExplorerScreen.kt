@@ -1,6 +1,16 @@
 package ci.kalyno.app.ui.explorer
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -15,6 +25,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -24,15 +35,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -44,13 +51,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -64,7 +72,6 @@ import ci.kalyno.app.ui.components.KalynoPrimaryButton
 import ci.kalyno.app.ui.components.KalynoProgressBar
 import ci.kalyno.app.ui.components.SectionHeader
 import ci.kalyno.app.ui.components.ShimmerBlock
-import ci.kalyno.app.ui.components.StreakBadge
 import ci.kalyno.app.ui.components.rememberHaptic
 import ci.kalyno.app.ui.icons.KalynoSvgIcon
 import ci.kalyno.app.ui.theme.KalynoAmberDeep
@@ -83,23 +90,31 @@ private const val AUTO_REFRESH_MS = 120_000L
 
 private val PATH_ICONS = listOf("book-open", "brain", "rocket", "dumbbell", "radio-tower", "flame")
 
+// Ombre portée ultra-légère des mini-cartes Discipline
+private val ChipShadow = Color(0x140F172A)
+
 // ===========================================================================
-// ÉCRAN EXPLORER
+// ROUTEUR EXPLORER : Accueil -> Liste des leçons -> Leçon
 // ===========================================================================
 
+/**
+ * Point d'entrée de l'onglet Explorer.
+ *
+ * Plus de salutation ni d'icône de profil : l'écran s'ouvre directement sur la section
+ * "Disciplines". La navigation (état dans [ExplorerViewModel]) glisse horizontalement
+ * entre les trois écrans et gère le bouton retour système.
+ */
 @Composable
 fun ExplorerScreen(
     levelId: String,
-    nickname: String,
-    streak: Int,
     onStartChapter: (title: String, items: List<ReviewItem>) -> Unit,
     viewModel: ExplorerViewModel = viewModel(key = "explorer-$levelId")
 ) {
-    val state by viewModel.state.collectAsState()
-    val ui = state
+    val ui by viewModel.state.collectAsState()
 
-    var selectedId by rememberSaveable { mutableStateOf<String?>(null) }
     var showLeaderboard by rememberSaveable { mutableStateOf(false) }
+    // Hissé ici pour retrouver la même position de scroll en revenant de la liste des leçons
+    val homeScroll = rememberScrollState()
 
     LaunchedEffect(levelId) {
         viewModel.load(levelId)
@@ -109,24 +124,108 @@ fun ExplorerScreen(
         }
     }
 
+    // Retour système : Leçon -> Liste -> Accueil Explorer (puis MainScreen reprend la main)
+    BackHandler(enabled = ui.route != ExplorerRoute.Home) { viewModel.onBack() }
+
     val start: (ExplorerChapter) -> Unit = { chapter ->
         if (chapter.items.isNotEmpty()) {
             onStartChapter("${chapter.subjectEmoji} ${chapter.title}", chapter.items)
         }
     }
-    val open: (ExplorerChapter) -> Unit = { selectedId = it.id }
 
+    AnimatedContent(
+        targetState = ui.route,
+        transitionSpec = {
+            val forward = targetState.depth > initialState.depth
+            val dir = if (forward) 1 else -1
+            (slideInHorizontally(tween(300)) { it / 4 * dir } + fadeIn(tween(300))) togetherWith
+                (slideOutHorizontally(tween(300)) { -it / 6 * dir } + fadeOut(tween(180)))
+        },
+        label = "explorerRoute"
+    ) { route ->
+        when (route) {
+            ExplorerRoute.Home -> ExplorerHome(
+                levelId = levelId,
+                ui = ui,
+                viewModel = viewModel,
+                scroll = homeScroll,
+                onStart = start,
+                onOpenLesson = { viewModel.onLessonClick(it.id) },
+                onOpenLeaderboard = { showLeaderboard = true }
+            )
+
+            is ExplorerRoute.DisciplineLessons -> {
+                val discipline = ui.disciplines.firstOrNull { it.id == route.disciplineId }
+                if (discipline != null) {
+                    DisciplineLessonsScreen(
+                        discipline = discipline,
+                        lessons = ui.lessonsOf(discipline.id),
+                        onBack = { viewModel.onBack() },
+                        onOpenLesson = { viewModel.onLessonClick(it.id) }
+                    )
+                }
+            }
+
+            is ExplorerRoute.LessonDetail -> {
+                val lesson = ui.chapters.firstOrNull { it.id == route.lessonId }
+                if (lesson != null) {
+                    LessonScreen(
+                        chapter = lesson,
+                        onBack = { viewModel.onBack() },
+                        onStartQuestions = { start(lesson) }
+                    )
+                }
+            }
+        }
+    }
+
+    if (showLeaderboard) {
+        AlertDialog(
+            onDismissRequest = { showLeaderboard = false },
+            confirmButton = {
+                TextButton(onClick = { showLeaderboard = false }) {
+                    Text("OK", color = KalynoBlue, fontWeight = FontWeight.ExtraBold)
+                }
+            },
+            title = { Text("🏆 Classement en direct", fontWeight = FontWeight.ExtraBold) },
+            text = {
+                Text(
+                    "Le classement inter-classes s'ouvrira avec le premier tournoi publié par ton école. " +
+                        "Continue à t'entraîner : ta progression comptera !"
+                )
+            },
+            containerColor = Color.White
+        )
+    }
+}
+
+// ===========================================================================
+// ACCUEIL EXPLORER (épuré : Disciplines -> recherche -> filtres -> contenu)
+// ===========================================================================
+
+@Composable
+private fun ExplorerHome(
+    levelId: String,
+    ui: ExplorerUiState,
+    viewModel: ExplorerViewModel,
+    scroll: ScrollState,
+    onStart: (ExplorerChapter) -> Unit,
+    onOpenLesson: (ExplorerChapter) -> Unit,
+    onOpenLeaderboard: () -> Unit
+) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(top = 16.dp, bottom = 28.dp),
+            .statusBarsPadding()
+            .verticalScroll(scroll)
+            .padding(top = 20.dp, bottom = 28.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
-        ExplorerTopBar(
-            nickname = nickname,
-            streak = streak,
-            modifier = Modifier.padding(horizontal = 20.dp)
+        DisciplinesSection(
+            disciplines = ui.disciplines,
+            pressedId = ui.pressedDisciplineId,
+            loading = ui.loading && ui.disciplines.isEmpty(),
+            onClick = viewModel::onDisciplineClick
         )
 
         SearchField(
@@ -171,7 +270,7 @@ fun ExplorerScreen(
             ui.filter == ExplorerFilter.COMMUNITY -> CommunityBanner(
                 progress = ui.subjectProgress,
                 levelLabel = Levels.label(levelId),
-                onOpenLeaderboard = { showLeaderboard = true },
+                onOpenLeaderboard = onOpenLeaderboard,
                 modifier = Modifier.padding(horizontal = 20.dp)
             )
 
@@ -183,103 +282,135 @@ fun ExplorerScreen(
 
             else -> when (ui.filter) {
                 ExplorerFilter.FOR_YOU -> {
-                    ForYouSection(chapters = visible, onStart = start, onOpen = open)
-                    NewPathsSection(chapters = visible, onOpen = open)
+                    ForYouSection(chapters = visible, onStart = onStart, onOpen = onOpenLesson)
+                    NewPathsSection(chapters = visible, onOpen = onOpenLesson)
                     CommunityBanner(
                         progress = ui.subjectProgress,
                         levelLabel = Levels.label(levelId),
-                        onOpenLeaderboard = { showLeaderboard = true },
+                        onOpenLeaderboard = onOpenLeaderboard,
                         modifier = Modifier.padding(horizontal = 20.dp)
                     )
                 }
 
                 ExplorerFilter.CHALLENGES -> ChallengesSection(
                     chapters = visible,
-                    onStart = start,
-                    onOpen = open
+                    onStart = onStart,
+                    onOpen = onOpenLesson
                 )
 
-                ExplorerFilter.PATHS -> PathsSection(chapters = visible, onOpen = open)
+                ExplorerFilter.PATHS -> PathsSection(chapters = visible, onOpen = onOpenLesson)
 
                 ExplorerFilter.COMMUNITY -> Unit
             }
         }
     }
-
-    val selected = ui.chapters.firstOrNull { it.id == selectedId }
-    if (selected != null) {
-        ChapterSheet(
-            chapter = selected,
-            onDismiss = { selectedId = null },
-            onStart = {
-                selectedId = null
-                start(selected)
-            }
-        )
-    }
-
-    if (showLeaderboard) {
-        AlertDialog(
-            onDismissRequest = { showLeaderboard = false },
-            confirmButton = {
-                TextButton(onClick = { showLeaderboard = false }) {
-                    Text("OK", color = KalynoBlue, fontWeight = FontWeight.ExtraBold)
-                }
-            },
-            title = { Text("🏆 Classement en direct", fontWeight = FontWeight.ExtraBold) },
-            text = {
-                Text(
-                    "Le classement inter-classes s'ouvrira avec le premier tournoi publié par ton école. " +
-                        "Continue à t'entraîner : ta progression comptera !"
-                )
-            },
-            containerColor = Color.White
-        )
-    }
 }
 
 // ===========================================================================
-// TOP BAR / RECHERCHE / FILTRES
+// SECTION "DISCIPLINES" (défilement horizontal)
 // ===========================================================================
 
+/**
+ * Titre "Disciplines" (#0F172A) + LazyRow de mini-cartes, une par matière publiée par l'admin.
+ * [pressedId] = discipline touchée : sa carte passe instantanément en Vert Pétrole.
+ */
 @Composable
-private fun ExplorerTopBar(nickname: String, streak: Int, modifier: Modifier = Modifier) {
-    Row(
-        modifier = modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(text = "Bonjour 👋", color = KalynoMuted, fontSize = 14.sp)
-            Text(
-                text = nickname.ifBlank { "Explorateur" },
-                color = KalynoText,
-                fontSize = 24.sp,
-                fontWeight = FontWeight.ExtraBold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-        StreakBadge(count = streak)
-        Spacer(Modifier.width(10.dp))
-        Box(
-            modifier = Modifier
-                .size(46.dp)
-                .border(2.5.dp, KalynoBlue, CircleShape)
-                .padding(4.dp)
-                .clip(CircleShape)
-                .background(KalynoBlueSoft),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = nickname.trim().take(1).uppercase().ifEmpty { "K" },
-                color = KalynoBlue,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.ExtraBold
-            )
+private fun DisciplinesSection(
+    disciplines: List<Discipline>,
+    pressedId: String?,
+    loading: Boolean,
+    onClick: (String) -> Unit
+) {
+    // Rien à montrer (pas de discipline publiée) : on masque toute la section
+    if (!loading && disciplines.isEmpty()) return
+
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        SectionHeader(
+            title = "Disciplines",
+            subtitle = "Choisis une matière pour voir ses leçons",
+            modifier = Modifier.padding(horizontal = 20.dp)
+        )
+
+        if (loading) {
+            Row(
+                modifier = Modifier.padding(horizontal = 20.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                repeat(3) {
+                    ShimmerBlock(
+                        modifier = Modifier.width(110.dp).height(46.dp),
+                        shape = RoundedCornerShape(18.dp)
+                    )
+                }
+            }
+        } else {
+            LazyRow(
+                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                items(disciplines, key = { it.id }) { discipline ->
+                    DisciplineChip(
+                        discipline = discipline,
+                        selected = discipline.id == pressedId,
+                        onClick = { onClick(discipline.id) }
+                    )
+                }
+            }
         }
     }
 }
+
+/** Mini-carte : blanc pur + bordure #E2E8F0 + ombre légère ; sélectionnée = #0F766E + texte blanc. */
+@Composable
+private fun DisciplineChip(discipline: Discipline, selected: Boolean, onClick: () -> Unit) {
+    val haptic = rememberHaptic()
+    val shape = RoundedCornerShape(18.dp)
+
+    // Transition courte (120 ms) : le retour visuel est perçu comme instantané
+    val container by animateColorAsState(
+        targetValue = if (selected) KalynoBlue else Color.White,
+        animationSpec = tween(120),
+        label = "disciplineContainer"
+    )
+    val content by animateColorAsState(
+        targetValue = if (selected) Color.White else KalynoText,
+        animationSpec = tween(120),
+        label = "disciplineContent"
+    )
+    val border by animateColorAsState(
+        targetValue = if (selected) KalynoBlue else KalynoOutline,
+        animationSpec = tween(120),
+        label = "disciplineBorder"
+    )
+
+    Row(
+        modifier = Modifier
+            .shadow(2.dp, shape, ambientColor = ChipShadow, spotColor = ChipShadow)
+            .background(container, shape)
+            .border(1.dp, border, shape)
+            .clip(shape)
+            .clickable {
+                haptic()
+                onClick()
+            }
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(text = discipline.emoji, fontSize = 16.sp)
+        Text(
+            text = discipline.name,
+            color = content,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.ExtraBold,
+            maxLines = 1
+        )
+    }
+}
+
+// ===========================================================================
+// RECHERCHE / FILTRES
+// ===========================================================================
 
 @Composable
 private fun SearchField(
@@ -685,87 +816,6 @@ private fun CommunityBanner(
                 .padding(vertical = 15.dp),
             textAlign = TextAlign.Center
         )
-    }
-}
-
-// ===========================================================================
-// DÉTAIL D'UN CHAPITRE (leçons + démarrage)
-// ===========================================================================
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun ChapterSheet(
-    chapter: ExplorerChapter,
-    onDismiss: () -> Unit,
-    onStart: () -> Unit
-) {
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = Color.White
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp)
-                .padding(bottom = 28.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            KalynoPill(text = "${chapter.subjectEmoji} ${chapter.subjectName}")
-            Text(
-                text = chapter.title,
-                color = KalynoText,
-                fontSize = 24.sp,
-                lineHeight = 30.sp,
-                fontWeight = FontWeight.ExtraBold
-            )
-            if (chapter.questionCount > 0) {
-                Text(
-                    text = "⏱️ ${questionsLabel(chapter.questionCount)} • ${chapter.minutes} min",
-                    color = KalynoMuted,
-                    fontSize = 14.sp
-                )
-                KalynoProgressBar(progress = chapter.progress)
-            }
-
-            chapter.capsules.forEach { capsule ->
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(KalynoBlueSoft)
-                        .padding(16.dp)
-                ) {
-                    Text(
-                        text = capsule.title,
-                        color = KalynoBlue,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.ExtraBold
-                    )
-                    if (capsule.minutes > 0) {
-                        Text("${capsule.minutes} min de lecture", color = KalynoMuted, fontSize = 12.sp)
-                    }
-                    if (capsule.body.isNotBlank()) {
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            text = capsule.body,
-                            color = KalynoText,
-                            fontSize = 14.sp,
-                            lineHeight = 21.sp
-                        )
-                    }
-                }
-            }
-
-            if (chapter.questionCount > 0) {
-                Spacer(Modifier.height(4.dp))
-                KalynoPrimaryButton(
-                    label = "DÉMARRER LES ${chapter.questionCount} QUESTIONS",
-                    onClick = onStart
-                )
-            }
-        }
     }
 }
 

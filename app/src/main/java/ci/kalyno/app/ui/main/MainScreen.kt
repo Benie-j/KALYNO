@@ -117,8 +117,6 @@ fun MainScreen(
                     )
                     2 -> ExplorerScreen(
                         levelId = levelId,
-                        nickname = nickname,
-                        streak = state.streak,
                         onStartChapter = viewModel::startCustomSession
                     )
                     else -> ProfileScreen(levelId, onChangeLevel, onLoginClick, signedIn, accountLabel, onLogoutClick)

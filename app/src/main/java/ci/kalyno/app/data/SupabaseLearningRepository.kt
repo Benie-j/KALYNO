@@ -26,7 +26,13 @@ data class LearningCapsule(
     val title: String,
     val body: String,
     val minutes: Int,
-    val cards: List<LearningCard>
+    val cards: List<LearningCard>,
+    /**
+     * Type de bloc configuré par l'admin : "intro", "text", "rule" (formule / règle d'or),
+     * "tip" (astuce) ou "pitfall" (piège à éviter). "text" par défaut : si la colonne `kind`
+     * n'existe pas encore côté back-end, l'app reste 100 % fonctionnelle.
+     */
+    val kind: String = "text"
 )
 
 data class LearningChapter(
@@ -70,11 +76,7 @@ class SupabaseLearningRepository {
                                 val chapter = chapterRows.getJSONObject(j)
                                 val chapterId = chapter.getString("id")
 
-                                val capsuleRows = getArray(
-                                    "capsules?select=id,title,body,minutes,position" +
-                                        "&chapter_id=eq.${enc(chapterId)}" +
-                                        "&order=position.asc"
-                                )
+                                val capsuleRows = loadCapsuleRows(chapterId)
 
                                 val cards = loadCards(chapterId)
 
@@ -91,7 +93,11 @@ class SupabaseLearningRepository {
                                                 minutes = capsule.optInt("minutes", 0),
                                                 cards = cards.filter {
                                                     it.capsuleId == capsuleId
-                                                }
+                                                },
+                                                kind = capsule.optString("kind", "text")
+                                                    .takeUnless {
+                                                        it.isBlank() || it.equals("null", ignoreCase = true)
+                                                    } ?: "text"
                                             )
                                         )
                                     }
@@ -125,6 +131,30 @@ class SupabaseLearningRepository {
                 throw e
             }
         }
+
+    /** Faux dès qu'on sait que la table `capsules` n'a pas (encore) la colonne `kind`. */
+    @Volatile
+    private var capsuleKindSupported = true
+
+    /**
+     * Charge les blocs d'une leçon. On demande d'abord la colonne `kind` ; si le back-end ne la
+     * connaît pas encore (HTTP 400), on retombe sur l'ancienne requête sans casser l'écran.
+     */
+    private fun loadCapsuleRows(chapterId: String): JSONArray {
+        val filter = "&chapter_id=eq.${enc(chapterId)}&order=position.asc"
+        if (capsuleKindSupported) {
+            try {
+                return getArray("capsules?select=id,title,body,minutes,position,kind$filter")
+            } catch (e: IOException) {
+                if (e.message?.startsWith("Supabase HTTP 400") == true) {
+                    capsuleKindSupported = false
+                } else {
+                    throw e
+                }
+            }
+        }
+        return getArray("capsules?select=id,title,body,minutes,position$filter")
+    }
 
     private fun loadCards(chapterId: String): List<LearningCard> {
         val rows = getArray(
