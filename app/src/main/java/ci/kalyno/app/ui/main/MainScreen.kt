@@ -31,6 +31,11 @@ import ci.kalyno.app.ui.icons.KalynoSvgIcon
 import androidx.lifecycle.viewmodel.compose.viewModel
 import ci.kalyno.app.ui.dojo.DojoScreen
 import ci.kalyno.app.ui.explorer.ExplorerScreen
+import ci.kalyno.app.ui.profile.ProfileLinks
+import ci.kalyno.app.ui.profile.ProfileScreen
+import ci.kalyno.app.ui.profile.appVersionLabel
+import ci.kalyno.app.ui.profile.emailSupportOrSoon
+import ci.kalyno.app.ui.profile.openLinkOrSoon
 import ci.kalyno.app.ui.review.ReviewSessionScreen
 
 private data class TabItem(val icon: String, val label: String)
@@ -119,158 +124,39 @@ fun MainScreen(
                         levelId = levelId,
                         onStartChapter = viewModel::startCustomSession
                     )
-                    else -> ProfileScreen(levelId, onChangeLevel, onLoginClick, signedIn, accountLabel, onLogoutClick)
+                    else -> {
+                        val context = LocalContext.current
+                        val levelLabel = Levels.label(levelId)
+                        val version = context.appVersionLabel()
+                        ProfileScreen(
+                            levelId = levelId,
+                            nickname = nickname,
+                            streak = state.streak,
+                            signedIn = signedIn,
+                            accountLabel = accountLabel,
+                            appVersionLabel = version,
+                            onChangeLevel = onChangeLevel,
+                            onLoginClick = onLoginClick,
+                            onLogoutClick = onLogoutClick,
+                            onOpenHelp = { context.openLinkOrSoon(ProfileLinks.HELP_URL) },
+                            onContactSupport = {
+                                context.emailSupportOrSoon(
+                                    subject = "[KALYNO] Question",
+                                    body = "\n\n---\nClasse : $levelLabel\n$version"
+                                )
+                            },
+                            onReportIssue = {
+                                context.emailSupportOrSoon(
+                                    subject = "[KALYNO] Signalement bug / contenu",
+                                    body = "Décris le problème (matière, leçon, question concernée) :\n\n\n---\nClasse : $levelLabel\n$version"
+                                )
+                            },
+                            onOpenTerms = { context.openLinkOrSoon(ProfileLinks.TERMS_URL) },
+                            onOpenPrivacy = { context.openLinkOrSoon(ProfileLinks.PRIVACY_URL) }
+                        )
+                    }
                 }
             }
         }
-    }
-}
-
-// ---------- Profil ----------
-
-@Composable
-private fun ProfileScreen(
-    levelId: String,
-    onChangeLevel: () -> Unit,
-    onLoginClick: () -> Unit,
-    signedIn: Boolean,
-    accountLabel: String?,
-    onLogoutClick: () -> Unit
-) {
-    val context = LocalContext.current.applicationContext
-    val streak = remember { StreakStore(context).current() }
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp, vertical = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
-    ) {
-        Text(
-            text = "👤 Profil",
-            color = KalynoText,
-            fontSize = 22.sp,
-            fontWeight = FontWeight.ExtraBold
-        )
-
-        DashCard {
-            CardLabel("🎓 MA CLASSE", KalynoBlue)
-            Spacer(Modifier.height(8.dp))
-
-            Text(
-                text = "${Levels.emoji(levelId)} ${Levels.label(levelId)}",
-                color = KalynoText,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.ExtraBold
-            )
-
-            Spacer(Modifier.height(12.dp))
-            SoftButton("Changer de classe", onChangeLevel)
-        }
-
-        DashCard {
-            CardLabel("🔥 MA SÉRIE", KalynoBlue)
-            Spacer(Modifier.height(8.dp))
-
-            Text(
-                text = when (streak) {
-                    0 -> "Pas de série en cours. Termine un défi pour la lancer !"
-                    1 -> "1 jour de suite"
-                    else -> "$streak jours de suite"
-                },
-                color = KalynoText,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Medium
-            )
-        }
-
-        DashCard {
-            CardLabel("☁️ MON COMPTE", KalynoBlue)
-            Spacer(Modifier.height(8.dp))
-
-            if (signedIn) {
-                Text(
-                    text = "✅ Connecté" + (accountLabel?.let { " : $it" } ?: ""),
-                    color = KalynoText,
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    text = "Ta progression est sauvegardée et retrouvée si tu changes de téléphone.",
-                    color = KalynoMuted,
-                    fontSize = 14.sp,
-                    lineHeight = 20.sp
-                )
-                Spacer(Modifier.height(12.dp))
-                SoftButton("Se déconnecter", onLogoutClick)
-            } else {
-                Text(
-                    text = "Connecte-toi avec Google pour retrouver ta progression si tu changes de téléphone.",
-                    color = KalynoMuted,
-                    fontSize = 14.sp,
-                    lineHeight = 20.sp
-                )
-
-                Spacer(Modifier.height(12.dp))
-                SoftButton("Se connecter avec Google", onLoginClick)
-            }
-        }
-    }
-}
-
-// ---------- Éléments communs ----------
-
-@Composable
-private fun DashCard(
-    background: Color = Color.White,
-    stroke: Color = KalynoOutline,
-    content: @Composable ColumnScope.() -> Unit
-) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        color = background,
-        border = BorderStroke(2.dp, stroke)
-    ) {
-        Column(
-            modifier = Modifier.padding(18.dp),
-            content = content
-        )
-    }
-}
-
-@Composable
-private fun CardLabel(text: String, color: Color) {
-    Text(
-        text = text,
-        color = color,
-        fontSize = 12.sp,
-        fontWeight = FontWeight.ExtraBold,
-        letterSpacing = 1.sp
-    )
-}
-
-@Composable
-private fun SoftButton(
-    label: String,
-    onClick: () -> Unit
-) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(48.dp)
-            .clip(RoundedCornerShape(14.dp))
-            .background(KalynoBlueSoft)
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = label,
-            color = KalynoBlue,
-            fontSize = 15.sp,
-            fontWeight = FontWeight.Bold
-        )
     }
 }
