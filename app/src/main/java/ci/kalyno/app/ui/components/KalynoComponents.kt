@@ -19,7 +19,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -49,6 +52,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import ci.kalyno.app.ui.icons.KalynoSvgIcon
 import ci.kalyno.app.ui.theme.KalynoAmberDeep
 import ci.kalyno.app.ui.theme.KalynoAmberSoft
 import ci.kalyno.app.ui.theme.KalynoBlue
@@ -202,16 +206,22 @@ fun KalynoPill(
 /** Série de jours : flamme orange sur fond doux. */
 @Composable
 fun StreakBadge(count: Int, modifier: Modifier = Modifier) {
-    Text(
-        text = "🔥 $count",
-        color = KalynoRetryText,
-        fontSize = 15.sp,
-        fontWeight = FontWeight.ExtraBold,
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
         modifier = modifier
             .clip(CircleShape)
             .background(KalynoAmberSoft)
             .padding(horizontal = 14.dp, vertical = 8.dp)
-    )
+    ) {
+        KalynoSvgIcon(name = "flame", size = 16.dp, tint = KalynoRetryText)
+        Spacer(Modifier.width(6.dp))
+        Text(
+            text = count.toString(),
+            color = KalynoRetryText,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.ExtraBold
+        )
+    }
 }
 
 /** Titre de section avec sous-titre optionnel. */
@@ -311,6 +321,49 @@ fun KalynoEmptyState(
     ) {
         Text(emoji, fontSize = 52.sp)
         Spacer(Modifier.height(12.dp))
+        Text(
+            text = title,
+            color = KalynoText,
+            fontSize = 20.sp,
+            fontWeight = FontWeight.ExtraBold,
+            textAlign = TextAlign.Center
+        )
+        Spacer(Modifier.height(8.dp))
+        Text(
+            text = text,
+            color = KalynoMuted,
+            fontSize = 14.sp,
+            lineHeight = 20.sp,
+            textAlign = TextAlign.Center
+        )
+    }
+}
+
+/** État vide avec icône vectorielle (remplace la version à emoji pour tous les écrans refaits). */
+@Composable
+fun KalynoIconEmptyState(
+    icon: String,
+    title: String,
+    text: String,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 32.dp, vertical = 40.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Box(
+            modifier = Modifier
+                .size(72.dp)
+                .clip(CircleShape)
+                .background(KalynoBlueSoft),
+            contentAlignment = Alignment.Center
+        ) {
+            KalynoSvgIcon(name = icon, size = 32.dp, tint = KalynoBlue)
+        }
+        Spacer(Modifier.height(16.dp))
         Text(
             text = title,
             color = KalynoText,

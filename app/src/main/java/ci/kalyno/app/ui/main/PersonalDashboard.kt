@@ -59,7 +59,7 @@ fun PersonalDashboard(
                     letterSpacing = 1.sp
                 )
                 Text(
-                    text = "${Levels.emoji(levelId)} ${Levels.label(levelId)}",
+                    text = Levels.label(levelId),
                     color = KalynoMuted,
                     fontSize = 13.sp
                 )

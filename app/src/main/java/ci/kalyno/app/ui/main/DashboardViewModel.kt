@@ -90,7 +90,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
             it.copy(
                 session = ReviewSession(
                     id = UUID.randomUUID().toString(),
-                    title = "${mission.subjectEmoji} ${mission.chapterTitle}",
+                    title = "${mission.subjectEmoji} ${mission.chapterTitle}".trim(),
                     items = mission.items
                 )
             )

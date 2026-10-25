@@ -5,6 +5,7 @@ import ci.kalyno.app.data.LearningCapsule
 import ci.kalyno.app.data.LearningCard
 import ci.kalyno.app.data.LearningChapter
 import ci.kalyno.app.data.LearningSubject
+import ci.kalyno.app.data.LearningTheme
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -49,7 +50,15 @@ class LearningContentCache(context: Context) {
                 JSONObject().apply {
                     put("id", s.id)
                     put("name", s.name)
-                    put("emoji", s.emoji)
+                    put("iconKey", s.iconKey ?: JSONObject.NULL)
+                    put("themes", JSONArray().apply {
+                        s.themes.forEach { t ->
+                            put(JSONObject().apply {
+                                put("id", t.id)
+                                put("title", t.title)
+                            })
+                        }
+                    })
                     put("chapters", JSONArray().apply {
                         s.chapters.forEach { ch ->
                             put(
@@ -57,6 +66,7 @@ class LearningContentCache(context: Context) {
                                     put("id", ch.id)
                                     put("title", ch.title)
                                     put("tag", ch.tag ?: JSONObject.NULL)
+                                    put("themeId", ch.themeId ?: JSONObject.NULL)
                                     put("capsules", JSONArray().apply {
                                         ch.capsules.forEach { cap ->
                                             put(
@@ -98,11 +108,16 @@ class LearningContentCache(context: Context) {
         List(array.length()) { i ->
             val s = array.getJSONObject(i)
             val chaptersJson = s.optJSONArray("chapters") ?: JSONArray()
+            val themesJson = s.optJSONArray("themes") ?: JSONArray()
             LearningSubject(
                 id = s.getString("id"),
                 name = s.optString("name", ""),
-                emoji = s.optString("emoji", "📘"),
-                chapters = List(chaptersJson.length()) { j -> decodeChapter(chaptersJson.getJSONObject(j)) }
+                chapters = List(chaptersJson.length()) { j -> decodeChapter(chaptersJson.getJSONObject(j)) },
+                iconKey = if (s.isNull("iconKey")) null else s.optString("iconKey").takeIf { it.isNotBlank() },
+                themes = List(themesJson.length()) { k ->
+                    val t = themesJson.getJSONObject(k)
+                    LearningTheme(id = t.getString("id"), title = t.optString("title", ""))
+                }
             )
         }
 
@@ -114,6 +129,7 @@ class LearningContentCache(context: Context) {
             id = ch.getString("id"),
             title = ch.optString("title", ""),
             tag = if (ch.isNull("tag")) null else ch.optString("tag").takeIf { it.isNotBlank() },
+            themeId = if (ch.isNull("themeId")) null else ch.optString("themeId").takeIf { it.isNotBlank() },
             capsules = List(capsules.length()) { k ->
                 val cap = capsules.getJSONObject(k)
                 val capId = cap.getString("id")

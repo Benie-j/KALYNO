@@ -65,7 +65,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import ci.kalyno.app.data.Levels
 import ci.kalyno.app.data.dashboard.ReviewItem
 import ci.kalyno.app.ui.components.KalynoCard
-import ci.kalyno.app.ui.components.KalynoEmptyState
+import ci.kalyno.app.ui.components.KalynoIconEmptyState
 import ci.kalyno.app.ui.components.KalynoErrorCard
 import ci.kalyno.app.ui.components.KalynoPill
 import ci.kalyno.app.ui.components.KalynoPrimaryButton
@@ -74,6 +74,7 @@ import ci.kalyno.app.ui.components.SectionHeader
 import ci.kalyno.app.ui.components.ShimmerBlock
 import ci.kalyno.app.ui.components.rememberHaptic
 import ci.kalyno.app.ui.icons.KalynoSvgIcon
+import ci.kalyno.app.ui.icons.iconAssetFor
 import ci.kalyno.app.ui.theme.KalynoAmberDeep
 import ci.kalyno.app.ui.theme.KalynoAmberSoft
 import ci.kalyno.app.ui.theme.KalynoBlue
@@ -129,7 +130,7 @@ fun ExplorerScreen(
 
     val start: (ExplorerChapter) -> Unit = { chapter ->
         if (chapter.items.isNotEmpty()) {
-            onStartChapter("${chapter.subjectEmoji} ${chapter.title}", chapter.items)
+            onStartChapter(chapter.title, chapter.items)
         }
     }
 
@@ -159,6 +160,7 @@ fun ExplorerScreen(
                 if (discipline != null) {
                     DisciplineLessonsScreen(
                         discipline = discipline,
+                        themes = ui.themesOf(discipline.id),
                         lessons = ui.lessonsOf(discipline.id),
                         onBack = { viewModel.onBack() },
                         onOpenLesson = { viewModel.onLessonClick(it) }
@@ -187,7 +189,7 @@ fun ExplorerScreen(
                     Text("OK", color = KalynoBlue, fontWeight = FontWeight.ExtraBold)
                 }
             },
-            title = { Text("🏆 Classement en direct", fontWeight = FontWeight.ExtraBold) },
+            title = { Text("Classement en direct", fontWeight = FontWeight.ExtraBold) },
             text = {
                 Text(
                     "Le classement inter-classes s'ouvrira avec le premier tournoi publié par ton école. " +
@@ -246,17 +248,23 @@ private fun ExplorerHome(
         FilterChips(selected = ui.filter, onSelect = viewModel::onFilterChange)
 
         if (ui.offline) {
-            Text(
-                text = "📡 Hors ligne · contenu enregistré sur ton téléphone",
-                color = KalynoAmberDeep,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
                     .padding(horizontal = 20.dp)
                     .clip(CircleShape)
                     .background(KalynoAmberSoft)
                     .padding(horizontal = 14.dp, vertical = 8.dp)
-            )
+            ) {
+                KalynoSvgIcon(name = "wifi-off", size = 14.dp, tint = KalynoAmberDeep)
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = "Pas de réseau, mais ton contenu est gardé sur ton téléphone",
+                    color = KalynoAmberDeep,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
         }
 
         val visible = ui.visibleChapters
@@ -270,10 +278,10 @@ private fun ExplorerHome(
                 modifier = Modifier.padding(horizontal = 20.dp)
             )
 
-            ui.chapters.isEmpty() -> KalynoEmptyState(
-                emoji = "🌱",
-                title = "Bientôt du nouveau !",
-                text = "De nouveaux parcours préparés par tes professeurs arrivent bientôt..."
+            ui.chapters.isEmpty() -> KalynoIconEmptyState(
+                icon = "book-open",
+                title = "Ça arrive bientôt",
+                text = "Tes profs préparent de nouveaux parcours pour toi. Reviens vite, on est ensemble."
             )
 
             ui.filter == ExplorerFilter.COMMUNITY -> CommunityBanner(
@@ -283,10 +291,10 @@ private fun ExplorerHome(
                 modifier = Modifier.padding(horizontal = 20.dp)
             )
 
-            visible.isEmpty() -> KalynoEmptyState(
-                emoji = "🔍",
-                title = "Aucun résultat",
-                text = "Essaie un autre mot-clé ou une autre matière."
+            visible.isEmpty() -> KalynoIconEmptyState(
+                icon = "search",
+                title = "Rien trouvé",
+                text = "Essaie un autre mot-clé ou une autre matière, ça va sortir."
             )
 
             else -> when (ui.filter) {
@@ -400,7 +408,7 @@ private fun DisciplineChip(discipline: Discipline, selected: Boolean, onClick: (
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Text(text = discipline.emoji, fontSize = 16.sp)
+        KalynoSvgIcon(name = iconAssetFor(discipline.iconKey), size = 18.dp, tint = content)
         Text(
             text = discipline.name,
             color = content,
@@ -429,18 +437,17 @@ private fun SearchField(
         singleLine = true,
         shape = RoundedCornerShape(18.dp),
         placeholder = { Text("Rechercher un cours, une matière…", color = KalynoMuted) },
-        leadingIcon = { Text("🔍", fontSize = 16.sp) },
+        leadingIcon = { KalynoSvgIcon(name = "search", size = 20.dp, tint = KalynoMuted) },
         trailingIcon = {
             if (value.isNotEmpty()) {
-                Text(
-                    text = "✕",
-                    color = KalynoMuted,
-                    fontWeight = FontWeight.Bold,
+                Box(
                     modifier = Modifier
                         .clip(CircleShape)
                         .clickable { onValueChange("") }
                         .padding(12.dp)
-                )
+                ) {
+                    KalynoSvgIcon(name = "x", size = 18.dp, tint = KalynoMuted)
+                }
             }
         },
         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
@@ -600,7 +607,7 @@ private fun PathsSection(chapters: List<ExplorerChapter>, onOpen: (ExplorerChapt
     ) {
         bySubject.forEach { list ->
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                SectionHeader(title = "${list.first().subjectEmoji} ${list.first().subjectName}")
+                SectionHeader(title = list.first().subjectName)
                 PathGrid(chapters = list, onOpen = onOpen)
             }
         }
@@ -625,7 +632,7 @@ private fun CourseCard(
             verticalAlignment = Alignment.CenterVertically
         ) {
             KalynoPill(
-                text = "${chapter.subjectEmoji} ${chapter.subjectName}",
+                text = chapter.subjectName,
                 modifier = Modifier.weight(1f, fill = false)
             )
             SmartTagPill(chapter.tag)
@@ -646,7 +653,7 @@ private fun CourseCard(
         Spacer(Modifier.height(6.dp))
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(
-                text = "⏱️ ${questionsLabel(chapter.questionCount)} • ${chapter.minutes} min",
+                text = "${questionsLabel(chapter.questionCount)} • ${chapter.minutes} min",
                 color = KalynoMuted,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Medium
@@ -758,7 +765,7 @@ private fun CommunityBanner(
                     .background(KalynoAmberSoft),
                 contentAlignment = Alignment.Center
             ) {
-                Text("🏆", fontSize = 28.sp)
+                KalynoSvgIcon(name = "trophy", size = 28.dp, tint = KalynoAmberDeep)
             }
             Spacer(Modifier.width(14.dp))
             Column {
@@ -808,7 +815,7 @@ private fun CommunityBanner(
                                 .background(Color.White.copy(alpha = 0.92f))
                         )
                         Spacer(Modifier.height(6.dp))
-                        Text(subject.emoji, fontSize = 16.sp)
+                        KalynoSvgIcon(name = iconAssetFor(subject.iconKey), size = 18.dp, tint = Color.White)
                     }
                 }
             }

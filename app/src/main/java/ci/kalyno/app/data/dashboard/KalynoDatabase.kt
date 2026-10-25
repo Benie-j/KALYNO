@@ -6,6 +6,11 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import ci.kalyno.app.data.catalog.CatalogDao
+import ci.kalyno.app.data.catalog.CatalogLessonEntity
+import ci.kalyno.app.data.catalog.CatalogLevelEntity
+import ci.kalyno.app.data.catalog.CatalogSubjectEntity
+import ci.kalyno.app.data.catalog.CatalogThemeEntity
 import ci.kalyno.app.data.srs.CardProgressEntity
 import ci.kalyno.app.data.srs.FlashcardEntity
 import ci.kalyno.app.data.srs.ReviewLogEntity
@@ -17,14 +22,19 @@ import ci.kalyno.app.data.srs.SubjectEntity
         SubjectEntity::class,
         FlashcardEntity::class,
         CardProgressEntity::class,
-        ReviewLogEntity::class
+        ReviewLogEntity::class,
+        CatalogLevelEntity::class,
+        CatalogSubjectEntity::class,
+        CatalogThemeEntity::class,
+        CatalogLessonEntity::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 abstract class KalynoDatabase : RoomDatabase() {
     abstract fun srsDao(): SrsDao
     abstract fun dashboardDao(): DashboardDao
+    abstract fun catalogDao(): CatalogDao
 
     companion object {
         @Volatile
@@ -60,13 +70,48 @@ abstract class KalynoDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * Catalogue pédagogique : classes/séries (Tle A1, Tle A2…), disciplines, thèmes, leçons,
+         * reliés par clés étrangères. Aucune donnée existante (SRS, historique) n'est touchée.
+         */
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `catalog_levels` (`id` TEXT NOT NULL, `label` TEXT NOT NULL, " +
+                        "`cycle` TEXT NOT NULL, `iconKey` TEXT, `tagline` TEXT, `position` INTEGER NOT NULL, " +
+                        "PRIMARY KEY(`id`))"
+                )
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `catalog_subjects` (`id` TEXT NOT NULL, `levelId` TEXT NOT NULL, " +
+                        "`name` TEXT NOT NULL, `iconKey` TEXT, `position` INTEGER NOT NULL, PRIMARY KEY(`id`), " +
+                        "FOREIGN KEY(`levelId`) REFERENCES `catalog_levels`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE)"
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_catalog_subjects_levelId` ON `catalog_subjects` (`levelId`)")
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `catalog_themes` (`id` TEXT NOT NULL, `subjectId` TEXT NOT NULL, " +
+                        "`title` TEXT NOT NULL, `position` INTEGER NOT NULL, PRIMARY KEY(`id`), " +
+                        "FOREIGN KEY(`subjectId`) REFERENCES `catalog_subjects`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE)"
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_catalog_themes_subjectId` ON `catalog_themes` (`subjectId`)")
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `catalog_lessons` (`id` TEXT NOT NULL, `subjectId` TEXT NOT NULL, " +
+                        "`themeId` TEXT, `title` TEXT NOT NULL, `position` INTEGER NOT NULL, `tag` TEXT, " +
+                        "PRIMARY KEY(`id`), " +
+                        "FOREIGN KEY(`subjectId`) REFERENCES `catalog_subjects`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE, " +
+                        "FOREIGN KEY(`themeId`) REFERENCES `catalog_themes`(`id`) ON UPDATE NO ACTION ON DELETE SET NULL)"
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_catalog_lessons_subjectId` ON `catalog_lessons` (`subjectId`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_catalog_lessons_themeId` ON `catalog_lessons` (`themeId`)")
+            }
+        }
+
         fun get(context: Context): KalynoDatabase =
             instance ?: synchronized(this) {
                 instance ?: Room.databaseBuilder(
                     context.applicationContext,
                     KalynoDatabase::class.java,
                     "kalyno.db"
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3).build().also { instance = it }
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4).build().also { instance = it }
             }
     }
 }

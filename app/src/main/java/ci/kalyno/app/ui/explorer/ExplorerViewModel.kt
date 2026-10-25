@@ -9,6 +9,8 @@ import ci.kalyno.app.data.LearningCapsule
 import ci.kalyno.app.data.LearningCard
 import ci.kalyno.app.data.LearningSubject
 import ci.kalyno.app.data.SupabaseLearningRepository
+import ci.kalyno.app.data.catalog.CatalogRepository
+import ci.kalyno.app.data.catalog.CatalogTree
 import ci.kalyno.app.data.dashboard.KalynoDatabase
 import ci.kalyno.app.data.dashboard.ReviewItem
 import ci.kalyno.app.data.dashboard.StudentId
@@ -47,20 +49,32 @@ data class ExplorerChapter(
     val capsules: List<LearningCapsule>,
     val items: List<ReviewItem>,
     /** Smart Tag admin ("urgent", "populaire"…), null si absent. */
-    val tag: String? = null
+    val tag: String? = null,
+    /** Icône vectorielle de la discipline (clé admin), null = icône par défaut. */
+    val subjectIconKey: String? = null,
+    /** Thème (chapitre global) de la leçon, null tant que l'admin ne l'a pas rangée. */
+    val themeId: String? = null
 ) {
     val questionCount: Int get() = items.size
     val progress: Float
         get() = if (items.isEmpty()) 0f else (discovered.toFloat() / items.size).coerceIn(0f, 1f)
 }
 
-data class SubjectProgress(val name: String, val emoji: String, val progress: Float)
+data class SubjectProgress(val name: String, val iconKey: String?, val progress: Float)
 
 /** Une discipline (= matière publiée par l'admin) affichée en mini-carte dans Explorer. */
 data class Discipline(
     val id: String,
     val name: String,
-    val emoji: String,
+    val iconKey: String?,
+    val lessonCount: Int
+)
+
+/** Un thème (chapitre global) d'une discipline : il regroupe des leçons. */
+data class ExplorerTheme(
+    val id: String,
+    val disciplineId: String,
+    val title: String,
     val lessonCount: Int
 )
 
@@ -93,8 +107,10 @@ data class ExplorerUiState(
     val chapters: List<ExplorerChapter> = emptyList(),
     val query: String = "",
     val filter: ExplorerFilter = ExplorerFilter.FOR_YOU,
-    /** Disciplines publiées (ordre défini par l'admin). */
+    /** Disciplines publiées (ordre défini par l'admin), lues dans Room. */
     val disciplines: List<Discipline> = emptyList(),
+    /** Thèmes publiés de toutes les disciplines (ordre défini par l'admin), lus dans Room. */
+    val themes: List<ExplorerTheme> = emptyList(),
     /** Discipline touchée : se colore immédiatement, avant l'ouverture de sa page. */
     val pressedDisciplineId: String? = null,
     val openDisciplineId: String? = null,
@@ -108,6 +124,9 @@ data class ExplorerUiState(
             openDisciplineId != null -> ExplorerRoute.DisciplineLessons(openDisciplineId)
             else -> ExplorerRoute.Home
         }
+
+    fun themesOf(disciplineId: String): List<ExplorerTheme> =
+        themes.filter { it.disciplineId == disciplineId }
 
     /** Leçons (= chapitres publiés) d'une discipline, dans l'ordre de l'admin. */
     fun lessonsOf(disciplineId: String): List<ExplorerChapter> =
@@ -131,7 +150,7 @@ data class ExplorerUiState(
                 val done = list.sumOf { it.discovered }
                 SubjectProgress(
                     name = list.first().subjectName,
-                    emoji = list.first().subjectEmoji,
+                    iconKey = list.first().subjectIconKey,
                     progress = if (total == 0) 0f else done.toFloat() / total
                 )
             }
@@ -148,6 +167,7 @@ class ExplorerViewModel(app: Application) : AndroidViewModel(app) {
 
     private val remote = SupabaseLearningRepository()
     private val cache = LearningContentCache(app)
+    private val catalog = CatalogRepository.get(app)
     private val dao = KalynoDatabase.get(app).dashboardDao()
     private val prefs = AppPrefs(app)
     private val studentId = StudentId.get(app)
@@ -157,6 +177,7 @@ class ExplorerViewModel(app: Application) : AndroidViewModel(app) {
 
     private var levelId: String? = null
     private var job: Job? = null
+    private var treeJob: Job? = null
 
     /** Premier appel : charge tout. Appels suivants (retour sur l'onglet) : rafraîchit en douceur. */
     fun load(level: String) {
@@ -166,10 +187,27 @@ class ExplorerViewModel(app: Application) : AndroidViewModel(app) {
         }
         levelId = level
         _state.value = ExplorerUiState()
+        observeTree(level)
         refresh(silent = false)
     }
 
     fun retry() = refresh(silent = false)
+
+    /** Disciplines et thèmes viennent de Room : affichage immédiat, même sans réseau. */
+    private fun observeTree(level: String) {
+        treeJob?.cancel()
+        treeJob = viewModelScope.launch {
+            catalog.observeTree(level).collect { tree ->
+                _state.update { sanitized(it.copy(disciplines = tree.toDisciplines(), themes = tree.toThemes())) }
+            }
+        }
+    }
+
+    private fun CatalogTree.toDisciplines(): List<Discipline> =
+        subjects.map { Discipline(it.id, it.name, it.iconKey, it.lessonCount) }
+
+    private fun CatalogTree.toThemes(): List<ExplorerTheme> =
+        themes.map { ExplorerTheme(it.id, it.subjectId, it.title, it.lessonCount) }
 
     fun onQueryChange(value: String) = _state.update { it.copy(query = value) }
 
@@ -230,9 +268,9 @@ class ExplorerViewModel(app: Application) : AndroidViewModel(app) {
                 val cached = withContext(Dispatchers.IO) { cache.read(level) }
                 if (cached != null && cached.isNotEmpty()) {
                     val chapters = withContext(Dispatchers.IO) { toChapters(cached) }
-                    _state.update {
-                        sanitized(it.copy(chapters = chapters, disciplines = toDisciplines(cached), loading = false))
-                    }
+                    // Première ouverture après la mise à jour : on amorce Room avec l'ancien cache
+                    withContext(Dispatchers.IO) { runCatching { catalog.storeTree(level, cached) } }
+                    _state.update { sanitized(it.copy(chapters = chapters, loading = false)) }
                 }
             }
 
@@ -240,7 +278,10 @@ class ExplorerViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 val subjects = remote.loadPublishedContent(level)
                 val banner = remote.loadBanner(level)
-                withContext(Dispatchers.IO) { cache.write(level, subjects) }
+                withContext(Dispatchers.IO) {
+                    cache.write(level, subjects)
+                    runCatching { catalog.storeTree(level, subjects) }
+                }
                 val chapters = withContext(Dispatchers.IO) { toChapters(subjects) }
                 _state.update {
                     sanitized(
@@ -249,7 +290,6 @@ class ExplorerViewModel(app: Application) : AndroidViewModel(app) {
                             error = null,
                             offline = false,
                             chapters = chapters,
-                            disciplines = toDisciplines(subjects),
                             banner = banner
                         )
                     )
@@ -273,9 +313,6 @@ class ExplorerViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     // ----- Mapping contenu -> UI -----
-
-    private fun toDisciplines(subjects: List<LearningSubject>): List<Discipline> =
-        subjects.map { Discipline(it.id, it.name, it.emoji, it.chapters.size) }
 
     /** Si l'admin dépublie la leçon / discipline ouverte, on revient proprement en arrière. */
     private fun sanitized(st: ExplorerUiState): ExplorerUiState {
@@ -308,7 +345,9 @@ class ExplorerViewModel(app: Application) : AndroidViewModel(app) {
                     discovered = items.count { it.cardId in introduced },
                     capsules = chapter.capsules,
                     items = items,
-                    tag = chapter.tag
+                    tag = chapter.tag,
+                    subjectIconKey = subject.iconKey,
+                    themeId = chapter.themeId
                 )
             }
         }

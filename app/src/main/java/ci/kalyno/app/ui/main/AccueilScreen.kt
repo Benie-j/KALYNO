@@ -84,7 +84,7 @@ private fun TopBar(streak: Int) {
                 .background(KalynoAmberSoft)
                 .padding(horizontal = 14.dp, vertical = 8.dp)
         ) {
-            Text("🔥", fontSize = 15.sp)
+            KalynoSvgIcon(name = "flame", size = 16.dp, tint = KalynoAmberDeep)
             Spacer(Modifier.width(6.dp))
             Text(
                 text = streak.toString(),
@@ -117,13 +117,17 @@ private fun HeroBanner(message: String?, examDaysLeft: Int?) {
         ) {
             Column {
                 if (examDaysLeft != null) {
-                    Text(
-                        text = if (examDaysLeft == 0) "📅 Jour J !" else "📅 J-$examDaysLeft avant les épreuves",
-                        color = Color.White,
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(Modifier.height(6.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        KalynoSvgIcon(name = "calendar", size = 16.dp, tint = Color.White)
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = if (examDaysLeft == 0) "Jour J, c'est le moment de briller" else "J-$examDaysLeft avant les épreuves, on est ensemble",
+                            color = Color.White,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Spacer(Modifier.height(8.dp))
                 }
                 if (!message.isNullOrBlank()) {
                     Text(
@@ -159,12 +163,17 @@ private fun SrsWidget(state: DashboardUiState, onReview: () -> Unit) {
         }
 
         if (!urgent) {
-            Text(
-                text = "⚡ Tout est à jour, ton cerveau est au top !",
-                color = KalynoCorrectText,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.ExtraBold
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                KalynoSvgIcon(name = "check-circle", size = 22.dp, tint = KalynoCorrectText)
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    text = "Tu gères, tout est à jour. Ton cerveau est au top !",
+                    color = KalynoCorrectText,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    modifier = Modifier.weight(1f)
+                )
+            }
             return@DashCard
         }
 
@@ -177,7 +186,7 @@ private fun SrsWidget(state: DashboardUiState, onReview: () -> Unit) {
             }
             Spacer(Modifier.width(12.dp))
             Text(
-                text = if (state.urgentTotal == 1) "🔥 1 notion à réviser d'urgence" else "🔥 ${state.urgentTotal} notions à réviser d'urgence",
+                text = if (state.urgentTotal == 1) "1 notion te réclame, on s'y met ?" else "${state.urgentTotal} notions te réclament, on s'y met ?",
                 color = KalynoRetryText,
                 fontSize = 15.sp,
                 fontWeight = FontWeight.ExtraBold,
@@ -191,7 +200,7 @@ private fun SrsWidget(state: DashboardUiState, onReview: () -> Unit) {
             shape = RoundedCornerShape(14.dp),
             colors = ButtonDefaults.buttonColors(containerColor = KalynoRetry, contentColor = KalynoText)
         ) {
-            Text("Lancer la session dans le Dojo", fontSize = 16.sp, fontWeight = FontWeight.ExtraBold)
+            Text("On y va au Dojo", fontSize = 16.sp, fontWeight = FontWeight.ExtraBold)
         }
     }
 }
@@ -254,7 +263,7 @@ private fun ResumeCard(lesson: LastLessonUi, onClick: () -> Unit) {
             }
             Spacer(Modifier.width(14.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text("Reprendre l'aventure", color = KalynoMuted, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Text("On reprend où tu t'es arrêté", color = KalynoMuted, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 Text(
                     text = "${lesson.subjectName} · ${lesson.chapterTitle}",
                     color = KalynoText,

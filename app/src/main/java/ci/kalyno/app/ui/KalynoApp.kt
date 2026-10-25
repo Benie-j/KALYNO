@@ -8,6 +8,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import ci.kalyno.app.data.AppPrefs
 import ci.kalyno.app.data.SupabaseChallengeRepository
 import ci.kalyno.app.data.auth.AuthStore
+import ci.kalyno.app.data.catalog.CatalogRepository
 import ci.kalyno.app.data.auth.findActivity
 import ci.kalyno.app.ui.auth.AuthViewModel
 import ci.kalyno.app.ui.challenge.ChallengeScreen
@@ -24,6 +25,9 @@ fun KalynoApp() {
     val prefs = remember { AppPrefs(context) }
     val authStore = remember { AuthStore(context) }
     val repository = remember { SupabaseChallengeRepository() }
+
+    // Libellés des classes (Tle A1, Tle A2…) : Room d'abord, puis mise à jour réseau en douceur
+    LaunchedEffect(Unit) { runCatching { CatalogRepository.get(context).warmUp() } }
 
     val authViewModel: AuthViewModel = viewModel()
     val auth by authViewModel.state.collectAsState()

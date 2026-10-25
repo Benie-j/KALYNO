@@ -7,7 +7,7 @@ class AppPrefs(context: Context) {
 
     /** Classe choisie par l'élève (null tant qu'il n'a pas choisi). */
     var level: String?
-        get() = prefs.getString(KEY_LEVEL, null)
+        get() = prefs.getString(KEY_LEVEL, null)?.takeUnless { it in LEGACY_LEVELS }
         set(value) {
             val editor = prefs.edit()
             if (value == null) editor.remove(KEY_LEVEL) else editor.putString(KEY_LEVEL, value)
@@ -46,6 +46,12 @@ class AppPrefs(context: Context) {
     val lastLessonProgress: Float get() = prefs.getFloat(KEY_LAST_LESSON_PROGRESS, 0f)
 
     private companion object {
+        /**
+         * Anciennes classes supprimées : "TLE_A" a été scindée en Tle A1 et Tle A2 (programmes différents).
+         * L'élève qui l'avait choisie repasse une seule fois par l'écran de choix pour trancher.
+         */
+        val LEGACY_LEVELS = setOf("TLE_A")
+
         const val KEY_LEVEL = "level"
         const val KEY_NICKNAME = "nickname"
         const val KEY_DEMO_DONE = "demo_done"

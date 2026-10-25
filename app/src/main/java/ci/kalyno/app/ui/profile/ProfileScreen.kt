@@ -91,7 +91,7 @@ fun ProfileScreen(
         item {
             ProfileHeader(
                 nickname = nickname,
-                classLabel = "${Levels.emoji(levelId)} ${Levels.label(levelId)}",
+                classLabel = Levels.label(levelId),
                 streak = streak
             )
         }

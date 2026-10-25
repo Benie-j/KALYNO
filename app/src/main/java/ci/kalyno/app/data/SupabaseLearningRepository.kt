@@ -43,14 +43,23 @@ data class LearningChapter(
     val capsules: List<LearningCapsule>,
     val cards: List<LearningCard>,
     /** Smart Tag choisi par l'admin ("urgent", "populaire", texte libre…) ; null si absent. */
-    val tag: String? = null
+    val tag: String? = null,
+    /** Thème (chapitre global) auquel appartient la leçon ; null tant que l'admin ne l'a pas rangée. */
+    val themeId: String? = null
 )
+
+/** Thème = chapitre global d'une discipline, qui regroupe plusieurs leçons. */
+data class LearningTheme(val id: String, val title: String)
 
 data class LearningSubject(
     val id: String,
     val name: String,
-    val emoji: String,
-    val chapters: List<LearningChapter>
+    val chapters: List<LearningChapter>,
+    /** Clé d'icône vectorielle choisie par l'admin ; null = icône par défaut. */
+    val iconKey: String? = null,
+    val themes: List<LearningTheme> = emptyList(),
+    /** Hérité, plus jamais lu ni affiché (l'interface n'utilise plus d'emoji). */
+    val emoji: String = ""
 )
 
 class SupabaseLearningRepository {
@@ -58,11 +67,7 @@ class SupabaseLearningRepository {
     suspend fun loadPublishedContent(levelId: String): List<LearningSubject> =
         withContext(Dispatchers.IO) {
             try {
-                val subjects = getArray(
-                    "subjects?select=id,name,emoji,position" +
-                        "&level_id=eq.${enc(levelId)}" +
-                        "&is_active=eq.true&order=position.asc"
-                )
+                val subjects = loadSubjectRows(levelId)
 
                 buildList {
                     for (i in 0 until subjects.length()) {
@@ -109,9 +114,18 @@ class SupabaseLearningRepository {
                                         title = chapter.optString("title", ""),
                                         capsules = capsules,
                                         cards = cards,
-                                        tag = chapter.textOrNull("tag")
+                                        tag = chapter.textOrNull("tag"),
+                                        themeId = chapter.textOrNull("theme_id")
                                     )
                                 )
+                            }
+                        }
+
+                        val themeRows = loadThemeRows(subjectId)
+                        val themes = buildList {
+                            for (t in 0 until themeRows.length()) {
+                                val row = themeRows.getJSONObject(t)
+                                add(LearningTheme(id = row.getString("id"), title = row.optString("title", "")))
                             }
                         }
 
@@ -119,11 +133,9 @@ class SupabaseLearningRepository {
                             LearningSubject(
                                 id = subjectId,
                                 name = subject.optString("name", ""),
-                                emoji = subject.optString("emoji")
-                                    .takeUnless {
-                                        it.isBlank() || it.equals("null", ignoreCase = true)
-                                    } ?: "📘",
-                                chapters = chapters
+                                chapters = chapters,
+                                iconKey = subject.textOrNull("icon_key"),
+                                themes = themes
                             )
                         )
                     }
@@ -165,25 +177,111 @@ class SupabaseLearningRepository {
         }
     }
 
-    /** Faux dès qu'on sait que la table `chapters` n'a pas (encore) la colonne `tag`. */
+    /**
+     * Niveau de colonnes que la table `chapters` sait servir : 2 = tag + theme_id, 1 = tag, 0 = rien.
+     * On descend d'un cran dès que le back-end répond HTTP 400 (colonne inconnue) : l'app reste fonctionnelle
+     * même si la migration SQL n'est pas encore passée.
+     */
     @Volatile
-    private var chapterTagSupported = true
+    private var chapterColumnsLevel = 2
 
-    /** Charge les chapitres publiés avec leur Smart Tag ; repli sans `tag` si le back-end ne le connaît pas. */
     private fun loadChapterRows(subjectId: String): JSONArray {
         val filter = "&subject_id=eq.${enc(subjectId)}&status=eq.published&order=position.asc"
-        if (chapterTagSupported) {
+        while (true) {
+            val columns = when (chapterColumnsLevel) {
+                2 -> "id,title,position,tag,theme_id"
+                1 -> "id,title,position,tag"
+                else -> "id,title,position"
+            }
             try {
-                return getArray("chapters?select=id,title,position,tag$filter")
+                return getArray("chapters?select=$columns$filter")
             } catch (e: IOException) {
-                if (e.message?.startsWith("Supabase HTTP 400") == true) {
-                    chapterTagSupported = false
+                if (e.message?.startsWith("Supabase HTTP 400") == true && chapterColumnsLevel > 0) {
+                    chapterColumnsLevel--
                 } else {
                     throw e
                 }
             }
         }
-        return getArray("chapters?select=id,title,position$filter")
+    }
+
+    /** Faux dès qu'on sait que la table `subjects` n'a pas (encore) la colonne `icon_key`. */
+    @Volatile
+    private var subjectIconSupported = true
+
+    private fun loadSubjectRows(levelId: String): JSONArray {
+        val filter = "&level_id=eq.${enc(levelId)}&is_active=eq.true&order=position.asc"
+        if (subjectIconSupported) {
+            try {
+                return getArray("subjects?select=id,name,icon_key,position$filter")
+            } catch (e: IOException) {
+                if (e.message?.startsWith("Supabase HTTP 400") == true) subjectIconSupported = false else throw e
+            }
+        }
+        return getArray("subjects?select=id,name,position$filter")
+    }
+
+    /** Thèmes publiés d'une discipline. Table facultative : absente (404) ou non migrée (400) = aucun thème. */
+    @Volatile
+    private var themesSupported = true
+
+    private fun loadThemeRows(subjectId: String): JSONArray {
+        if (!themesSupported) return JSONArray()
+        return try {
+            getArray(
+                "themes?select=id,title,position&subject_id=eq.${enc(subjectId)}" +
+                    "&status=eq.published&order=position.asc"
+            )
+        } catch (e: IOException) {
+            val message = e.message.orEmpty()
+            if (message.startsWith("Supabase HTTP 404") || message.startsWith("Supabase HTTP 400")) {
+                themesSupported = false
+                JSONArray()
+            } else {
+                throw e
+            }
+        }
+    }
+
+    /** Faux dès qu'on sait que la table `levels` n'a pas (encore) les colonnes cycle / icon_key / tagline. */
+    @Volatile
+    private var levelExtrasSupported = true
+
+    /** Classes et séries actives publiées par l'admin (Tle A1, Tle A2, Tle C…). */
+    suspend fun loadLevels(): List<LevelInfo> = withContext(Dispatchers.IO) {
+        val filter = "&is_active=eq.true&order=position.asc"
+        val rows = if (levelExtrasSupported) {
+            try {
+                getArray("levels?select=id,label,position,cycle,icon_key,tagline$filter")
+            } catch (e: IOException) {
+                if (e.message?.startsWith("Supabase HTTP 400") == true) {
+                    levelExtrasSupported = false
+                    getArray("levels?select=id,label,position$filter")
+                } else {
+                    throw e
+                }
+            }
+        } else {
+            getArray("levels?select=id,label,position$filter")
+        }
+
+        buildList {
+            for (i in 0 until rows.length()) {
+                val row = rows.getJSONObject(i)
+                val id = row.getString("id")
+                add(
+                    LevelInfo(
+                        id = id,
+                        label = row.textOrNull("label") ?: id,
+                        // Repli d'affichage uniquement : le vrai groupe vient de la colonne `cycle` de l'admin
+                        cycle = row.textOrNull("cycle") ?: if (id.startsWith("TLE", ignoreCase = true)) "BAC" else "BEPC",
+                        iconKey = row.textOrNull("icon_key"),
+                        tagline = row.textOrNull("tagline"),
+                        position = row.optInt("position", i)
+                    )
+                )
+            }
+        }
     }
 
     private fun JSONObject.textOrNull(key: String): String? =

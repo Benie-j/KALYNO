@@ -15,20 +15,46 @@ data class Challenge(
     val questions: List<Question>
 )
 
-object Levels {
-    const val BEPC = "3E"
-    val bacSeries = listOf("TLE_A" to "Tle A", "TLE_C" to "Tle C", "TLE_D" to "Tle D")
+/** Classe ou série telle que publiée par l'admin (table `levels`). Rien n'est écrit en dur dans l'app. */
+data class LevelInfo(
+    val id: String,
+    val label: String,
+    /** Groupe d'examen publié par l'admin ("BEPC", "BAC"…) ; vide si l'admin n'en définit pas. */
+    val cycle: String,
+    /** Clé d'icône vectorielle (voir KalynoIcons) ; null = icône par défaut du groupe. */
+    val iconKey: String?,
+    /** Courte description facultative (utile pour distinguer Tle A1 et Tle A2). */
+    val tagline: String?,
+    val position: Int
+)
 
-    fun label(id: String): String = when (id) {
-        BEPC -> "BEPC · 3e"
-        else -> bacSeries.firstOrNull { it.first == id }?.let { "BAC · ${it.second}" } ?: id
+object Levels {
+    @Volatile
+    private var known: Map<String, LevelInfo> = emptyMap()
+
+    /** Appelé par le catalogue Room dès que les classes sont connues. */
+    fun register(levels: Collection<LevelInfo>) {
+        known = levels.associateBy { it.id }
     }
 
-    fun emoji(id: String): String = when (id) {
-        BEPC -> "🎒"
-        "TLE_A" -> "📖"
-        "TLE_C" -> "📐"
-        "TLE_D" -> "🔬"
-        else -> "🎓"
+    fun info(id: String): LevelInfo? = known[id]
+
+    /** Libellé complet ("BAC · Tle A1"). Avant le premier chargement, on dérive un libellé lisible de l'identifiant. */
+    fun label(id: String): String {
+        val info = known[id] ?: return prettify(id)
+        return if (info.cycle.isBlank()) info.label else "${info.cycle} · ${info.label}"
+    }
+
+    /** "TLE_A1" -> "Tle A1" ; "3E" -> "3E". Simple repli d'affichage, sans liste de classes. */
+    private fun prettify(id: String): String {
+        val parts = id.split('_').filter { it.isNotBlank() }
+        if (parts.isEmpty()) return id
+        return parts.mapIndexed { index, part ->
+            if (index == 0 && part.length > 2 && part.any { it.isLetter() }) {
+                part.lowercase().replaceFirstChar { it.uppercase() }
+            } else {
+                part.uppercase()
+            }
+        }.joinToString(" ")
     }
 }
