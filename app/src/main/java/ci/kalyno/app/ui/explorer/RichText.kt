@@ -1,5 +1,6 @@
 package ci.kalyno.app.ui.explorer
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -20,6 +21,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.Placeholder
 import androidx.compose.ui.text.PlaceholderVerticalAlign
@@ -28,20 +32,28 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.BaselineShift
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import ci.kalyno.app.ui.theme.KalynoBlue
+import ru.noties.jlatexmath.JLatexMathDrawable
 
-private enum class RKind { P, H, QUOTE, LI }
+private enum class RKind { P, H, QUOTE, LI, DISPLAY }
 private class RFrac(val num: String, val den: String)
-private class RBlock(val kind: RKind, val text: AnnotatedString, val fracs: Map<String, RFrac>)
+private class RBlock(
+    val kind: RKind,
+    val text: AnnotatedString,
+    val fracs: Map<String, RFrac>,
+    val maths: Map<String, String>
+)
 
 private val FRAC_RE = Regex(
     """<span class="frac"[^>]*>\s*<span class="fn"[^>]*>(.*?)</span>\s*<span class="fd"[^>]*>(.*?)</span>\s*</span>""",
     RegexOption.DOT_MATCHES_ALL
 )
+private val MATH_RE = Regex("""\$\$(.+?)\$\$|\$([^$]+?)\$""", RegexOption.DOT_MATCHES_ALL)
 private val TAG_RE = Regex("<[^>]*>")
 private val SPACES_RE = Regex("\\s+")
 private val COLOR_RE = Regex("""(?<![-\w])color\s*:\s*#([0-9a-fA-F]{3,6})""")
@@ -81,14 +93,17 @@ private fun parseRich(html: String): List<RBlock> {
     var kind = RKind.P
     var empty = true
     var blockFracs = LinkedHashMap<String, RFrac>()
+    var blockMaths = LinkedHashMap<String, String>()
+    var mathCount = 0
     val stack = ArrayList<Boolean>()
     val ordered = ArrayList<Boolean>()
     val counters = ArrayList<Int>()
 
     fun flush() {
-        if (!empty) blocks.add(RBlock(kind, builder.toAnnotatedString(), blockFracs))
+        if (!empty) blocks.add(RBlock(kind, builder.toAnnotatedString(), blockFracs, blockMaths))
         builder = AnnotatedString.Builder()
         blockFracs = LinkedHashMap()
+        blockMaths = LinkedHashMap()
         empty = true
         for (j in stack.indices) stack[j] = false
     }
@@ -98,8 +113,7 @@ private fun parseRich(html: String): List<RBlock> {
         stack.add(true)
     }
 
-    fun appendText(raw: String) {
-        val text = decode(raw)
+    fun appendPlain(text: String) {
         var k = 0
         while (k < text.length) {
             if (text[k] == MARK_OPEN) {
@@ -123,6 +137,35 @@ private fun parseRich(html: String): List<RBlock> {
                 k = nextMark
             }
         }
+    }
+
+    fun appendMath(tex: String, display: Boolean) {
+        val clean = tex.trim()
+        if (clean.isEmpty()) return
+        if (display) {
+            flush()
+            kind = RKind.DISPLAY
+        }
+        val id = "m${mathCount++}"
+        blockMaths[id] = clean
+        builder.appendInlineContent(id, clean)
+        empty = false
+        if (display) {
+            flush()
+            kind = RKind.P
+        }
+    }
+
+    fun appendText(raw: String) {
+        val text = decode(raw)
+        var last = 0
+        for (m in MATH_RE.findAll(text)) {
+            appendPlain(text.substring(last, m.range.first))
+            val display = m.groupValues[1].isNotEmpty()
+            appendMath(if (display) m.groupValues[1] else m.groupValues[2], display)
+            last = m.range.last + 1
+        }
+        appendPlain(text.substring(last))
     }
 
     fun openTag(name: String, raw: String) {
@@ -197,11 +240,18 @@ private fun parseRich(html: String): List<RBlock> {
     return blocks
 }
 
-private fun buildInline(fracs: Map<String, RFrac>, color: Color, fontSize: TextUnit): Map<String, InlineTextContent> =
-    fracs.mapValues { (_, f) ->
+private fun buildInline(
+    block: RBlock,
+    color: Color,
+    fontSize: TextUnit,
+    density: Density
+): Map<String, InlineTextContent> {
+    val result = LinkedHashMap<String, InlineTextContent>()
+    val small = (fontSize.value * 0.82f).sp
+
+    for ((id, f) in block.fracs) {
         val widthEm = maxOf(f.num.length, f.den.length) * 0.56f + 0.6f
-        val small = (fontSize.value * 0.82f).sp
-        InlineTextContent(
+        result[id] = InlineTextContent(
             Placeholder(
                 width = widthEm.em,
                 height = 2.4.em,
@@ -220,7 +270,47 @@ private fun buildInline(fracs: Map<String, RFrac>, color: Color, fontSize: TextU
         }
     }
 
-/** Affiche le contenu d'une capsule : HTML simple (gras, couleurs, exposants, fractions...) ou texte brut. */
+    val sizePx = with(density) { fontSize.toPx() }
+    for ((id, tex) in block.maths) {
+        val drawable = try {
+            JLatexMathDrawable.builder(tex).textSize(sizePx).padding(2).build()
+        } catch (e: Throwable) {
+            null
+        }
+        val w = drawable?.intrinsicWidth ?: 0
+        val h = drawable?.intrinsicHeight ?: 0
+        result[id] = if (drawable != null && w > 0 && h > 0) {
+            InlineTextContent(
+                Placeholder(
+                    width = with(density) { w.toSp() },
+                    height = with(density) { h.toSp() },
+                    placeholderVerticalAlign = PlaceholderVerticalAlign.Center
+                )
+            ) {
+                Canvas(Modifier.fillMaxSize()) {
+                    drawIntoCanvas { canvas ->
+                        drawable.setBounds(0, 0, size.width.toInt(), size.height.toInt())
+                        drawable.draw(canvas.nativeCanvas)
+                    }
+                }
+            }
+        } else {
+            // Formule invalide : on affiche le texte brut plutôt que de planter.
+            InlineTextContent(
+                Placeholder(
+                    width = (tex.length * 0.55f).em,
+                    height = 1.4.em,
+                    placeholderVerticalAlign = PlaceholderVerticalAlign.Center
+                )
+            ) {
+                Text(tex, color = color, fontSize = fontSize, maxLines = 1, softWrap = false)
+            }
+        }
+    }
+    return result
+}
+
+/** Affiche le contenu d'une capsule : HTML simple + formules LaTeX ($...$ et $$...$$), ou texte brut. */
 @Composable
 fun RichText(
     html: String,
@@ -229,7 +319,7 @@ fun RichText(
     lineHeight: TextUnit,
     fontWeight: FontWeight = FontWeight.Normal
 ) {
-    if (!html.contains('<')) {
+    if (!html.contains('<') && !html.contains('$')) {
         Text(text = html, color = color, fontSize = fontSize, lineHeight = lineHeight, fontWeight = fontWeight)
         return
     }
@@ -241,10 +331,11 @@ fun RichText(
 
 @Composable
 private fun RichBlockView(block: RBlock, color: Color, fontSize: TextUnit, lineHeight: TextUnit, fontWeight: FontWeight) {
-    val inline = remember(block, color, fontSize) { buildInline(block.fracs, color, fontSize) }
+    val density = LocalDensity.current
+    val inline = remember(block, color, fontSize, density) { buildInline(block, color, fontSize, density) }
     val heading = block.kind == RKind.H
     val size = if (heading) (fontSize.value * 1.2f).sp else fontSize
-    val lh = if (block.fracs.isNotEmpty()) TextUnit.Unspecified else lineHeight
+    val lh = if (block.fracs.isNotEmpty() || block.maths.isNotEmpty()) TextUnit.Unspecified else lineHeight
     val body: @Composable () -> Unit = {
         Text(
             text = block.text,
@@ -261,6 +352,7 @@ private fun RichBlockView(block: RBlock, color: Color, fontSize: TextUnit, lineH
             Box(Modifier.padding(start = 10.dp)) { body() }
         }
         RKind.LI -> Box(Modifier.padding(start = 8.dp)) { body() }
+        RKind.DISPLAY -> Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { body() }
         else -> body()
     }
 }
