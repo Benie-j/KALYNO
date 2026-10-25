@@ -18,7 +18,9 @@ data class LearningCard(
     val back: String?,
     val choices: List<String>,
     val correctIndex: Int?,
-    val explanation: String?
+    val explanation: String?,
+    /** Bonnes réponses d'un QCM à choix multiples (colonne `correct_indices`, optionnelle). */
+    val correctIndices: List<Int> = emptyList()
 )
 
 data class LearningCapsule(
@@ -211,12 +213,33 @@ class SupabaseLearningRepository {
         return getArray("capsules?select=id,title,body,minutes,position$filter")
     }
 
+    /** Faux dès qu'on sait que la table `cards` n'a pas (encore) la colonne `correct_indices`. */
+    @Volatile
+    private var cardMultiAnswerSupported = true
+
+    private fun readIndices(array: JSONArray?): List<Int> =
+        if (array == null) emptyList() else List(array.length()) { array.optInt(it, -1) }.filter { it >= 0 }
+
+    /** Cartes d'un chapitre ; repli sans `correct_indices` si le back-end ne la connaît pas (HTTP 400). */
+    private fun loadCardRows(chapterId: String): JSONArray {
+        val base = "cards?select=id,capsule_id,kind,front,back,choices,correct_index,explanation,position"
+        val filter = "&chapter_id=eq.${enc(chapterId)}&order=position.asc"
+        if (cardMultiAnswerSupported) {
+            try {
+                return getArray("$base,correct_indices$filter")
+            } catch (e: IOException) {
+                if (e.message?.startsWith("Supabase HTTP 400") == true) {
+                    cardMultiAnswerSupported = false
+                } else {
+                    throw e
+                }
+            }
+        }
+        return getArray("$base$filter")
+    }
+
     private fun loadCards(chapterId: String): List<LearningCard> {
-        val rows = getArray(
-            "cards?select=id,capsule_id,kind,front,back,choices," +
-                "correct_index,explanation,position" +
-                "&chapter_id=eq.${enc(chapterId)}&order=position.asc"
-        )
+        val rows = loadCardRows(chapterId)
 
         return buildList {
             for (i in 0 until rows.length()) {
@@ -255,7 +278,8 @@ class SupabaseLearningRepository {
                             null
                         } else {
                             row.optString("explanation")
-                        }
+                        },
+                        correctIndices = readIndices(row.optJSONArray("correct_indices"))
                     )
                 )
             }

@@ -91,6 +91,7 @@ class LearningContentCache(context: Context) {
         put("choices", JSONArray().apply { card.choices.forEach { put(it) } })
         put("correctIndex", card.correctIndex ?: JSONObject.NULL)
         put("explanation", card.explanation ?: JSONObject.NULL)
+        put("correctIndices", JSONArray().apply { card.correctIndices.forEach { put(it) } })
     }
 
     private fun decode(array: JSONArray): List<LearningSubject> =
@@ -139,7 +140,10 @@ class LearningContentCache(context: Context) {
             back = if (o.isNull("back")) null else o.optString("back"),
             choices = List(rawChoices.length()) { rawChoices.optString(it) },
             correctIndex = if (o.isNull("correctIndex")) null else o.optInt("correctIndex"),
-            explanation = if (o.isNull("explanation")) null else o.optString("explanation")
+            explanation = if (o.isNull("explanation")) null else o.optString("explanation"),
+            correctIndices = o.optJSONArray("correctIndices")
+                ?.let { a -> List(a.length()) { a.optInt(it, -1) }.filter { it >= 0 } }
+                ?: emptyList()
         )
     }
 }

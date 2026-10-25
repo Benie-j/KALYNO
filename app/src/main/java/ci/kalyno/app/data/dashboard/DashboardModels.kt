@@ -10,7 +10,11 @@ data class ReviewItem(
     val answer: String,
     val explanation: String?,
     /** Indice optionnel affiché dans un bloc orange (null tant que le back-end n'en fournit pas). */
-    val hint: String? = null
+    val hint: String? = null,
+    /** Type d'exercice publié par l'admin (SINGLE_CHOICE, MULTIPLE_CHOICE, FREE_TEXT) ; null = déduit des données. */
+    val kind: String? = null,
+    /** Indices des bonnes réponses (plusieurs possibles) ; vide = on utilise [correctIndex]. */
+    val correctIndices: List<Int> = emptyList()
 )
 
 enum class MissionStatus {

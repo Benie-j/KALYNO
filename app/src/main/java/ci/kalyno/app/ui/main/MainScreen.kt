@@ -36,7 +36,7 @@ import ci.kalyno.app.ui.profile.ProfileScreen
 import ci.kalyno.app.ui.profile.appVersionLabel
 import ci.kalyno.app.ui.profile.emailSupportOrSoon
 import ci.kalyno.app.ui.profile.openLinkOrSoon
-import ci.kalyno.app.ui.review.ReviewSessionScreen
+import ci.kalyno.app.ui.dojo.DojoSessionScreen
 
 private data class TabItem(val icon: String, val label: String)
 
@@ -66,9 +66,9 @@ fun MainScreen(
 
     if (session != null) {
         BackHandler { viewModel.closeSession(false) }
-        ReviewSessionScreen(
+        DojoSessionScreen(
             session = session,
-            onRate = { cardId, rating -> viewModel.rate(cardId, rating) },
+            levelId = levelId,
             onClose = { completed -> viewModel.closeSession(completed) }
         )
     } else {

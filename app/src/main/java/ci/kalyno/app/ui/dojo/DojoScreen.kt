@@ -38,6 +38,8 @@ import ci.kalyno.app.ui.theme.KalynoAmberDeep
 import ci.kalyno.app.ui.theme.KalynoAmberSoft
 import ci.kalyno.app.ui.theme.KalynoBlue
 import ci.kalyno.app.ui.theme.KalynoBlueSoft
+import ci.kalyno.app.ui.theme.KalynoCorrectSoft
+import ci.kalyno.app.ui.theme.KalynoCorrectText
 import ci.kalyno.app.ui.theme.KalynoDanger
 import ci.kalyno.app.ui.theme.KalynoDangerSoft
 import ci.kalyno.app.ui.theme.KalynoMuted
@@ -273,14 +275,14 @@ private fun MissionBlock(
     }
 }
 
-/** Mini-guide du feedback métacognitif qui pilote l'algorithme. */
+/** Mini-guide : l'élève répond à de vrais exercices, l'algorithme note à sa place. */
 @Composable
 private fun SrsLegend() {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        SectionHeader(title = "Comment ça marche ?", subtitle = "Après chaque carte, dis honnêtement comment c'était")
-        LegendRow("🔴", "Oublié", "La carte revient très vite", KalynoDangerSoft, KalynoDanger)
-        LegendRow("🟡", "Hésité", "Elle reviendra bientôt", KalynoAmberSoft, KalynoAmberDeep)
-        LegendRow("🟢", "Facile", "Elle s'espace de plus en plus", KalynoBlueSoft, KalynoBlue)
+        SectionHeader(title = "Comment ça marche ?", subtitle = "Pas d'auto-évaluation : tu réponds, l'app corrige")
+        LegendRow("✍️", "Tu réponds", "QCM ou saisie libre, sans voir la correction", KalynoBlueSoft, KalynoBlue)
+        LegendRow("✅", "L'app corrige", "Juste : la carte s'espace. Erreur : elle revient vite", KalynoCorrectSoft, KalynoCorrectText)
+        LegendRow("🧠", "FSRS planifie", "Ta prochaine révision tombe au meilleur moment", KalynoAmberSoft, KalynoAmberDeep)
     }
 }
 

@@ -39,7 +39,12 @@ data class FlashcardEntity(
     val subjectId: String,
     val chapitre: String,
     val question: String,
-    val reponse: String
+    val reponse: String,
+    // -- Exercice piloté par l'admin (null = carte créée avant le Dojo : saisie libre) --
+    val kind: String? = null,            // SINGLE_CHOICE, MULTIPLE_CHOICE ou FREE_TEXT
+    val choicesJson: String? = null,     // choix proposés, au format JSON
+    val correctIndices: String? = null,  // indices des bonnes réponses, séparés par des virgules
+    val explanation: String? = null      // explication détaillée (révélée après la réponse)
 )
 
 /**

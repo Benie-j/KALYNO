@@ -95,15 +95,18 @@ class DashboardRepository(context: Context) {
         val urgentItems = due.mapNotNull { d ->
             cardIndex[d.flashcardId]?.let { (s, ch, c) -> itemFrom(c, s.name, ch.title) }
                 ?: entities[d.flashcardId]?.let { e ->
+                    val storedIndices = ci.kalyno.app.data.dojo.parseIndexList(e.correctIndices)
                     ReviewItem(
                         cardId = e.id,
                         subjectName = subjectNames[d.subjectId].orEmpty(),
                         chapterTitle = e.chapitre,
                         front = e.question,
-                        choices = emptyList(),
-                        correctIndex = null,
+                        choices = choicesFromJson(e.choicesJson),
+                        correctIndex = storedIndices.firstOrNull(),
                         answer = e.reponse,
-                        explanation = null
+                        explanation = e.explanation,
+                        kind = e.kind,
+                        correctIndices = storedIndices
                     )
                 }
         }
@@ -202,6 +205,9 @@ class DashboardRepository(context: Context) {
                         reviewedAt = now
                     )
                 )
+
+                // Intervalle planifié par FSRS (affiché à l'élève dans la correction)
+                next.intervalDays
             }
         }
 
@@ -218,7 +224,19 @@ class DashboardRepository(context: Context) {
                 ch.cards.mapNotNull { c ->
                     val answer = answerOf(c)
                     if (c.front.isBlank() || answer.isNullOrBlank()) null
-                    else FlashcardEntity(c.id, s.id, ch.title, c.front, answer)
+                    else FlashcardEntity(
+                        id = c.id,
+                        subjectId = s.id,
+                        chapitre = ch.title,
+                        question = c.front,
+                        reponse = answer,
+                        kind = c.kind,
+                        choicesJson = JSONArray(c.choices).toString(),
+                        correctIndices = ci.kalyno.app.data.dojo
+                            .mergeCorrectIndices(c.correctIndices, c.correctIndex)
+                            .joinToString(","),
+                        explanation = c.explanation
+                    )
                 }
             }
         }
@@ -285,7 +303,21 @@ class DashboardRepository(context: Context) {
     }
 
     private fun answerOf(card: LearningCard): String? =
-        card.correctIndex?.let { card.choices.getOrNull(it) } ?: card.back
+        ci.kalyno.app.data.dojo.answerText(
+            card.choices,
+            ci.kalyno.app.data.dojo.mergeCorrectIndices(card.correctIndices, card.correctIndex),
+            card.back
+        )
+
+    private fun choicesFromJson(json: String?): List<String> = try {
+        if (json.isNullOrBlank()) {
+            emptyList()
+        } else {
+            JSONArray(json).let { array -> List(array.length()) { array.optString(it) } }
+        }
+    } catch (e: Exception) {
+        emptyList()
+    }
 
     private fun itemFrom(card: LearningCard, subject: String, chapter: String): ReviewItem? {
         val answer = answerOf(card)
@@ -298,7 +330,9 @@ class DashboardRepository(context: Context) {
             choices = card.choices,
             correctIndex = card.correctIndex,
             answer = answer,
-            explanation = card.explanation
+            explanation = card.explanation,
+            kind = card.kind,
+            correctIndices = ci.kalyno.app.data.dojo.mergeCorrectIndices(card.correctIndices, card.correctIndex)
         )
     }
 

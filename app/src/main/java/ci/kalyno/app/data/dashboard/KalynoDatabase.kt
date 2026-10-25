@@ -19,7 +19,7 @@ import ci.kalyno.app.data.srs.SubjectEntity
         CardProgressEntity::class,
         ReviewLogEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class KalynoDatabase : RoomDatabase() {
@@ -50,13 +50,23 @@ abstract class KalynoDatabase : RoomDatabase() {
             }
         }
 
+        /** Dojo : type d'exercice, choix, bonnes réponses et explication stockés dans Room. */
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE flashcards ADD COLUMN kind TEXT")
+                db.execSQL("ALTER TABLE flashcards ADD COLUMN choicesJson TEXT")
+                db.execSQL("ALTER TABLE flashcards ADD COLUMN correctIndices TEXT")
+                db.execSQL("ALTER TABLE flashcards ADD COLUMN explanation TEXT")
+            }
+        }
+
         fun get(context: Context): KalynoDatabase =
             instance ?: synchronized(this) {
                 instance ?: Room.databaseBuilder(
                     context.applicationContext,
                     KalynoDatabase::class.java,
                     "kalyno.db"
-                ).addMigrations(MIGRATION_1_2).build().also { instance = it }
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3).build().also { instance = it }
             }
     }
 }
