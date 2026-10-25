@@ -111,7 +111,11 @@ fun LearningCapsule.toLessonBlock(): LessonBlock {
         id = id,
         type = type,
         title = displayTitle,
-        paragraphs = body.split(Regex("\\n\\s*\\n")).map { it.trim() }.filter { it.isNotEmpty() }
+        paragraphs = if (body.contains('<')) {
+            listOf(body.trim()).filter { it.isNotEmpty() }
+        } else {
+            body.split(Regex("\\n\\s*\\n")).map { it.trim() }.filter { it.isNotEmpty() }
+        }
     )
 }
 
@@ -275,7 +279,7 @@ private fun TextBlock(block: LessonBlock, modifier: Modifier = Modifier) {
             )
         }
         block.paragraphs.forEach {
-            Text(text = it, color = KalynoText, fontSize = 16.sp, lineHeight = 26.sp)
+            RichText(it, KalynoText, 16.sp, 26.sp)
         }
     }
 }
@@ -332,12 +336,12 @@ private fun AccentBlock(
                 )
             }
             block.paragraphs.forEach {
-                Text(
-                    text = it,
-                    color = KalynoText,
-                    fontSize = if (emphasizeBody) 18.sp else 15.sp,
-                    lineHeight = if (emphasizeBody) 28.sp else 23.sp,
-                    fontWeight = if (emphasizeBody) FontWeight.SemiBold else FontWeight.Normal
+                RichText(
+                    it,
+                    KalynoText,
+                    if (emphasizeBody) 18.sp else 15.sp,
+                    if (emphasizeBody) 28.sp else 23.sp,
+                    if (emphasizeBody) FontWeight.SemiBold else FontWeight.Normal
                 )
             }
         }
