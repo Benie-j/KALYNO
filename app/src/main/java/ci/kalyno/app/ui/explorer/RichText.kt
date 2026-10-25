@@ -2,6 +2,7 @@ package ci.kalyno.app.ui.explorer
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.InlineTextContent
 import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.material3.Text
@@ -40,13 +42,15 @@ import androidx.compose.ui.unit.sp
 import ci.kalyno.app.ui.theme.KalynoBlue
 import ru.noties.jlatexmath.JLatexMathDrawable
 
-private enum class RKind { P, H, QUOTE, LI, DISPLAY }
+private enum class RKind { P, H, QUOTE, LI, DISPLAY, BOX }
 private class RFrac(val num: String, val den: String)
 private class RBlock(
     val kind: RKind,
     val text: AnnotatedString,
     val fracs: Map<String, RFrac>,
-    val maths: Map<String, String>
+    val maths: Map<String, String>,
+    val boxBorder: Color? = null,
+    val boxBackground: Color? = null
 )
 
 private val FRAC_RE = Regex(
@@ -58,6 +62,7 @@ private val TAG_RE = Regex("<[^>]*>")
 private val SPACES_RE = Regex("\\s+")
 private val COLOR_RE = Regex("""(?<![-\w])color\s*:\s*#([0-9a-fA-F]{3,6})""")
 private val BG_RE = Regex("""background-color\s*:\s*#([0-9a-fA-F]{3,6})""")
+private val BORDER_RE = Regex("""border\s*:\s*\d+px\s+solid\s+#([0-9a-fA-F]{3,6})""")
 private const val MARK_OPEN = '\uE000'
 private const val MARK_CLOSE = '\uE001'
 
@@ -95,12 +100,14 @@ private fun parseRich(html: String): List<RBlock> {
     var blockFracs = LinkedHashMap<String, RFrac>()
     var blockMaths = LinkedHashMap<String, String>()
     var mathCount = 0
+    var activeBoxBorder: Color? = null
+    var activeBoxBackground: Color? = null
     val stack = ArrayList<Boolean>()
     val ordered = ArrayList<Boolean>()
     val counters = ArrayList<Int>()
 
     fun flush() {
-        if (!empty) blocks.add(RBlock(kind, builder.toAnnotatedString(), blockFracs, blockMaths))
+        if (!empty) blocks.add(RBlock(kind, builder.toAnnotatedString(), blockFracs, blockMaths, activeBoxBorder, activeBoxBackground))
         builder = AnnotatedString.Builder()
         blockFracs = LinkedHashMap()
         blockMaths = LinkedHashMap()
@@ -170,7 +177,20 @@ private fun parseRich(html: String): List<RBlock> {
 
     fun openTag(name: String, raw: String) {
         when (name) {
-            "p", "div" -> { flush(); kind = RKind.P }
+            "p" -> { flush(); kind = if (activeBoxBorder != null) RKind.BOX else RKind.P }
+            "div" -> {
+                val border = BORDER_RE.find(raw)?.let { hexColor(it.groupValues[1]) }
+                val background = BG_RE.find(raw)?.let { hexColor(it.groupValues[1]) }
+                if (border != null) {
+                    flush()
+                    activeBoxBorder = border
+                    activeBoxBackground = background
+                    kind = RKind.BOX
+                } else {
+                    flush()
+                    kind = if (activeBoxBorder != null) RKind.BOX else RKind.P
+                }
+            }
             "h1", "h2", "h3" -> { flush(); kind = RKind.H }
             "blockquote" -> { flush(); kind = RKind.QUOTE }
             "ul" -> { ordered.add(false); counters.add(0) }
@@ -186,6 +206,7 @@ private fun parseRich(html: String): List<RBlock> {
             "strong", "b" -> push(SpanStyle(fontWeight = FontWeight.Bold))
             "em", "i" -> push(SpanStyle(fontStyle = FontStyle.Italic))
             "u" -> push(SpanStyle(textDecoration = TextDecoration.Underline))
+            "s", "strike", "del" -> push(SpanStyle(textDecoration = TextDecoration.LineThrough))
             "sup" -> push(SpanStyle(baselineShift = BaselineShift.Superscript, fontSize = 0.75.em))
             "sub" -> push(SpanStyle(baselineShift = BaselineShift.Subscript, fontSize = 0.75.em))
             "mark" -> push(SpanStyle(background = Color(0xFFFFF0B3)))
@@ -204,7 +225,8 @@ private fun parseRich(html: String): List<RBlock> {
 
     fun closeTag(name: String) {
         when (name) {
-            "p", "div", "h1", "h2", "h3", "blockquote", "li" -> { flush(); kind = RKind.P }
+            "p", "h1", "h2", "h3", "blockquote", "li" -> { flush(); kind = if (activeBoxBorder != null) RKind.BOX else RKind.P }
+            "div" -> { flush(); activeBoxBorder = null; activeBoxBackground = null; kind = RKind.P }
             "ul", "ol" -> {
                 if (ordered.isNotEmpty()) ordered.removeAt(ordered.lastIndex)
                 if (counters.isNotEmpty()) counters.removeAt(counters.lastIndex)
@@ -317,20 +339,21 @@ fun RichText(
     color: Color,
     fontSize: TextUnit,
     lineHeight: TextUnit,
-    fontWeight: FontWeight = FontWeight.Normal
+    fontWeight: FontWeight = FontWeight.Normal,
+    fontStyle: FontStyle = FontStyle.Normal
 ) {
     if (!html.contains('<') && !html.contains('$')) {
-        Text(text = html, color = color, fontSize = fontSize, lineHeight = lineHeight, fontWeight = fontWeight)
+        Text(text = html, color = color, fontSize = fontSize, lineHeight = lineHeight, fontWeight = fontWeight, fontStyle = fontStyle)
         return
     }
     val blocks = remember(html) { parseRich(html) }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        for (block in blocks) RichBlockView(block, color, fontSize, lineHeight, fontWeight)
+        for (block in blocks) RichBlockView(block, color, fontSize, lineHeight, fontWeight, fontStyle)
     }
 }
 
 @Composable
-private fun RichBlockView(block: RBlock, color: Color, fontSize: TextUnit, lineHeight: TextUnit, fontWeight: FontWeight) {
+private fun RichBlockView(block: RBlock, color: Color, fontSize: TextUnit, lineHeight: TextUnit, fontWeight: FontWeight, fontStyle: FontStyle) {
     val density = LocalDensity.current
     val inline = remember(block, color, fontSize, density) { buildInline(block, color, fontSize, density) }
     val heading = block.kind == RKind.H
@@ -343,7 +366,8 @@ private fun RichBlockView(block: RBlock, color: Color, fontSize: TextUnit, lineH
             color = color,
             fontSize = size,
             lineHeight = lh,
-            fontWeight = if (heading) FontWeight.ExtraBold else fontWeight
+            fontWeight = if (heading) FontWeight.ExtraBold else fontWeight,
+            fontStyle = fontStyle
         )
     }
     when (block.kind) {
@@ -353,6 +377,15 @@ private fun RichBlockView(block: RBlock, color: Color, fontSize: TextUnit, lineH
         }
         RKind.LI -> Box(Modifier.padding(start = 8.dp)) { body() }
         RKind.DISPLAY -> Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { body() }
+        RKind.BOX -> {
+            val shape = RoundedCornerShape(10.dp)
+            Column(
+                Modifier.fillMaxWidth()
+                    .background(block.boxBackground ?: Color.Transparent, shape)
+                    .border(1.dp, block.boxBorder ?: KalynoBlue, shape)
+                    .padding(10.dp)
+            ) { body() }
+        }
         else -> body()
     }
 }

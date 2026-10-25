@@ -246,8 +246,8 @@ private fun IntroBlock(block: LessonBlock, modifier: Modifier = Modifier) {
             Text(text = it, color = KalynoText, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold)
         }
         block.paragraphs.forEach {
-            Text(
-                text = it,
+            RichText(
+                html = it,
                 color = KalynoMuted,
                 fontSize = 17.sp,
                 lineHeight = 27.sp,
