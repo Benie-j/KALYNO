@@ -36,12 +36,18 @@ class CatalogRepository private constructor(context: Context) {
         if (rows.isNotEmpty()) Levels.register(rows.map { it.toInfo() })
     }
 
-    /** Réseau -> Room. Une liste vide venant du réseau est ignorée (on ne vide jamais le catalogue sur une anomalie). */
+    /**
+     * Une liste vide signifie que Supabase a répondu correctement sans classe active.
+     * Les erreurs réseau/HTTP sont propagées et ne vident donc jamais le cache par erreur.
+     */
     suspend fun refreshLevels() {
         val levels = remote.loadLevels()
-        if (levels.isEmpty()) return
-        dao.upsertLevels(levels.map { it.toEntity() })
-        dao.deleteLevelsNotIn(levels.map { it.id })
+        if (levels.isEmpty()) {
+            dao.deleteAllLevels()
+        } else {
+            dao.upsertLevels(levels.map { it.toEntity() })
+            dao.deleteLevelsNotIn(levels.map { it.id })
+        }
         Levels.register(levels)
     }
 

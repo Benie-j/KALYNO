@@ -27,7 +27,7 @@ update public.levels set cycle = 'BAC',  icon_key = 'calculator',    position = 
 update public.levels set cycle = 'BAC',  icon_key = 'flask-conical', position = 50 where id = 'TLE_D';
 
 -- L'ancienne série unique n'est plus proposée aux élèves.
-update public.levels set is_active = false where id = 'TLE_A';
+update public.levels set position = 60 where id = 'TLE_A';
 
 -- Description facultative affichée sous le nom de la série (à remplir par l'équipe pédagogique), ex. :
 -- update public.levels set tagline = '...' where id = 'TLE_A1';
@@ -78,13 +78,11 @@ create policy themes_read_published on public.themes
 
 drop policy if exists themes_admin_all on public.themes;
 create policy themes_admin_all on public.themes
-  for all to authenticated using (true) with check (true);
+  for all to authenticated using (public.is_admin()) with check (public.is_admin());
 
 commit;
 
--- 6) À FAIRE À LA MAIN, une fois que tu sais quel contenu va dans quelle série ----------------------
--- Les disciplines/leçons/défis qui étaient rattachés à TLE_A ne sont plus visibles.
--- Si tout ce contenu correspond à Tle A1 :
---   update public.subjects   set level_id = 'TLE_A1' where level_id = 'TLE_A';
---   update public.challenges set level_id = 'TLE_A1' where level_id = 'TLE_A';
--- Tle A2 a un programme différent : ses disciplines et son défi de découverte se créent depuis l'admin.
+-- 6) Migration de l'ancienne série Tle A ----------------------------------------------
+-- Le transfert des références vers TLE_A1 et la suppression de TLE_A ont été
+-- effectués séparément sur la base après vérification des relations.
+-- TLE_A2 reste une série distincte : son contenu pédagogique est à créer depuis l'admin.

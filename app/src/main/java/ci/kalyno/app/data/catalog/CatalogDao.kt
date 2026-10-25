@@ -26,6 +26,10 @@ abstract class CatalogDao {
     @Query("DELETE FROM catalog_levels WHERE id NOT IN (:keepIds)")
     abstract suspend fun deleteLevelsNotIn(keepIds: List<String>)
 
+    /** Appelé uniquement après une réponse distante réussie sans classe active. */
+    @Query("DELETE FROM catalog_levels")
+    abstract suspend fun deleteAllLevels()
+
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     abstract suspend fun insertLevelIfAbsent(level: CatalogLevelEntity)
 
