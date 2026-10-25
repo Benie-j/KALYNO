@@ -38,8 +38,6 @@ import ci.kalyno.app.ui.theme.KalynoAmberDeep
 import ci.kalyno.app.ui.theme.KalynoAmberSoft
 import ci.kalyno.app.ui.theme.KalynoBlue
 import ci.kalyno.app.ui.theme.KalynoBlueSoft
-import ci.kalyno.app.ui.theme.KalynoCorrectSoft
-import ci.kalyno.app.ui.theme.KalynoCorrectText
 import ci.kalyno.app.ui.theme.KalynoDanger
 import ci.kalyno.app.ui.theme.KalynoDangerSoft
 import ci.kalyno.app.ui.theme.KalynoMuted
@@ -98,7 +96,6 @@ fun DojoScreen(
             else -> {
                 UrgentHero(state = state, onReview = onReviewUrgent)
                 MissionBlock(state = state, onStart = onStartMission, onReview = onReviewUrgent)
-                SrsLegend()
             }
         }
     }
@@ -271,36 +268,6 @@ private fun MissionBlock(
                 fontSize = 14.sp,
                 lineHeight = 20.sp
             )
-        }
-    }
-}
-
-/** Mini-guide : l'élève répond à de vrais exercices, l'algorithme note à sa place. */
-@Composable
-private fun SrsLegend() {
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        SectionHeader(title = "Comment ça marche ?", subtitle = "Pas d'auto-évaluation : tu réponds, l'app corrige")
-        LegendRow("✍️", "Tu réponds", "QCM ou saisie libre, sans voir la correction", KalynoBlueSoft, KalynoBlue)
-        LegendRow("✅", "L'app corrige", "Juste : la carte s'espace. Erreur : elle revient vite", KalynoCorrectSoft, KalynoCorrectText)
-        LegendRow("🧠", "FSRS planifie", "Ta prochaine révision tombe au meilleur moment", KalynoAmberSoft, KalynoAmberDeep)
-    }
-}
-
-@Composable
-private fun LegendRow(emoji: String, title: String, text: String, container: Color, content: Color) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(container)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(emoji, fontSize = 20.sp)
-        Spacer(Modifier.width(12.dp))
-        Column {
-            Text(title, color = content, fontSize = 15.sp, fontWeight = FontWeight.ExtraBold)
-            Text(text, color = KalynoText, fontSize = 13.sp)
         }
     }
 }
