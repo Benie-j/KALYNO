@@ -97,4 +97,18 @@ interface SrsDao {
 
     @Query("SELECT * FROM card_progress WHERE studentId = :studentId AND flashcardId = :flashcardId")
     suspend fun getProgress(studentId: String, flashcardId: String): CardProgressEntity?
+
+    /** Cartes deja revisees au moins une fois, pour calculer maitrise et retention. */
+    @Query(
+        "SELECT repetitions, stability, lastReviewedAt FROM card_progress " +
+            "WHERE studentId = :studentId AND repetitions > 0"
+    )
+    suspend fun masteryRows(studentId: String): List<MasteryRow>
 }
+
+/** Ligne minimale pour le calcul de la grille KPI (notions maitrisees, retention). */
+data class MasteryRow(
+    val repetitions: Int,
+    val stability: Double,
+    val lastReviewedAt: Long?
+)

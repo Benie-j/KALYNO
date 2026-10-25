@@ -150,7 +150,7 @@ fun ExplorerScreen(
                 viewModel = viewModel,
                 scroll = homeScroll,
                 onStart = start,
-                onOpenLesson = { viewModel.onLessonClick(it.id) },
+                onOpenLesson = { viewModel.onLessonClick(it) },
                 onOpenLeaderboard = { showLeaderboard = true }
             )
 
@@ -161,7 +161,7 @@ fun ExplorerScreen(
                         discipline = discipline,
                         lessons = ui.lessonsOf(discipline.id),
                         onBack = { viewModel.onBack() },
-                        onOpenLesson = { viewModel.onLessonClick(it.id) }
+                        onOpenLesson = { viewModel.onLessonClick(it) }
                     )
                 }
             }

@@ -65,5 +65,19 @@ data class DashboardUiState(
     val urgentItems: List<ReviewItem> = emptyList(),
     /** Jours avant l'examen publié par l'admin ; null tant qu'aucune date n'est publiée. */
     val examDaysLeft: Int? = null,
-    val session: ReviewSession? = null
+    val session: ReviewSession? = null,
+    /** Message de motivation publie par l'admin (banniere heros). Null = rien a afficher. */
+    val heroMessage: String? = null,
+    /** Nombre de notions maitrisees (repetitions >= 2 cote SRS). Null = pas encore calcule. */
+    val masteredCount: Int? = null,
+    /** Score global de retention (0..1), derive de l'ease factor moyen des cartes. */
+    val retentionScore: Float? = null,
+    /** Derniere lecon consultee dans l'Explorer, pour "Reprendre l'aventure". */
+    val lastLesson: LastLessonUi? = null
+)
+
+data class LastLessonUi(
+    val subjectName: String,
+    val chapterTitle: String,
+    val progress: Float
 )

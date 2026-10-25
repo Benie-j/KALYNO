@@ -30,9 +30,28 @@ class AppPrefs(context: Context) {
             prefs.edit().putBoolean(KEY_DEMO_DONE, value).apply()
         }
 
+    /** Dernière leçon ouverte dans l'Explorer, pour "Reprendre l'aventure" sur l'Accueil. */
+    fun saveLastLesson(subjectName: String, subjectEmoji: String, chapterTitle: String, progress: Float) {
+        prefs.edit()
+            .putString(KEY_LAST_LESSON_SUBJECT, subjectName)
+            .putString(KEY_LAST_LESSON_EMOJI, subjectEmoji)
+            .putString(KEY_LAST_LESSON_CHAPTER, chapterTitle)
+            .putFloat(KEY_LAST_LESSON_PROGRESS, progress)
+            .apply()
+    }
+
+    val lastLessonSubjectName: String? get() = prefs.getString(KEY_LAST_LESSON_SUBJECT, null)
+    val lastLessonSubjectEmoji: String? get() = prefs.getString(KEY_LAST_LESSON_EMOJI, null)
+    val lastLessonChapterTitle: String? get() = prefs.getString(KEY_LAST_LESSON_CHAPTER, null)
+    val lastLessonProgress: Float get() = prefs.getFloat(KEY_LAST_LESSON_PROGRESS, 0f)
+
     private companion object {
         const val KEY_LEVEL = "level"
         const val KEY_NICKNAME = "nickname"
         const val KEY_DEMO_DONE = "demo_done"
+        const val KEY_LAST_LESSON_SUBJECT = "last_lesson_subject"
+        const val KEY_LAST_LESSON_EMOJI = "last_lesson_emoji"
+        const val KEY_LAST_LESSON_CHAPTER = "last_lesson_chapter"
+        const val KEY_LAST_LESSON_PROGRESS = "last_lesson_progress"
     }
 }

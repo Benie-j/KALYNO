@@ -63,7 +63,10 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                         urgentTotal = snapshot.urgentTotal,
                         urgentTopics = snapshot.urgentTopics,
                         urgentItems = snapshot.urgentItems,
-                        examDaysLeft = snapshot.examDaysLeft
+                        examDaysLeft = snapshot.examDaysLeft,
+                        masteredCount = snapshot.masteredCount,
+                        retentionScore = snapshot.retentionScore,
+                        lastLesson = snapshot.lastLesson
                     )
                 }
             } catch (e: CancellationException) {

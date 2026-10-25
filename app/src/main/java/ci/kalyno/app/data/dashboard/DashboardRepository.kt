@@ -5,6 +5,7 @@ import androidx.room.withTransaction
 import ci.kalyno.app.data.LearningCard
 import ci.kalyno.app.data.LearningChapter
 import ci.kalyno.app.data.LearningSubject
+import ci.kalyno.app.data.AppPrefs
 import ci.kalyno.app.data.SupabaseLearningRepository
 import ci.kalyno.app.data.cloud.CloudSync
 import ci.kalyno.app.data.srs.CardProgressEntity
@@ -28,6 +29,7 @@ class DashboardRepository(context: Context) {
     private val remote = SupabaseLearningRepository()
     private val cloud = CloudSync(context)
     private val exams = ExamSchedule(context)
+    private val prefs = AppPrefs(context)
 
     data class Snapshot(
         val mission: MissionUi?,
@@ -36,7 +38,13 @@ class DashboardRepository(context: Context) {
         val urgentTopics: List<UrgentTopic>,
         val urgentItems: List<ReviewItem>,
         /** Jours restants avant l'examen publié par l'admin (null si aucune date). */
-        val examDaysLeft: Int?
+        val examDaysLeft: Int?,
+        /** Notions revisees au moins MASTERED_REPETITIONS fois d'affilee avec succes. */
+        val masteredCount: Int,
+        /** Probabilite moyenne de retention (courbe de l'oubli FSRS), null si aucune carte revisee. */
+        val retentionScore: Float?,
+        /** Derniere lecon ouverte dans l'Explorer ("Reprendre l'aventure"), null si aucune encore. */
+        val lastLesson: LastLessonUi?
     )
 
     /**
@@ -153,6 +161,21 @@ class DashboardRepository(context: Context) {
             else -> MissionStatus.EMPTY
         }
 
+        // ----- KPI : notions maîtrisées et score de rétention -----
+        val masteryRows = srs.masteryRows(studentId)
+        val masteredCount = masteryRows.count { it.repetitions >= MASTERED_REPETITIONS }
+        val retentionScore = masteryRows
+            .mapNotNull { row ->
+                val last = row.lastReviewedAt ?: return@mapNotNull null
+                val stability = row.stability.takeIf { it > 0.0 } ?: return@mapNotNull null
+                // Courbe de l'oubli FSRS : R(t) = exp(-t / S), t et S en jours.
+                val elapsedDays = (now - last) / DAY_MS.toDouble()
+                kotlin.math.exp(-elapsedDays / stability)
+            }
+            .takeIf { it.isNotEmpty() }
+            ?.average()
+            ?.toFloat()
+
         Snapshot(
             mission = when (status) {
                 MissionStatus.READY -> mission
@@ -173,7 +196,16 @@ class DashboardRepository(context: Context) {
             urgentItems = urgentItems.take(SrsConfig.SESSION_SIZE),
             examDaysLeft = examLookup.await()
                 ?.let { SrsEngine.daysUntil(now, it) }
-                ?.takeIf { it >= 0 }
+                ?.takeIf { it >= 0 },
+            masteredCount = masteredCount,
+            retentionScore = retentionScore,
+            lastLesson = prefs.lastLessonChapterTitle?.let { chapterTitle ->
+                LastLessonUi(
+                    subjectName = "${prefs.lastLessonSubjectEmoji.orEmpty()} ${prefs.lastLessonSubjectName.orEmpty()}".trim(),
+                    chapterTitle = chapterTitle,
+                    progress = prefs.lastLessonProgress
+                )
+            }
         )
     }
 
@@ -358,5 +390,7 @@ class DashboardRepository(context: Context) {
 
     private companion object {
         const val DAY_MS = 24 * 60 * 60 * 1000L
+        /** Nombre de réussites d'affilée pour considérer une notion comme maîtrisée. */
+        const val MASTERED_REPETITIONS = 3
     }
 }

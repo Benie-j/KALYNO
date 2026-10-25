@@ -106,12 +106,12 @@ fun MainScreen(
                     .padding(padding)
             ) {
                 when (tab) {
-                    0 -> PersonalDashboard(
-                        levelId = levelId,
+                    0 -> AccueilScreen(
                         state = state,
                         onStartMission = viewModel::startMission,
                         onReviewUrgent = viewModel::startUrgentReview,
-                        onRetry = viewModel::retry
+                        onRetry = viewModel::retry,
+                        onResumeLastLesson = { tab = 2 } // ouvre l'onglet Explorer
                     )
                     1 -> DojoScreen(
                         levelId = levelId,

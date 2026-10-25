@@ -3,6 +3,7 @@ package ci.kalyno.app.ui.explorer
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import ci.kalyno.app.data.AppPrefs
 import ci.kalyno.app.data.ExplorerBanner
 import ci.kalyno.app.data.LearningCapsule
 import ci.kalyno.app.data.LearningCard
@@ -148,6 +149,7 @@ class ExplorerViewModel(app: Application) : AndroidViewModel(app) {
     private val remote = SupabaseLearningRepository()
     private val cache = LearningContentCache(app)
     private val dao = KalynoDatabase.get(app).dashboardDao()
+    private val prefs = AppPrefs(app)
     private val studentId = StudentId.get(app)
 
     private val _state = MutableStateFlow(ExplorerUiState())
@@ -189,7 +191,15 @@ class ExplorerViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun onLessonClick(id: String) = _state.update { it.copy(openLessonId = id) }
+    fun onLessonClick(chapter: ExplorerChapter) {
+        prefs.saveLastLesson(
+            subjectName = chapter.subjectName,
+            subjectEmoji = chapter.subjectEmoji,
+            chapterTitle = chapter.title,
+            progress = chapter.progress
+        )
+        _state.update { it.copy(openLessonId = chapter.id) }
+    }
 
     /** Gère le retour système / flèche. Renvoie false si on est déjà sur l'accueil Explorer. */
     fun onBack(): Boolean {
