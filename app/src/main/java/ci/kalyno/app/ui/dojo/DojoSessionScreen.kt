@@ -453,7 +453,7 @@ private fun QuestionCard(state: DojoUiState, exercise: DojoExercise, vm: DojoVie
 }
 
 @Composable
-private fun ChoiceRow(
+internal fun ChoiceRow(
     letter: String,
     text: String,
     multiple: Boolean,
@@ -727,7 +727,7 @@ private fun SummaryChip(text: String, container: Color, content: Color) {
 }
 
 /** Découpe l'explication de l'admin en étapes (une par ligne, sinon une par phrase). */
-private fun explanationSteps(explanation: String?): List<String> {
+internal fun explanationSteps(explanation: String?): List<String> {
     if (explanation.isNullOrBlank()) return emptyList()
     val lines = explanation.lines()
         .map { it.trim().trimStart('-', '•', '*').trim() }

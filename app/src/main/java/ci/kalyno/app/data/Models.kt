@@ -1,10 +1,18 @@
 package ci.kalyno.app.data
 
+/**
+ * Une question du premier défi, publiée par l'admin. Même moule que les exercices du Dojo :
+ * une bonne réponse, plusieurs bonnes réponses ou saisie libre.
+ */
 data class Question(
     val id: String,
     val prompt: String,
+    val kind: ci.kalyno.app.data.dojo.ExerciseKind,
     val choices: List<String>,
-    val correctIndex: Int,
+    val correctIndices: Set<Int>,
+    /** Saisie libre : réponses acceptées (variantes séparées par « | » côté admin). */
+    val acceptedAnswers: List<String> = emptyList(),
+    val hint: String? = null,
     val explanation: String? = null
 )
 

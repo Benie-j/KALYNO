@@ -2,6 +2,7 @@ package ci.kalyno.app.ui.challenge
 
 import ci.kalyno.app.ui.icons.KalynoSvgIcon
 
+import android.os.SystemClock
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -9,30 +10,35 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.BorderStroke
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Surface
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -40,16 +46,25 @@ import ci.kalyno.app.data.Challenge
 import ci.kalyno.app.data.ChallengeRepository
 import ci.kalyno.app.data.ChallengeResult
 import ci.kalyno.app.data.Levels
-import ci.kalyno.app.data.Feedback
-import ci.kalyno.app.data.StreakStore
 import ci.kalyno.app.data.Question
+import ci.kalyno.app.data.StreakStore
+import ci.kalyno.app.data.dojo.AnswerContext
+import ci.kalyno.app.data.dojo.AnswerGrader
+import ci.kalyno.app.data.dojo.CalculatorPolicy
+import ci.kalyno.app.data.dojo.ExerciseKind
+import ci.kalyno.app.data.dojo.answerText
+import ci.kalyno.app.data.dojo.parseIndexList
+import ci.kalyno.app.ui.components.KalynoCard
+import ci.kalyno.app.ui.components.KalynoPill
+import ci.kalyno.app.ui.components.KalynoPrimaryButton
+import ci.kalyno.app.ui.components.rememberHaptic
+import ci.kalyno.app.ui.dojo.CalculatorModel
+import ci.kalyno.app.ui.dojo.ChoiceRow
+import ci.kalyno.app.ui.dojo.DojoMessages
+import ci.kalyno.app.ui.dojo.ScientificCalculatorDialog
+import ci.kalyno.app.ui.dojo.explanationSteps
 import ci.kalyno.app.ui.theme.*
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.delay
-
-// Temps entre l'affichage du message et le retournement de la carte
-private const val FLIP_DELAY_MS = 1100L
-private const val FLIP_DURATION_MS = 600
 
 @Composable
 fun ChallengeScreen(
@@ -172,8 +187,8 @@ private fun MessageState(
 private fun ChallengeContent(challenge: Challenge, onExit: () -> Unit) {
     val total = challenge.questions.size
     var index by rememberSaveable { mutableStateOf(0) }
-    var score by rememberSaveable { mutableStateOf(0) }
-    var selected by rememberSaveable { mutableStateOf<Int?>(null) }
+    // Calculatrice du Dojo, conservée pendant tout le défi
+    val calculator = remember { CalculatorModel() }
 
     if (index >= total) {
         // Plus d'écran « Défi terminé » : on enregistre la série et on passe à la suite
@@ -183,52 +198,89 @@ private fun ChallengeContent(challenge: Challenge, onExit: () -> Unit) {
             onExit()
         }
     } else {
-        QuestionContent(
-            question = challenge.questions[index],
-            index = index,
-            total = total,
-            selected = selected,
-            onSelect = { choice ->
-                if (selected == null) {
-                    selected = choice
-                    if (choice == challenge.questions[index].correctIndex) score += 1
-                }
-            },
-            onNext = {
-                selected = null
-                index += 1
-            },
-            onExit = onExit
-        )
+        key(index) {
+            QuestionStep(
+                title = challenge.title,
+                question = challenge.questions[index],
+                index = index,
+                total = total,
+                calculator = calculator,
+                onNext = { index += 1 },
+                onExit = onExit
+            )
+        }
     }
 }
 
+/** 0 = pas encore validé, 1 = juste, 2 = incomplet (QCM), 3 = faux. */
+private const val OUTCOME_NONE = 0
+private const val OUTCOME_CORRECT = 1
+private const val OUTCOME_PARTIAL = 2
+private const val OUTCOME_WRONG = 3
+
 @Composable
-private fun QuestionContent(
+private fun QuestionStep(
+    title: String,
     question: Question,
     index: Int,
     total: Int,
-    selected: Int?,
-    onSelect: (Int) -> Unit,
+    calculator: CalculatorModel,
     onNext: () -> Unit,
     onExit: () -> Unit
 ) {
-    val answered = selected != null
-    val wasCorrect = selected == question.correctIndex
-    val feedback = remember(index, selected) {
-        selected?.let { if (it == question.correctIndex) Feedback.success() else Feedback.retry() }
+    val haptic = rememberHaptic()
+    val shownAt = remember { SystemClock.elapsedRealtime() }
+
+    var selectedCsv by rememberSaveable { mutableStateOf("") }
+    var typed by rememberSaveable { mutableStateOf("") }
+    var hintShown by rememberSaveable { mutableStateOf(false) }
+    var calculatorUsed by rememberSaveable { mutableStateOf(false) }
+    var calculatorOpen by remember { mutableStateOf(false) }
+    var outcome by rememberSaveable { mutableStateOf(OUTCOME_NONE) }
+    var message by rememberSaveable { mutableStateOf("") }
+
+    val selected = remember(selectedCsv) { parseIndexList(selectedCsv).toSet() }
+    val locked = outcome != OUTCOME_NONE
+    val isFree = question.kind == ExerciseKind.FREE_TEXT
+    val canSubmit = if (isFree) typed.isNotBlank() else selected.isNotEmpty()
+    val calculatorSuggested = remember(question.id) {
+        CalculatorPolicy.suggested(listOf(question.prompt) + question.choices)
     }
 
-    // 1) le message apparaît, 2) la carte se retourne, 3) le bouton Suivant apparaît
-    var flipped by remember(index) { mutableStateOf(false) }
-    LaunchedEffect(index, selected) {
-        if (selected != null) {
-            delay(FLIP_DELAY_MS)
-            flipped = true
+    fun toggle(choice: Int) {
+        if (locked) return
+        selectedCsv = if (question.kind == ExerciseKind.MULTIPLE_CHOICE) {
+            val next = selected.toMutableSet()
+            if (!next.add(choice)) next.remove(choice)
+            next.sorted().joinToString(",")
+        } else {
+            choice.toString()
         }
     }
 
-    val done = index + if (answered) 1 else 0
+    // Correction objective du Dojo : jamais avant la validation
+    fun submit() {
+        if (locked || !canSubmit) return
+        val context = AnswerContext(
+            elapsedMs = SystemClock.elapsedRealtime() - shownAt,
+            questionLength = question.prompt.length + question.choices.sumOf { it.length },
+            hintUsed = hintShown,
+            calculatorUsed = calculatorUsed
+        )
+        val verdict = if (isFree) {
+            AnswerGrader.gradeText(typed, question.acceptedAnswers, context)
+        } else {
+            AnswerGrader.gradeChoice(selected, question.correctIndices, context)
+        }
+        outcome = when {
+            verdict.correct -> OUTCOME_CORRECT
+            verdict.partial -> OUTCOME_PARTIAL
+            else -> OUTCOME_WRONG
+        }
+        message = if (verdict.correct) DojoMessages.congrats() else DojoMessages.encourage()
+    }
+
+    val done = index + if (locked) 1 else 0
     val progress by animateFloatAsState(
         targetValue = done.toFloat() / maxOf(total, 1),
         animationSpec = tween(400),
@@ -244,7 +296,7 @@ private fun QuestionContent(
                     .clickable(onClick = onExit),
                 contentAlignment = Alignment.Center
             ) {
-                Text("✕", color = KalynoMuted, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                KalynoSvgIcon(name = "x", size = 22.dp, tint = KalynoMuted)
             }
             Spacer(Modifier.width(8.dp))
             FlameProgressBar(progress = progress, modifier = Modifier.weight(1f))
@@ -257,59 +309,347 @@ private fun QuestionContent(
                 .weight(1f)
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
-                .padding(top = 20.dp)
+                .padding(top = 16.dp, bottom = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            key(index) {
-                FlipCard(flipped = flipped, question = question, index = index)
-            }
+            ChallengeQuestionCard(
+                title = title,
+                question = question,
+                outcome = outcome,
+                selected = selected,
+                typed = typed,
+                hintShown = hintShown,
+                calculatorSuggested = calculatorSuggested,
+                onToggle = { haptic(); toggle(it) },
+                onTyped = { if (!locked) typed = it.take(MAX_INPUT) },
+                onSubmit = ::submit,
+                onShowHint = { hintShown = true },
+                onCalculator = {
+                    haptic()
+                    calculatorUsed = true
+                    calculatorOpen = true
+                }
+            )
 
-            Spacer(Modifier.height(20.dp))
-
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                question.choices.forEachIndexed { i, text ->
-                    OptionRow(
-                        letter = ('A' + i).toString(),
-                        text = text,
-                        isCorrect = i == question.correctIndex,
-                        isSelected = selected == i,
-                        answered = answered,
-                        onClick = { onSelect(i) }
-                    )
+            if (locked) {
+                AnimatedVisibility(
+                    visible = true,
+                    enter = fadeIn(tween(350)) + expandVertically(tween(350))
+                ) {
+                    ChallengeCorrection(question = question, outcome = outcome, message = message)
                 }
             }
-            Spacer(Modifier.height(16.dp))
         }
 
-        AnimatedVisibility(visible = feedback != null) {
-            Column {
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    color = if (wasCorrect) KalynoCorrectSoft else KalynoRetrySoft
+        if (!locked) {
+            KalynoPrimaryButton(label = "VALIDER MA RÉPONSE", onClick = ::submit, enabled = canSubmit)
+        } else {
+            KalynoPrimaryButton(
+                label = if (index == total - 1) "TERMINER" else "CONTINUER",
+                onClick = onNext
+            )
+        }
+    }
+
+    if (calculatorOpen) {
+        ScientificCalculatorDialog(
+            model = calculator,
+            canUseResult = isFree && !locked,
+            onUseResult = {
+                typed = it.take(MAX_INPUT)
+                calculatorOpen = false
+            },
+            onDismiss = { calculatorOpen = false }
+        )
+    }
+}
+
+private const val MAX_INPUT = 200
+
+@Composable
+private fun ChallengeQuestionCard(
+    title: String,
+    question: Question,
+    outcome: Int,
+    selected: Set<Int>,
+    typed: String,
+    hintShown: Boolean,
+    calculatorSuggested: Boolean,
+    onToggle: (Int) -> Unit,
+    onTyped: (String) -> Unit,
+    onSubmit: () -> Unit,
+    onShowHint: () -> Unit,
+    onCalculator: () -> Unit
+) {
+    val locked = outcome != OUTCOME_NONE
+
+    val cardBackground by animateColorAsState(
+        targetValue = when (outcome) {
+            OUTCOME_NONE -> Color.White
+            OUTCOME_CORRECT -> KalynoCorrectSoft
+            else -> KalynoDangerSoft
+        },
+        label = "challengeCardBackground"
+    )
+    val cardBorder by animateColorAsState(
+        targetValue = when (outcome) {
+            OUTCOME_NONE -> KalynoOutline
+            OUTCOME_CORRECT -> KalynoCorrect
+            else -> KalynoDangerBorder
+        },
+        label = "challengeCardBorder"
+    )
+
+    KalynoCard(
+        modifier = Modifier.fillMaxWidth(),
+        contentPadding = 22.dp,
+        background = cardBackground,
+        borderColor = cardBorder
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            KalynoPill(
+                text = when (question.kind) {
+                    ExerciseKind.SINGLE_CHOICE -> "UNE BONNE RÉPONSE"
+                    ExerciseKind.MULTIPLE_CHOICE -> "PLUSIEURS RÉPONSES"
+                    ExerciseKind.FREE_TEXT -> "SAISIE LIBRE"
+                }
+            )
+            Spacer(Modifier.weight(1f))
+            if (calculatorSuggested) {
+                Text(
+                    text = "Calculatrice",
+                    color = KalynoAmberDeep,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(KalynoAmberSoft)
+                        .clickable(onClick = onCalculator)
+                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                )
+            }
+        }
+
+        if (title.isNotBlank()) {
+            Spacer(Modifier.height(8.dp))
+            Text(text = title, color = KalynoMuted, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+        }
+
+        Spacer(Modifier.height(16.dp))
+        Text(
+            text = question.prompt,
+            color = KalynoText,
+            fontSize = 21.sp,
+            lineHeight = 30.sp,
+            fontWeight = FontWeight.ExtraBold
+        )
+
+        // Indice : seulement à la demande
+        val hint = question.hint
+        if (!hint.isNullOrBlank()) {
+            Spacer(Modifier.height(12.dp))
+            if (hintShown) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(KalynoAmberSoft)
+                        .padding(12.dp),
+                    verticalAlignment = Alignment.Top
                 ) {
+                    KalynoSvgIcon(name = "lightbulb", size = 18.dp, tint = KalynoAmberDeep)
+                    Spacer(Modifier.width(8.dp))
+                    Text(text = hint, color = KalynoAmberDeep, fontSize = 14.sp, lineHeight = 20.sp)
+                }
+            } else if (!locked) {
+                Row(
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(KalynoAmberSoft)
+                        .clickable(onClick = onShowHint)
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    KalynoSvgIcon(name = "lightbulb", size = 16.dp, tint = KalynoAmberDeep)
+                    Spacer(Modifier.width(6.dp))
                     Text(
-                        text = (if (wasCorrect) "Correct : " else "À revoir : ") + (feedback ?: ""),
-                        modifier = Modifier.padding(16.dp),
-                        color = if (wasCorrect) KalynoCorrectText else KalynoRetryText,
-                        fontSize = 17.sp,
-                        fontWeight = FontWeight.Bold
+                        text = "Voir un indice",
+                        color = KalynoAmberDeep,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.ExtraBold
                     )
                 }
-                AnimatedVisibility(visible = flipped) {
-                    Column {
-                        Spacer(Modifier.height(12.dp))
-                        Button(
-                            onClick = onNext,
-                            modifier = Modifier.fillMaxWidth().height(56.dp),
-                            shape = RoundedCornerShape(16.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = KalynoBlue)
-                        ) {
-                            Text(
-                                text = if (index == total - 1) "Terminer" else "Suivant",
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.Bold
-                            )
+            }
+        }
+
+        Spacer(Modifier.height(18.dp))
+
+        if (question.kind == ExerciseKind.FREE_TEXT) {
+            OutlinedTextField(
+                value = typed,
+                onValueChange = onTyped,
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !locked,
+                singleLine = true,
+                shape = RoundedCornerShape(16.dp),
+                textStyle = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.Bold),
+                placeholder = { Text("Écris ta réponse ici...", color = KalynoMuted) },
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = { onSubmit() }),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedContainerColor = Color.White,
+                    unfocusedContainerColor = Color.White,
+                    disabledContainerColor = Color.White,
+                    focusedBorderColor = KalynoBlue,
+                    unfocusedBorderColor = KalynoOutline,
+                    disabledBorderColor = if (outcome == OUTCOME_CORRECT) KalynoCorrect else KalynoDangerBorder,
+                    cursorColor = KalynoBlue,
+                    focusedTextColor = KalynoText,
+                    unfocusedTextColor = KalynoText,
+                    disabledTextColor = KalynoText
+                )
+            )
+        } else {
+            val multiple = question.kind == ExerciseKind.MULTIPLE_CHOICE
+            if (multiple && !locked) {
+                Text(text = "Coche toutes les bonnes réponses.", color = KalynoMuted, fontSize = 13.sp)
+                Spacer(Modifier.height(10.dp))
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                question.choices.forEachIndexed { i, choice ->
+                    ChoiceRow(
+                        letter = ('A'.code + i).toChar().toString(),
+                        text = choice,
+                        multiple = multiple,
+                        selected = i in selected,
+                        locked = locked,
+                        // La bonne réponse n'est révélée qu'après la validation
+                        isCorrect = locked && i in question.correctIndices,
+                        onClick = { onToggle(i) }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ChallengeCorrection(question: Question, outcome: Int, message: String) {
+    val accent = when (outcome) {
+        OUTCOME_CORRECT -> KalynoCorrectText
+        OUTCOME_PARTIAL -> KalynoAmberDeep
+        else -> KalynoDanger
+    }
+    val tint = when (outcome) {
+        OUTCOME_CORRECT -> KalynoCorrectSoft
+        OUTCOME_PARTIAL -> KalynoAmberSoft
+        else -> KalynoDangerSoft
+    }
+    val isFree = question.kind == ExerciseKind.FREE_TEXT
+
+    KalynoCard(modifier = Modifier.fillMaxWidth(), contentPadding = 20.dp) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(14.dp))
+                .background(tint)
+                .padding(14.dp)
+        ) {
+            Text(
+                text = message,
+                color = accent,
+                fontSize = 15.sp,
+                lineHeight = 21.sp,
+                fontWeight = FontWeight.Bold
+            )
+            if (outcome == OUTCOME_PARTIAL) {
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = "Tu n'as pas coché toutes les bonnes réponses.",
+                    color = KalynoText,
+                    fontSize = 13.sp
+                )
+            }
+        }
+
+        // La bonne réponse : affichée en cas d'erreur, et toujours pour la saisie libre
+        if (outcome != OUTCOME_CORRECT || isFree) {
+            val answer = if (isFree) {
+                question.acceptedAnswers.firstOrNull()
+            } else {
+                answerText(question.choices, question.correctIndices.sorted(), null)
+            }
+            if (!answer.isNullOrBlank()) {
+                Spacer(Modifier.height(16.dp))
+                Text(
+                    text = "BONNE RÉPONSE",
+                    color = KalynoCorrectText,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    letterSpacing = 1.sp
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = answer,
+                    color = KalynoCorrect,
+                    fontSize = 22.sp,
+                    lineHeight = 30.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(KalynoCorrectSoft)
+                        .padding(16.dp)
+                )
+                if (isFree && question.acceptedAnswers.size > 1) {
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        text = "Aussi accepté : " + question.acceptedAnswers.drop(1).joinToString(" · "),
+                        color = KalynoMuted,
+                        fontSize = 12.sp
+                    )
+                }
+            }
+        }
+
+        val steps = explanationSteps(question.explanation)
+        if (steps.isNotEmpty()) {
+            Spacer(Modifier.height(18.dp))
+            Text(
+                text = "EXPLICATION",
+                color = KalynoBlue,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.ExtraBold,
+                letterSpacing = 1.sp
+            )
+            Spacer(Modifier.height(10.dp))
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                steps.forEachIndexed { i, step ->
+                    Row(verticalAlignment = Alignment.Top) {
+                        if (steps.size > 1) {
+                            Box(
+                                modifier = Modifier
+                                    .size(24.dp)
+                                    .clip(CircleShape)
+                                    .background(KalynoBlueSoft),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "${i + 1}",
+                                    color = KalynoBlue,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.ExtraBold
+                                )
+                            }
+                            Spacer(Modifier.width(10.dp))
                         }
+                        Text(
+                            text = step,
+                            color = KalynoText,
+                            fontSize = 15.sp,
+                            lineHeight = 22.sp,
+                            modifier = Modifier.weight(1f)
+                        )
                     }
                 }
             }
@@ -360,150 +700,6 @@ private fun FlameProgressBar(progress: Float, modifier: Modifier = Modifier) {
             contentAlignment = Alignment.Center
         ) {
             KalynoSvgIcon(name = "flame", size = 22.dp)
-        }
-    }
-}
-
-@Composable
-private fun FlipCard(flipped: Boolean, question: Question, index: Int) {
-    val rotation by animateFloatAsState(
-        targetValue = if (flipped) 180f else 0f,
-        animationSpec = tween(FLIP_DURATION_MS),
-        label = "flip"
-    )
-
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .graphicsLayer {
-                rotationY = rotation
-                cameraDistance = 14f * density
-            }
-    ) {
-        if (rotation <= 90f) {
-            CardFace(
-                label = "QUESTION ${index + 1}",
-                labelColor = KalynoBlue,
-                background = Color.White,
-                stroke = KalynoOutline
-            ) {
-                Text(
-                    text = question.prompt,
-                    color = KalynoText,
-                    fontSize = 22.sp,
-                    lineHeight = 30.sp,
-                    fontWeight = FontWeight.ExtraBold
-                )
-            }
-        } else {
-            // Verso : on le re-retourne pour qu'il ne soit pas affiché en miroir
-            Box(modifier = Modifier.graphicsLayer { rotationY = 180f }) {
-                CardFace(
-                    label = "BONNE RÉPONSE",
-                    labelColor = KalynoCorrectText,
-                    background = KalynoCorrectSoft,
-                    stroke = KalynoCorrect
-                ) {
-                    Text(
-                        text = question.choices[question.correctIndex],
-                        color = KalynoCorrectText,
-                        fontSize = 24.sp,
-                        lineHeight = 32.sp,
-                        fontWeight = FontWeight.ExtraBold
-                    )
-                    question.explanation?.let {
-                        Spacer(Modifier.height(10.dp))
-                        Text(text = it, color = KalynoText, fontSize = 16.sp, lineHeight = 23.sp)
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun CardFace(
-    label: String,
-    labelColor: Color,
-    background: Color,
-    stroke: Color,
-    content: @Composable ColumnScope.() -> Unit
-) {
-    Surface(
-        modifier = Modifier.fillMaxWidth().heightIn(min = 170.dp),
-        shape = RoundedCornerShape(24.dp),
-        color = background,
-        border = BorderStroke(2.dp, stroke)
-    ) {
-        Column(modifier = Modifier.padding(24.dp)) {
-            Text(
-                text = label,
-                color = labelColor,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.ExtraBold,
-                letterSpacing = 1.sp
-            )
-            Spacer(Modifier.height(10.dp))
-            content()
-        }
-    }
-}
-
-@Composable
-private fun OptionRow(
-    letter: String,
-    text: String,
-    isCorrect: Boolean,
-    isSelected: Boolean,
-    answered: Boolean,
-    onClick: () -> Unit
-) {
-    val shape = RoundedCornerShape(18.dp)
-    val showCorrect = answered && isCorrect
-    val showWrong = answered && isSelected && !isCorrect
-    val background = when {
-        showCorrect -> KalynoCorrectSoft
-        showWrong -> KalynoRetrySoft
-        else -> Color.White
-    }
-    val stroke = when {
-        showCorrect -> KalynoCorrect
-        showWrong -> KalynoRetry
-        else -> KalynoOutline
-    }
-    val badge = when {
-        showCorrect -> KalynoCorrect
-        showWrong -> KalynoRetry
-        else -> KalynoBlueSoft
-    }
-    val badgeText = if (showCorrect || showWrong) Color.White else KalynoBlue
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .alpha(if (answered && !showCorrect && !showWrong) 0.55f else 1f)
-            .clip(shape)
-            .background(background)
-            .border(2.dp, stroke, shape)
-            .clickable(enabled = !answered, onClick = onClick)
-            .padding(14.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(
-            modifier = Modifier.size(36.dp).clip(CircleShape).background(badge),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(letter, color = badgeText, fontWeight = FontWeight.ExtraBold, fontSize = 16.sp)
-        }
-        Text(
-            text = text,
-            modifier = Modifier.weight(1f).padding(horizontal = 12.dp),
-            color = KalynoText,
-            fontSize = 17.sp,
-            fontWeight = FontWeight.Medium
-        )
-        if (showCorrect) {
-            Text("✓", color = KalynoCorrect, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold)
         }
     }
 }
