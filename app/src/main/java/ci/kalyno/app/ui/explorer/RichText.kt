@@ -401,6 +401,10 @@ fun RichText(
     fontWeight: FontWeight = FontWeight.Normal,
     fontStyle: FontStyle = FontStyle.Normal
 ) {
+    if (KATEX_ENABLED && html.contains('$') && katexAvailable()) {
+        KatexText(html, color, fontSize, lineHeight, fontWeight, fontStyle)
+        return
+    }
     if (!html.contains('<') && !html.contains('$')) {
         Text(text = html, color = color, fontSize = fontSize, lineHeight = lineHeight, fontWeight = fontWeight, fontStyle = fontStyle)
         return

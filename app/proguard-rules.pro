@@ -6,3 +6,8 @@
 
 # Garde les numeros de ligne pour lire les rapports de plantage
 -keepattributes SourceFile,LineNumberTable
+
+# Pont JavaScript du moteur KaTeX (hauteur des formules)
+-keepclassmembers class ci.kalyno.app.ui.explorer.HeightBridge {
+    @android.webkit.JavascriptInterface <methods>;
+}

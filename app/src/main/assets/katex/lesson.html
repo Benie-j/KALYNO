@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' file:; style-src 'unsafe-inline' file:; font-src file:">
+<link rel="stylesheet" href="katex.min.css">
+<style>
+html,body{margin:0;padding:0;background:transparent;overflow:hidden}
+body{font-family:Roboto,"Noto Sans",sans-serif;overflow-wrap:anywhere;-webkit-text-size-adjust:100%}
+#c>*{margin:0 0 8px}
+#c>*:last-child{margin-bottom:0}
+p,ul,ol,blockquote,h1,h2,h3{margin:0 0 8px}
+h1,h2,h3{font-size:1.2em;font-weight:800}
+blockquote{border-left:3px solid #0F766E;padding-left:10px}
+ul,ol{padding-left:22px}
+sup,sub{font-size:.75em}
+b,strong{font-weight:700}
+.katex{font-size:1.08em;text-indent:0}
+.katex-display{margin:.5em 0;overflow:visible}
+.frac{display:inline-flex;flex-direction:column;vertical-align:middle;text-align:center}
+.frac .fn{border-bottom:1px solid currentColor;padding:0 .2em}
+.frac .fd{padding:0 .2em}
+/*__CSS__*/
+</style>
+<script src="katex.min.js"></script>
+</head>
+<body>
+<div id="c"></div>
+<template id="src"><!--__CONTENT__--></template>
+<script>
+(function () {
+  var root = document.getElementById('c');
+  function plain(h) {
+    var t = document.createElement('textarea');
+    t.innerHTML = h.replace(/<br\s*\/?>/gi, ' ').replace(/<[^>]*>/g, '');
+    return t.value;
+  }
+  var src = document.getElementById('src').innerHTML;
+  var doc = new DOMParser().parseFromString(src, 'text/html');
+  doc.querySelectorAll('script,style,iframe,object,embed,link,meta,base,form,svg,math,img,video,audio').forEach(function (n) { n.remove(); });
+  doc.body.querySelectorAll('*').forEach(function (n) {
+    Array.prototype.slice.call(n.attributes).forEach(function (a) {
+      var k = a.name.toLowerCase();
+      if (k.indexOf('on') === 0 || k === 'href' || k === 'src' || k === 'srcdoc' || k === 'action') n.removeAttribute(a.name);
+    });
+  });
+  var html = doc.body.innerHTML.replace(/\u25A2/g, '');
+  html = html.replace(/\$\$([\s\S]+?)\$\$|\$([^$]+?)\$/g, function (m, block, inline) {
+    var tex = plain(block !== undefined ? block : inline).replace(/\u00A0/g, ' ');
+    try {
+      return katex.renderToString(tex, { displayMode: block !== undefined, throwOnError: false, errorColor: '#B91C1C' });
+    } catch (e) {
+      return m;
+    }
+  });
+  root.innerHTML = html;
+
+  function fit() {
+    var avail = root.clientWidth;
+    root.querySelectorAll('.katex').forEach(function (k) {
+      k.style.zoom = '';
+      var w = Math.max(k.scrollWidth, k.getBoundingClientRect().width);
+      if (w > avail + 0.5) k.style.zoom = String(avail / w);
+    });
+  }
+  var last = -1;
+  function report() {
+    fit();
+    var h = Math.ceil(root.getBoundingClientRect().height);
+    if (h !== last) {
+      last = h;
+      if (window.K && window.K.h) window.K.h(h);
+    }
+  }
+  report();
+  if (window.ResizeObserver) new ResizeObserver(report).observe(root);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(report);
+  window.addEventListener('load', report);
+})();
+</script>
+</body>
+</html>
