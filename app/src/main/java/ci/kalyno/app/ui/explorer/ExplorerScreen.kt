@@ -42,7 +42,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -111,7 +111,7 @@ fun ExplorerScreen(
     onStartChapter: (title: String, items: List<ReviewItem>) -> Unit,
     viewModel: ExplorerViewModel = viewModel(key = "explorer-$levelId")
 ) {
-    val ui by viewModel.state.collectAsState()
+    val ui by viewModel.state.collectAsStateWithLifecycle()
 
     var showLeaderboard by rememberSaveable { mutableStateOf(false) }
     // Hissé ici pour retrouver la même position de scroll en revenant de la liste des leçons

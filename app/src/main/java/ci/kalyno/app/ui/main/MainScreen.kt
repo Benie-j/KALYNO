@@ -15,6 +15,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -58,7 +59,7 @@ fun MainScreen(
     onLogoutClick: () -> Unit = {}
 ) {
     val viewModel: DashboardViewModel = viewModel(key = "dashboard-$levelId")
-    val state by viewModel.state.collectAsState()
+    val state by viewModel.state.collectAsStateWithLifecycle()
     LaunchedEffect(levelId, nickname) { viewModel.load(levelId, nickname) }
 
     var tab by rememberSaveable { mutableStateOf(0) }

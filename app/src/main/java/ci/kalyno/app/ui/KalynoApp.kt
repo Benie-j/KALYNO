@@ -2,6 +2,7 @@ package ci.kalyno.app.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.*
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -30,7 +31,7 @@ fun KalynoApp() {
     LaunchedEffect(Unit) { runCatching { CatalogRepository.get(context).warmUp() } }
 
     val authViewModel: AuthViewModel = viewModel()
-    val auth by authViewModel.state.collectAsState()
+    val auth by authViewModel.state.collectAsStateWithLifecycle()
 
     var level by remember { mutableStateOf(prefs.level) }
     var nickname by remember { mutableStateOf(prefs.nickname) }

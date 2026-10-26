@@ -35,7 +35,7 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -93,7 +93,7 @@ fun DojoSessionScreen(
     val vm: DojoViewModel = viewModel(key = "dojo-${session.id}")
     remember(session.id) { vm.start(session, levelId) }
 
-    val state by vm.state.collectAsState()
+    val state by vm.state.collectAsStateWithLifecycle()
     val haptic = rememberHaptic()
     val context = LocalContext.current
     val dayStreak = remember { StreakStore(context.applicationContext).current() }
