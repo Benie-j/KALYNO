@@ -55,6 +55,7 @@ import ci.kalyno.app.data.dojo.ExerciseKind
 import ci.kalyno.app.data.dojo.answerText
 import ci.kalyno.app.data.dojo.parseIndexList
 import ci.kalyno.app.ui.components.KalynoCard
+import ci.kalyno.app.ui.components.MathText
 import ci.kalyno.app.ui.components.KalynoPill
 import ci.kalyno.app.ui.components.KalynoPrimaryButton
 import ci.kalyno.app.ui.components.rememberHaptic
@@ -436,7 +437,7 @@ private fun ChallengeQuestionCard(
         }
 
         Spacer(Modifier.height(16.dp))
-        Text(
+        MathText(
             text = question.prompt,
             color = KalynoText,
             fontSize = 21.sp,
@@ -459,7 +460,7 @@ private fun ChallengeQuestionCard(
                 ) {
                     KalynoSvgIcon(name = "lightbulb", size = 18.dp, tint = KalynoAmberDeep)
                     Spacer(Modifier.width(8.dp))
-                    Text(text = hint, color = KalynoAmberDeep, fontSize = 14.sp, lineHeight = 20.sp)
+                    MathText(text = hint, color = KalynoAmberDeep, fontSize = 14.sp, lineHeight = 20.sp, modifier = Modifier.weight(1f))
                 }
             } else if (!locked) {
                 Row(
@@ -589,7 +590,7 @@ private fun ChallengeCorrection(question: Question, outcome: Int, message: Strin
                     letterSpacing = 1.sp
                 )
                 Spacer(Modifier.height(8.dp))
-                Text(
+                MathText(
                     text = answer,
                     color = KalynoCorrect,
                     fontSize = 22.sp,
@@ -643,7 +644,7 @@ private fun ChallengeCorrection(question: Question, outcome: Int, message: Strin
                             }
                             Spacer(Modifier.width(10.dp))
                         }
-                        Text(
+                        MathText(
                             text = step,
                             color = KalynoText,
                             fontSize = 15.sp,

@@ -59,6 +59,7 @@ import ci.kalyno.app.data.StreakStore
 import ci.kalyno.app.data.dashboard.ReviewSession
 import ci.kalyno.app.data.dojo.ExerciseKind
 import ci.kalyno.app.ui.components.KalynoCard
+import ci.kalyno.app.ui.components.MathText
 import ci.kalyno.app.ui.components.KalynoPill
 import ci.kalyno.app.ui.components.KalynoPrimaryButton
 import ci.kalyno.app.ui.components.StreakBadge
@@ -353,7 +354,7 @@ private fun QuestionCard(state: DojoUiState, exercise: DojoExercise, vm: DojoVie
         }
 
         Spacer(Modifier.height(16.dp))
-        Text(
+        MathText(
             text = item.front,
             color = KalynoText,
             fontSize = 21.sp,
@@ -366,8 +367,8 @@ private fun QuestionCard(state: DojoUiState, exercise: DojoExercise, vm: DojoVie
         if (!hint.isNullOrBlank()) {
             Spacer(Modifier.height(12.dp))
             if (state.hintShown) {
-                Text(
-                    text = "💡 $hint",
+                MathText(
+                    text = hint,
                     color = KalynoAmberDeep,
                     fontSize = 14.sp,
                     lineHeight = 20.sp,
@@ -516,7 +517,7 @@ internal fun ChoiceRow(
             )
         }
         Spacer(Modifier.width(12.dp))
-        Text(
+        MathText(
             text = text,
             color = KalynoText,
             fontSize = 16.sp,
@@ -595,7 +596,7 @@ private fun CorrectionCard(exercise: DojoExercise, result: DojoResult) {
                 letterSpacing = 1.sp
             )
             Spacer(Modifier.height(8.dp))
-            Text(
+            MathText(
                 text = exercise.acceptedAnswers.firstOrNull() ?: item.answer,
                 color = KalynoCorrect,
                 fontSize = 22.sp,
@@ -648,7 +649,7 @@ private fun CorrectionCard(exercise: DojoExercise, result: DojoResult) {
                             }
                             Spacer(Modifier.width(10.dp))
                         }
-                        Text(
+                        MathText(
                             text = step,
                             color = KalynoText,
                             fontSize = 15.sp,
