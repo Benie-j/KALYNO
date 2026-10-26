@@ -3,6 +3,8 @@ package ci.kalyno.app.ui.explorer
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -30,6 +32,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.Placeholder
 import androidx.compose.ui.text.PlaceholderVerticalAlign
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.BaselineShift
@@ -73,6 +76,30 @@ private fun decode(s: String): String = s
 
 private fun plain(s: String): String = decode(TAG_RE.replace(s, "")).trim()
 
+// Formule coupée par des balises (couleur, gras...) : on les retire dans le $...$, comme l'aperçu admin.
+private val MATH_SPAN_RE = Regex("""\$\$(.{1,800}?)\$\$|\$([^$]{1,800}?)\$""", RegexOption.DOT_MATCHES_ALL)
+private val BR_RE = Regex("""<br\s*/?>""", RegexOption.IGNORE_CASE)
+
+private fun unwrapMath(html: String): String {
+    if (!html.contains('$')) return html
+    return MATH_SPAN_RE.replace(html) { m ->
+        val display = m.groupValues[1].isNotEmpty()
+        val inner = if (display) m.groupValues[1] else m.groupValues[2]
+        if (!inner.contains('<')) {
+            m.value
+        } else {
+            val flat = TAG_RE.replace(BR_RE.replace(inner, " "), "")
+            if (display) "\$\$" + flat + "\$\$" else "\$" + flat + "\$"
+        }
+    }
+}
+
+private fun normalizeTex(tex: String): String = tex
+    .replace('\u00A0', ' ').replace("\u200B", "")
+    .replace('\u2212', '-')
+    .replace("\u25A2", "")
+    .trim()
+
 private fun hexColor(h: String): Color? {
     val full = when (h.length) {
         3 -> h.map { "$it$it" }.joinToString("")
@@ -88,7 +115,7 @@ private fun hexColor(h: String): Color? {
 
 private fun parseRich(html: String): List<RBlock> {
     val fracs = ArrayList<RFrac>()
-    val src = FRAC_RE.replace(html) { m ->
+    val src = FRAC_RE.replace(unwrapMath(html)) { m ->
         fracs.add(RFrac(plain(m.groupValues[1]), plain(m.groupValues[2])))
         "$MARK_OPEN${fracs.size - 1}$MARK_CLOSE"
     }
@@ -147,7 +174,7 @@ private fun parseRich(html: String): List<RBlock> {
     }
 
     fun appendMath(tex: String, display: Boolean) {
-        val clean = tex.trim()
+        val clean = normalizeTex(tex)
         if (clean.isEmpty()) return
         if (display) {
             flush()
@@ -292,11 +319,12 @@ private fun buildInline(
         }
     }
 
-    val sizePx = with(density) { fontSize.toPx() }
+    val sizePx = with(density) { fontSize.toPx() } * (if (block.kind == RKind.DISPLAY) 1.15f else 1f)
     for ((id, tex) in block.maths) {
         val drawable = try {
             JLatexMathDrawable.builder(tex).textSize(sizePx).padding(2).build()
         } catch (e: Throwable) {
+            android.util.Log.w("KalynoMath", "Formule non rendue : $tex", e)
             null
         }
         val w = drawable?.intrinsicWidth ?: 0
@@ -325,7 +353,7 @@ private fun buildInline(
                     placeholderVerticalAlign = PlaceholderVerticalAlign.Center
                 )
             ) {
-                Text(tex, color = color, fontSize = fontSize, maxLines = 1, softWrap = false)
+                Text(tex, color = color, fontSize = fontSize, fontFamily = FontFamily.Monospace, maxLines = 1, softWrap = false)
             }
         }
     }
@@ -376,7 +404,9 @@ private fun RichBlockView(block: RBlock, color: Color, fontSize: TextUnit, lineH
             Box(Modifier.padding(start = 10.dp)) { body() }
         }
         RKind.LI -> Box(Modifier.padding(start = 8.dp)) { body() }
-        RKind.DISPLAY -> Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { body() }
+        RKind.DISPLAY -> Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+            Box(Modifier.horizontalScroll(rememberScrollState())) { body() }
+        }
         RKind.BOX -> {
             val shape = RoundedCornerShape(10.dp)
             Column(

@@ -230,9 +230,9 @@ fun LessonBlockView(block: LessonBlock, modifier: Modifier = Modifier) {
         LessonBlockType.PITFALL -> AccentBlock(
             block = block,
             label = "⚠️ PIÈGE À ÉVITER",
-            labelColor = KalynoAmberDeep,
-            accent = KalynoYellow,
-            container = KalynoAmberSoft,
+            labelColor = ci.kalyno.app.ui.theme.KalynoDanger,
+            accent = ci.kalyno.app.ui.theme.KalynoDanger,
+            container = ci.kalyno.app.ui.theme.KalynoDangerSoft,
             modifier = modifier
         )
     }
