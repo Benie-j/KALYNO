@@ -11,16 +11,20 @@ import android.graphics.Paint
 import android.graphics.PorterDuff
 import android.graphics.PorterDuffColorFilter
 import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
+import ci.kalyno.app.ui.theme.KalynoBlue
 import com.caverock.androidsvg.SVG
 
 @Composable
 fun KalynoSvgIcon(
     name: String,
     size: Dp = 24.dp,
-    tint: Color = Color(0xFF2457C5)
+    tint: Color = KalynoBlue,
+    contentDescription: String? = null
 ) {
     val context = LocalContext.current
     val svg = remember(name, context) {
@@ -28,8 +32,14 @@ fun KalynoSvgIcon(
             SVG.getFromAsset(context.assets, "icons/$name.svg")
         }.getOrNull()
     }
+    val label = contentDescription
+    val semanticsModifier = if (label != null) {
+        Modifier.semantics { this.contentDescription = label }
+    } else {
+        Modifier
+    }
 
-    Canvas(Modifier.size(size)) {
+    Canvas(Modifier.size(size).then(semanticsModifier)) {
         val document = svg ?: return@Canvas
         val canvas = drawContext.canvas.nativeCanvas
         val paint = Paint().apply {

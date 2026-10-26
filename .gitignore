@@ -1,0 +1,7 @@
+.git-local-backups/
+*.bak
+.gradle/
+build/
+local.properties
+*.jks
+*.keystore

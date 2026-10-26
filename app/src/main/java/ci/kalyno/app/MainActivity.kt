@@ -59,7 +59,6 @@ class MainActivity : ComponentActivity() {
         installSplashScreen().apply {
             setKeepOnScreenCondition { !splashDrawn && SystemClock.uptimeMillis() - splashStart < 400L }
             setOnExitAnimationListener { it.remove() }
-            setKeepOnScreenCondition { !splashDrawn && SystemClock.uptimeMillis() - splashStart < 400L }
         }
 
         super.onCreate(savedInstanceState)
