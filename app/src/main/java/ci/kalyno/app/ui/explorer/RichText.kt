@@ -94,12 +94,7 @@ private fun unwrapMath(html: String): String {
     }
 }
 
-private val CASES_RE = Regex("""\\begin\{cases\}(.*?)\\end\{cases\}""", RegexOption.DOT_MATCHES_ALL)
-
-// JLaTeXMath ne connaît pas toujours cases : on l'écrit avec array, rendu identique.
-private fun normalizeTex(tex: String): String = CASES_RE.replace(tex) { m ->
-    "\\left\\{\\begin{array}{ll}" + m.groupValues[1] + "\\end{array}\\right."
-}
+private fun normalizeTex(tex: String): String = tex
     .replace('\u00A0', ' ').replace("\u200B", "")
     .replace('\u2212', '-')
     .replace("\u25A2", "")
@@ -294,6 +289,38 @@ private fun parseRich(html: String): List<RBlock> {
     return blocks
 }
 
+private val CASES_RE = Regex("""\\begin\{cases\}(.*?)\\end\{cases\}""", RegexOption.DOT_MATCHES_ALL)
+
+// Formule d'origine d'abord ; si JLaTeXMath la refuse, on tente des écritures équivalentes.
+private fun texVariants(tex: String): List<String> {
+    val list = ArrayList<String>()
+    list.add(tex)
+    if (CASES_RE.containsMatchIn(tex)) {
+        list.add(CASES_RE.replace(tex) { m ->
+            val body = m.groupValues[1]
+            val cols = (body.split("\\\\").maxOfOrNull { row -> row.count { it == '&' } } ?: 0) + 1
+            "\\left\\{\\begin{array}{" + "l".repeat(cols) + "}" + body + "\\end{array}\\right."
+        })
+    }
+    if (tex.contains("\\dfrac") || tex.contains("\\tfrac")) {
+        list.add(tex.replace("\\dfrac", "\\frac").replace("\\tfrac", "\\frac"))
+    }
+    return list.distinct()
+}
+
+private fun buildDrawable(tex: String, sizePx: Float): Pair<JLatexMathDrawable?, Throwable?> {
+    var error: Throwable? = null
+    for (variant in texVariants(tex)) {
+        try {
+            return Pair(JLatexMathDrawable.builder(variant).textSize(sizePx).padding(1).build(), null)
+        } catch (e: Throwable) {
+            if (error == null) error = e
+        }
+    }
+    android.util.Log.w("KalynoMath", "Formule non rendue : $tex", error)
+    return Pair(null, error)
+}
+
 private fun buildInline(
     block: RBlock,
     color: Color,
@@ -326,12 +353,7 @@ private fun buildInline(
 
     val sizePx = with(density) { fontSize.toPx() } * (if (block.kind == RKind.DISPLAY) 1.15f else 1f)
     for ((id, tex) in block.maths) {
-        val drawable = try {
-            JLatexMathDrawable.builder(tex).textSize(sizePx).padding(1).build()
-        } catch (e: Throwable) {
-            android.util.Log.w("KalynoMath", "Formule non rendue : $tex", e)
-            null
-        }
+        val (drawable, failure) = buildDrawable(tex, sizePx)
         val w = drawable?.intrinsicWidth ?: 0
         val h = drawable?.intrinsicHeight ?: 0
         result[id] = if (drawable != null && w > 0 && h > 0) {
@@ -350,15 +372,19 @@ private fun buildInline(
                 }
             }
         } else {
-            // Formule invalide : on affiche le texte brut plutôt que de planter.
+            // Formule refusée : texte brut + raison, pour que l'admin voie exactement quoi corriger.
+            val reason = failure?.message?.lineSequence()?.firstOrNull()?.take(90) ?: "rendu vide"
             InlineTextContent(
                 Placeholder(
-                    width = (tex.length * 0.55f).em,
-                    height = 1.4.em,
+                    width = maxOf(tex.length * 0.55f, reason.length * 0.34f).em,
+                    height = 2.6.em,
                     placeholderVerticalAlign = PlaceholderVerticalAlign.Center
                 )
             ) {
-                Text(tex, color = color, fontSize = fontSize, fontFamily = FontFamily.Monospace, maxLines = 1, softWrap = false)
+                Column {
+                    Text(tex, color = color, fontSize = fontSize, fontFamily = FontFamily.Monospace, maxLines = 1, softWrap = false)
+                    Text("⚠ " + reason, color = Color(0xFFB91C1C), fontSize = (fontSize.value * 0.6f).sp, maxLines = 1, softWrap = false)
+                }
             }
         }
     }
