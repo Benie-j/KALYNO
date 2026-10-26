@@ -94,7 +94,12 @@ private fun unwrapMath(html: String): String {
     }
 }
 
-private fun normalizeTex(tex: String): String = tex
+private val CASES_RE = Regex("""\\begin\{cases\}(.*?)\\end\{cases\}""", RegexOption.DOT_MATCHES_ALL)
+
+// JLaTeXMath ne connaît pas toujours cases : on l'écrit avec array, rendu identique.
+private fun normalizeTex(tex: String): String = CASES_RE.replace(tex) { m ->
+    "\\left\\{\\begin{array}{ll}" + m.groupValues[1] + "\\end{array}\\right."
+}
     .replace('\u00A0', ' ').replace("\u200B", "")
     .replace('\u2212', '-')
     .replace("\u25A2", "")
@@ -322,7 +327,7 @@ private fun buildInline(
     val sizePx = with(density) { fontSize.toPx() } * (if (block.kind == RKind.DISPLAY) 1.15f else 1f)
     for ((id, tex) in block.maths) {
         val drawable = try {
-            JLatexMathDrawable.builder(tex).textSize(sizePx).padding(2).build()
+            JLatexMathDrawable.builder(tex).textSize(sizePx).padding(1).build()
         } catch (e: Throwable) {
             android.util.Log.w("KalynoMath", "Formule non rendue : $tex", e)
             null
