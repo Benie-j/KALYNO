@@ -19,6 +19,11 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import ci.kalyno.app.data.dashboard.DailyQuotes
+import ci.kalyno.app.data.dashboard.ExamSchedule
+import ci.kalyno.app.data.srs.SrsEngine
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.util.UUID
 
 class DashboardViewModel(app: Application) : AndroidViewModel(app) {
@@ -26,6 +31,8 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     private val repository = DashboardRepository(app)
     private val streakStore = StreakStore(app)
     private val studentId = StudentId.get(app)
+    private val exams = ExamSchedule(app)
+    private val quotes = DailyQuotes(app)
 
     private val _state = MutableStateFlow(DashboardUiState(streak = streakStore.current()))
     val state: StateFlow<DashboardUiState> = _state.asStateFlow()
@@ -40,11 +47,36 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         _state.update { it.copy(nickname = nickname) }
         if (loadedLevel == levelId) return
         loadedLevel = levelId
+        // Affichage immédiat avec ce que le téléphone connaît déjà (marche hors connexion)
+        val cachedQuote = quotes.cached(levelId)
+        _state.update {
+            it.copy(
+                examDaysLeft = cachedExamDays(levelId),
+                examLabel = exams.label(levelId),
+                dailyQuote = cachedQuote
+            )
+        }
         refresh(levelId)
+        refreshQuote(levelId)
     }
 
     fun retry() {
-        loadedLevel?.let { refresh(it) }
+        loadedLevel?.let {
+            refresh(it)
+            refreshQuote(it)
+        }
+    }
+
+    private fun cachedExamDays(levelId: String): Int? =
+        exams.cached(levelId)
+            ?.let { SrsEngine.daysUntil(System.currentTimeMillis(), it) }
+            ?.takeIf { it >= 0 }
+
+    private fun refreshQuote(levelId: String) {
+        viewModelScope.launch {
+            val quote = withContext(Dispatchers.IO) { quotes.refresh(levelId) }
+            _state.update { it.copy(dailyQuote = quote, quoteReady = true) }
+        }
     }
 
     private fun refresh(levelId: String) {
@@ -64,6 +96,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                         urgentTopics = snapshot.urgentTopics,
                         urgentItems = snapshot.urgentItems,
                         examDaysLeft = snapshot.examDaysLeft,
+                        examLabel = exams.label(levelId),
                         masteredCount = snapshot.masteredCount,
                         retentionScore = snapshot.retentionScore,
                         lastLesson = snapshot.lastLesson

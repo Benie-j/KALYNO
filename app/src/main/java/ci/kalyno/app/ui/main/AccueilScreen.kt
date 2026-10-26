@@ -1,33 +1,65 @@
 package ci.kalyno.app.ui.main
 
-import androidx.compose.foundation.BorderStroke
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.*
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ci.kalyno.app.data.dashboard.DashboardUiState
 import ci.kalyno.app.data.dashboard.LastLessonUi
-import ci.kalyno.app.data.dashboard.MissionStatus
+import ci.kalyno.app.ui.components.KalynoErrorCard
 import ci.kalyno.app.ui.icons.KalynoSvgIcon
-import ci.kalyno.app.ui.theme.*
+import ci.kalyno.app.ui.theme.KalynoAmberDeep
+import ci.kalyno.app.ui.theme.KalynoAmberSoft
+import ci.kalyno.app.ui.theme.KalynoBackground
+import ci.kalyno.app.ui.theme.KalynoBlue
+import ci.kalyno.app.ui.theme.KalynoTealDark
+import ci.kalyno.app.ui.theme.KalynoText
+import ci.kalyno.app.ui.theme.KalynoYellow
+
+/** Les quatre modules stratégiques de la grille, dans l'ordre d'affichage. */
+private enum class HomeModule { QUOTE, URGENT, RESUME, PROGRESS }
 
 /**
- * Écran d'Accueil (Dashboard / Command Center).
- * Règle stricte : aucune mention de classe/niveau ici — c'est le rôle du Profil.
- * Tout le contenu vient de [DashboardUiState] : zéro donnée en dur.
+ * Écran d'Accueil (Command Center).
+ *
+ * - Adaptatif : 2 modules par ligne, 1 seule colonne sous 340 dp, contenu centré et plafonné
+ *   à 840 dp sur tablette / pliable pour ne jamais s'étirer.
+ * - Aucune mention de classe ou de niveau (rôle du Profil), aucun emoji, aucune donnée en dur :
+ *   tout vient de [DashboardUiState].
+ *
+ * [onStartMission] est conservé pour ne pas toucher à MainScreen ; l'Accueil ne l'utilise plus.
  */
 @Composable
 fun AccueilScreen(
@@ -37,34 +69,100 @@ fun AccueilScreen(
     onRetry: () -> Unit,
     onResumeLastLesson: (LastLessonUi) -> Unit
 ) {
-    Column(
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
             .background(KalynoBackground)
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp, vertical = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        TopBar(streak = state.streak)
-        HeroBanner(message = state.heroMessage, examDaysLeft = state.examDaysLeft)
-        SrsWidget(state = state, onReview = onReviewUrgent)
-        KpiGrid(masteredCount = state.masteredCount, retentionScore = state.retentionScore)
-        state.lastLesson?.let { lesson ->
-            ResumeCard(lesson = lesson, onClick = { onResumeLastLesson(lesson) })
-        }
+        val columns = if (maxWidth < 340.dp) 1 else 2
+        val wide = maxWidth >= 600.dp
+        val gap = if (wide) 18.dp else 14.dp
+        val sidePadding = if (wide) 32.dp else 20.dp
 
-        // La mission du jour reste disponible via le widget SRS / le Dojo,
-        // elle ne s'affiche plus en pleine carte sur l'Accueil (règle "pas de doublon avec le Dojo").
-        if (state.error != null) {
-            ErrorCard(message = state.error, onRetry = onRetry)
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState()),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Column(
+                modifier = Modifier
+                    .widthIn(max = 840.dp)
+                    .fillMaxWidth()
+                    .padding(horizontal = sidePadding, vertical = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(gap)
+            ) {
+                HomeTopBar(streak = state.streak)
+
+                AnimatedVisibility(
+                    visible = state.examDaysLeft != null,
+                    enter = fadeIn() + expandVertically()
+                ) {
+                    state.examDaysLeft?.let { days ->
+                        ExamHero(daysLeft = days, label = state.examLabel, wide = wide)
+                    }
+                }
+
+                state.error?.let { KalynoErrorCard(message = it, onRetry = onRetry) }
+
+                val modules = buildList {
+                    if (state.dailyQuote != null || !state.quoteReady) add(HomeModule.QUOTE)
+                    add(HomeModule.URGENT)
+                    if (state.lastLesson != null) add(HomeModule.RESUME)
+                    add(HomeModule.PROGRESS)
+                }
+
+                // Grille maison : lignes de [columns] modules, de même hauteur dans une ligne.
+                modules.chunked(columns).forEach { rowModules ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(IntrinsicSize.Max),
+                        horizontalArrangement = Arrangement.spacedBy(gap)
+                    ) {
+                        rowModules.forEach { module ->
+                            val slot = Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                            when (module) {
+                                HomeModule.QUOTE -> QuoteModule(
+                                    quote = state.dailyQuote,
+                                    modifier = slot
+                                )
+                                HomeModule.URGENT -> UrgentReviewModule(
+                                    total = state.urgentTotal,
+                                    topics = state.urgentTopics,
+                                    loading = state.loading,
+                                    onReview = onReviewUrgent,
+                                    modifier = slot
+                                )
+                                HomeModule.RESUME -> state.lastLesson?.let { lesson ->
+                                    ResumeModule(
+                                        lesson = lesson,
+                                        onClick = { onResumeLastLesson(lesson) },
+                                        modifier = slot
+                                    )
+                                }
+                                HomeModule.PROGRESS -> ProgressModule(
+                                    masteredCount = state.masteredCount,
+                                    retentionScore = state.retentionScore,
+                                    loading = state.loading,
+                                    modifier = slot
+                                )
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }
 
-// ---------- 1. Top Bar épurée ----------
+// ---------- 1. Top bar épurée ----------
 
 @Composable
-private fun TopBar(streak: Int) {
+private fun HomeTopBar(streak: Int) {
+    val streakLabel = if (streak <= 1) "Série de $streak jour" else "Série de $streak jours"
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
@@ -80,11 +178,12 @@ private fun TopBar(streak: Int) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
-                .clip(RoundedCornerShape(20.dp))
+                .semantics(mergeDescendants = true) { contentDescription = streakLabel }
+                .clip(CircleShape)
                 .background(KalynoAmberSoft)
                 .padding(horizontal = 14.dp, vertical = 8.dp)
         ) {
-            KalynoSvgIcon(name = "flame", size = 16.dp, tint = KalynoAmberDeep)
+            KalynoSvgIcon(name = "flame", size = 18.dp, tint = KalynoYellow)
             Spacer(Modifier.width(6.dp))
             Text(
                 text = streak.toString(),
@@ -96,212 +195,63 @@ private fun TopBar(streak: Int) {
     }
 }
 
-// ---------- 2. Hero Banner (admin-driven) ----------
+// ---------- 2. Hero : compte à rebours (date et intitulé publiés par l'admin) ----------
 
 @Composable
-private fun HeroBanner(message: String?, examDaysLeft: Int?) {
-    // Rien à afficher tant que l'admin n'a publié ni message ni date d'examen.
-    if (message.isNullOrBlank() && examDaysLeft == null) return
-
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(24.dp),
-        color = Color.Transparent
+private fun ExamHero(daysLeft: Int, label: String?, wide: Boolean) {
+    val shape = RoundedCornerShape(24.dp)
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(Brush.linearGradient(listOf(KalynoBlue, KalynoTealDark)))
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(24.dp))
-                .background(Brush.horizontalGradient(listOf(KalynoBlue, KalynoTealDark)))
-                .padding(20.dp)
-        ) {
-            Column {
-                if (examDaysLeft != null) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        KalynoSvgIcon(name = "calendar", size = 16.dp, tint = Color.White)
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            text = if (examDaysLeft == 0) "Jour J, c'est le moment de briller" else "J-$examDaysLeft avant les épreuves, on est ensemble",
-                            color = Color.White,
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                    Spacer(Modifier.height(8.dp))
-                }
-                if (!message.isNullOrBlank()) {
-                    Text(
-                        text = message,
-                        color = Color.White,
-                        fontSize = 18.sp,
-                        lineHeight = 24.sp,
-                        fontWeight = FontWeight.ExtraBold
-                    )
-                }
-            }
+        // Cercle décoratif discret (n'agrandit pas la bannière)
+        Box(modifier = Modifier.matchParentSize()) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .offset(x = 48.dp, y = (-48).dp)
+                    .size(if (wide) 220.dp else 160.dp)
+                    .clip(CircleShape)
+                    .background(Color.White.copy(alpha = 0.08f))
+            )
         }
-    }
-}
-
-// ---------- 3. Widget Révisions Urgentes SRS ----------
-
-@Composable
-private fun SrsWidget(state: DashboardUiState, onReview: () -> Unit) {
-    val urgent = state.urgentTotal > 0
-
-    DashCard(
-        background = if (urgent) KalynoRetrySoft else KalynoCorrectSoft,
-        stroke = if (urgent) KalynoRetry else KalynoCorrect
-    ) {
-        if (state.loading) {
+        Column(modifier = Modifier.padding(if (wide) 32.dp else 22.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 3.dp, color = KalynoBlue)
-                Spacer(Modifier.width(12.dp))
-                Text("Analyse de tes révisions…", color = KalynoMuted, fontSize = 15.sp)
-            }
-            return@DashCard
-        }
-
-        if (!urgent) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                KalynoSvgIcon(name = "check-circle", size = 22.dp, tint = KalynoCorrectText)
-                Spacer(Modifier.width(10.dp))
+                KalynoSvgIcon(name = "calendar", size = 16.dp, tint = Color.White.copy(alpha = 0.85f))
+                Spacer(Modifier.width(8.dp))
                 Text(
-                    text = "Tu gères, tout est à jour. Ton cerveau est au top !",
-                    color = KalynoCorrectText,
-                    fontSize = 16.sp,
+                    text = "COMPTE À REBOURS",
+                    color = Color.White.copy(alpha = 0.85f),
+                    fontSize = 12.sp,
                     fontWeight = FontWeight.ExtraBold,
-                    modifier = Modifier.weight(1f)
+                    letterSpacing = 1.sp
                 )
             }
-            return@DashCard
-        }
-
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                modifier = Modifier.size(40.dp).clip(CircleShape).background(KalynoRetry),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(state.urgentTotal.toString(), color = KalynoText, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold)
-            }
-            Spacer(Modifier.width(12.dp))
+            Spacer(Modifier.height(10.dp))
             Text(
-                text = if (state.urgentTotal == 1) "1 notion te réclame, on s'y met ?" else "${state.urgentTotal} notions te réclament, on s'y met ?",
-                color = KalynoRetryText,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.ExtraBold,
-                modifier = Modifier.weight(1f)
+                text = if (daysLeft == 0) "Jour J" else "J-$daysLeft",
+                color = Color.White,
+                fontSize = if (wide) 56.sp else 44.sp,
+                fontWeight = FontWeight.ExtraBold
             )
-        }
-        Spacer(Modifier.height(14.dp))
-        Button(
-            onClick = onReview,
-            modifier = Modifier.fillMaxWidth().height(52.dp),
-            shape = RoundedCornerShape(14.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = KalynoRetry, contentColor = KalynoText)
-        ) {
-            Text("On y va au Dojo", fontSize = 16.sp, fontWeight = FontWeight.ExtraBold)
-        }
-    }
-}
-
-// ---------- 4. Grille des KPIs ----------
-
-@Composable
-private fun KpiGrid(masteredCount: Int?, retentionScore: Float?) {
-    // Tant que le calcul n'est pas branché côté repository, on n'affiche rien
-    // plutôt qu'une fausse valeur à 0.
-    if (masteredCount == null && retentionScore == null) return
-
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        if (masteredCount != null) {
-            KpiCard(
-                modifier = Modifier.weight(1f),
-                icon = "check-circle",
-                value = masteredCount.toString(),
-                label = "Notions maîtrisées"
-            )
-        }
-        if (retentionScore != null) {
-            KpiCard(
-                modifier = Modifier.weight(1f),
-                icon = "brain",
-                value = "${(retentionScore * 100).toInt()}%",
-                label = "Score de rétention"
-            )
-        }
-    }
-}
-
-@Composable
-private fun KpiCard(modifier: Modifier = Modifier, icon: String, value: String, label: String) {
-    DashCard(modifier = modifier) {
-        KalynoSvgIcon(name = icon, size = 22.dp, tint = KalynoBlue)
-        Spacer(Modifier.height(10.dp))
-        Text(value, color = KalynoText, fontSize = 22.sp, fontWeight = FontWeight.ExtraBold)
-        Text(label, color = KalynoMuted, fontSize = 12.sp, fontWeight = FontWeight.Medium)
-    }
-}
-
-// ---------- 5. Reprendre l'aventure ----------
-
-@Composable
-private fun ResumeCard(lesson: LastLessonUi, onClick: () -> Unit) {
-    DashCard {
-        Row(
-            modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier.size(44.dp).clip(RoundedCornerShape(12.dp)).background(KalynoBlueSoft),
-                contentAlignment = Alignment.Center
-            ) {
-                KalynoSvgIcon(name = "book-open", size = 22.dp, tint = KalynoBlue)
-            }
-            Spacer(Modifier.width(14.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text("On reprend où tu t'es arrêté", color = KalynoMuted, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            if (daysLeft > 0) {
                 Text(
-                    text = "${lesson.subjectName} · ${lesson.chapterTitle}",
-                    color = KalynoText,
+                    text = "avant les épreuves",
+                    color = Color.White.copy(alpha = 0.9f),
                     fontSize = 15.sp,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+            if (!label.isNullOrBlank()) {
+                Text(
+                    text = label,
+                    color = Color.White,
+                    fontSize = 18.sp,
                     fontWeight = FontWeight.ExtraBold
                 )
             }
-            KalynoSvgIcon(name = "chevron-right", size = 20.dp, tint = KalynoMuted)
         }
-    }
-}
-
-// ---------- Commun ----------
-
-@Composable
-private fun ErrorCard(message: String, onRetry: () -> Unit) {
-    DashCard(background = KalynoDangerSoft, stroke = KalynoDangerBorder) {
-        Text(message, color = KalynoDanger, fontSize = 14.sp)
-        Spacer(Modifier.height(10.dp))
-        Button(onClick = onRetry, colors = ButtonDefaults.buttonColors(containerColor = KalynoBlue)) {
-            Text("Réessayer", color = Color.White)
-        }
-    }
-}
-
-@Composable
-private fun DashCard(
-    modifier: Modifier = Modifier,
-    background: Color = Color.White,
-    stroke: Color = KalynoOutline,
-    content: @Composable ColumnScope.() -> Unit
-) {
-    Surface(
-        modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(24.dp),
-        color = background,
-        border = BorderStroke(1.dp, stroke)
-    ) {
-        Column(modifier = Modifier.padding(18.dp), content = content)
     }
 }

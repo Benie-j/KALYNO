@@ -201,7 +201,7 @@ class DashboardRepository(context: Context) {
             retentionScore = retentionScore,
             lastLesson = prefs.lastLessonChapterTitle?.let { chapterTitle ->
                 LastLessonUi(
-                    subjectName = "${prefs.lastLessonSubjectEmoji.orEmpty()} ${prefs.lastLessonSubjectName.orEmpty()}".trim(),
+                    subjectName = prefs.lastLessonSubjectName.orEmpty(),
                     chapterTitle = chapterTitle,
                     progress = prefs.lastLessonProgress
                 )

@@ -73,7 +73,13 @@ data class DashboardUiState(
     /** Score global de retention (0..1), derive de l'ease factor moyen des cartes. */
     val retentionScore: Float? = null,
     /** Derniere lecon consultee dans l'Explorer, pour "Reprendre l'aventure". */
-    val lastLesson: LastLessonUi? = null
+    val lastLesson: LastLessonUi? = null,
+    /** Intitulé de l'examen publié par l'admin (compte à rebours de l'Accueil). */
+    val examLabel: String? = null,
+    /** Citation du jour publiée par l'admin ; null tant qu'aucune n'est disponible. */
+    val dailyQuote: DailyQuote? = null,
+    /** Faux tant que la citation n'a pas fini de se charger (affiche un squelette). */
+    val quoteReady: Boolean = false
 )
 
 data class LastLessonUi(
