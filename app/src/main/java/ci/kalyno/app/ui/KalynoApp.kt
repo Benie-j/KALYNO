@@ -145,7 +145,6 @@ fun KalynoApp() {
             onLoginClick = { showLogin = true },
             signedIn = auth.signedIn,
             accountLabel = accountLabel,
-            lastSyncMillis = if (auth.signedIn) maxOf(authStore.lastPushAt(), authStore.lastPullAt()) else 0L,
             onNicknameChange = {
                 prefs.nickname = it
                 nickname = it

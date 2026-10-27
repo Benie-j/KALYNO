@@ -19,28 +19,24 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Sync
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.IconButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.style.TextOverflow
-import ci.kalyno.app.ui.theme.KalynoOutline
-import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -54,7 +50,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ci.kalyno.app.data.Levels
@@ -71,20 +69,24 @@ import ci.kalyno.app.ui.theme.KalynoCorrectSoft
 import ci.kalyno.app.ui.theme.KalynoDanger
 import ci.kalyno.app.ui.theme.KalynoDangerBorder
 import ci.kalyno.app.ui.theme.KalynoMuted
+import ci.kalyno.app.ui.theme.KalynoOutline
 import ci.kalyno.app.ui.theme.KalynoText
 import ci.kalyno.app.ui.theme.KalynoYellow
 
-// Fonds de bulles d'icônes (doux, jamais criards)
 private val SkyBubble = Color(0xFFE0F2FE)
 private val SlateBubble = Color(0xFFF1F5F9)
 
+private const val NICKNAME_MIN = 2
+private const val NICKNAME_MAX = 16
+
 /**
- * Écran Profil & Paramètres ("Settings Hub").
+ * Écran Profil & Paramètres.
  *
- * Écran sans état : toute la navigation sort par callbacks, MainScreen décide quoi ouvrir.
+ * Écran sans état : toute la navigation sort par callbacks.
  *
- * @param userEmail e-mail du compte connecté. `null` = invité / non connecté : aucun statut
- *                  de synchronisation n'est alors affiché (ni check vert, ni "sauvegarde active").
+ * @param userEmail e-mail du compte connecté. `null` = invité / non connecté : aucun badge de
+ *                  synchronisation n'est alors affiché (ni check vert, ni "sauvegarde active").
+ * @param onNicknameChange appelé avec le nouveau pseudo, déjà nettoyé (trim, 2 à 16 caractères).
  */
 @Composable
 fun ProfileScreen(
@@ -92,7 +94,6 @@ fun ProfileScreen(
     nickname: String,
     streak: Int,
     userEmail: String?,
-    lastSyncMillis: Long = 0L,
     onNicknameChange: (String) -> Unit,
     onChangeLevel: () -> Unit,
     onLoginClick: () -> Unit,
@@ -135,7 +136,7 @@ fun ProfileScreen(
                     iconBackground = KalynoBlueSoft,
                     onClick = onChangeLevel
                 )
-                CloudStatusItem(userEmail = userEmail, lastSyncMillis = lastSyncMillis, onLoginClick = onLoginClick)
+                CloudStatusItem(userEmail = userEmail, onLoginClick = onLoginClick)
             }
         }
 
@@ -168,7 +169,7 @@ fun ProfileScreen(
             }
         }
 
-        // ----- D. Légal (la version de l'app vit désormais sur le splash) -----
+        // ----- D. Légal (aucune ligne "Version" : elle vit sur le splash) -----
         item {
             SettingsGroup(title = "LÉGAL") {
                 SettingsItem(
@@ -243,24 +244,14 @@ fun ProfileScreen(
 // ===========================================================================
 
 /**
- * Carte Cloud, trois états exclusifs :
- * - non connecté : CloudOff gris, aucun badge, cliquable vers la connexion ;
- * - connecté + au moins une synchro réussie : seul cas où le vert est permis ;
- * - connecté sans synchro encore : neutre, sans check.
+ * Carte Cloud, deux états exclusifs :
+ * - connecté (`userEmail != null`) : e-mail + icône de synchro + CheckCircle vert ;
+ * - invité : "Compte non connecté", icône neutre CloudOff, aucun badge vert, cliquable vers la connexion.
  */
 @Composable
-private fun CloudStatusItem(userEmail: String?, lastSyncMillis: Long, onLoginClick: () -> Unit) {
-    when {
-        userEmail == null -> SettingsItem(
-            icon = Icons.Default.CloudOff,
-            title = "Compte non connecté",
-            subtitle = "Connecte-toi pour sauvegarder ta progression",
-            iconBackground = SlateBubble,
-            iconTint = KalynoMuted,
-            onClick = onLoginClick,
-            showDivider = false
-        )
-        lastSyncMillis > 0L -> SettingsItem(
+private fun CloudStatusItem(userEmail: String?, onLoginClick: () -> Unit) {
+    if (userEmail != null) {
+        SettingsItem(
             icon = Icons.Default.Sync,
             title = "Synchronisation Cloud",
             subtitle = userEmail,
@@ -276,12 +267,14 @@ private fun CloudStatusItem(userEmail: String?, lastSyncMillis: Long, onLoginCli
             },
             showDivider = false
         )
-        else -> SettingsItem(
-            icon = Icons.Default.Sync,
-            title = "Connecté, synchro en attente",
-            subtitle = userEmail,
+    } else {
+        SettingsItem(
+            icon = Icons.Default.CloudOff,
+            title = "Compte non connecté",
+            subtitle = "Connecte-toi pour sauvegarder ta progression",
             iconBackground = SlateBubble,
             iconTint = KalynoMuted,
+            onClick = onLoginClick,
             showDivider = false
         )
     }
@@ -292,7 +285,13 @@ private fun CloudStatusItem(userEmail: String?, lastSyncMillis: Long, onLoginCli
 // ===========================================================================
 
 @Composable
-private fun ProfileHeader(nickname: String, classLabel: String, streak: Int, onEditNickname: () -> Unit) {
+private fun ProfileHeader(
+    nickname: String,
+    classLabel: String,
+    streak: Int,
+    onEditNickname: () -> Unit
+) {
+    val haptic = rememberHaptic()
     SettingsCard {
         Column(
             modifier = Modifier
@@ -300,7 +299,7 @@ private fun ProfileHeader(nickname: String, classLabel: String, streak: Int, onE
                 .padding(horizontal = 20.dp, vertical = 26.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Avatar : bordure Deep Teal + fond teinté + initiale
+            // Avatar : bordure Vert Pétrole + fond teinté + initiale
             Box(
                 modifier = Modifier
                     .size(92.dp)
@@ -319,7 +318,18 @@ private fun ProfileHeader(nickname: String, classLabel: String, streak: Int, onE
             }
 
             Spacer(Modifier.height(14.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
+
+            // Pseudo + crayon : toute la ligne est cliquable
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(12.dp))
+                    .clickable(role = Role.Button, onClickLabel = "Modifier mon pseudo") {
+                        haptic()
+                        onEditNickname()
+                    }
+                    .padding(horizontal = 10.dp, vertical = 6.dp)
+            ) {
                 Text(
                     text = nickname.ifBlank { "Élève" },
                     color = KalynoText,
@@ -330,16 +340,16 @@ private fun ProfileHeader(nickname: String, classLabel: String, streak: Int, onE
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f, fill = false)
                 )
-                IconButton(onClick = onEditNickname) {
-                    Icon(
-                        imageVector = Icons.Default.Edit,
-                        contentDescription = "Modifier mon pseudo",
-                        tint = KalynoBlue,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
+                Spacer(Modifier.width(8.dp))
+                Icon(
+                    imageVector = Icons.Default.Edit,
+                    contentDescription = null,
+                    tint = KalynoBlue,
+                    modifier = Modifier.size(18.dp)
+                )
             }
-            Spacer(Modifier.height(8.dp))
+
+            Spacer(Modifier.height(6.dp))
             KalynoPill(text = classLabel, fontSize = 13)
             Spacer(Modifier.height(14.dp))
             StreakChip(streak)
@@ -380,6 +390,64 @@ private fun StreakChip(streak: Int) {
 }
 
 // ===========================================================================
+// MODALE D'ÉDITION DU PSEUDO
+// ===========================================================================
+
+@Composable
+private fun NicknameEditDialog(
+    current: String,
+    onDismiss: () -> Unit,
+    onSave: (String) -> Unit
+) {
+    var text by rememberSaveable { mutableStateOf(current) }
+    val clean = text.trim()
+    val valid = clean.length in NICKNAME_MIN..NICKNAME_MAX
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Color.White,
+        title = {
+            Text("Modifier ton pseudo", fontWeight = FontWeight.ExtraBold, color = KalynoText)
+        },
+        text = {
+            OutlinedTextField(
+                value = text,
+                onValueChange = { text = it.take(NICKNAME_MAX) },
+                singleLine = true,
+                shape = RoundedCornerShape(16.dp),
+                placeholder = { Text("Ton pseudo") },
+                supportingText = { Text("$NICKNAME_MIN à $NICKNAME_MAX caractères", color = KalynoMuted) },
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = { if (valid) onSave(clean) }),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = KalynoBlue,
+                    unfocusedBorderColor = KalynoOutline,
+                    cursorColor = KalynoBlue,
+                    focusedTextColor = KalynoText,
+                    unfocusedTextColor = KalynoText,
+                    focusedContainerColor = Color.White,
+                    unfocusedContainerColor = Color.White
+                )
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = { onSave(clean) }, enabled = valid) {
+                Text(
+                    "Enregistrer",
+                    color = if (valid) KalynoBlue else KalynoMuted,
+                    fontWeight = FontWeight.ExtraBold
+                )
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Annuler", color = KalynoMuted, fontWeight = FontWeight.Bold)
+            }
+        }
+    )
+}
+
+// ===========================================================================
 // DÉCONNEXION : rouge doux, sans agresser
 // ===========================================================================
 
@@ -407,53 +475,4 @@ private fun LogoutButton(label: String, onClick: () -> Unit) {
             fontWeight = FontWeight.ExtraBold
         )
     }
-}
-
-// ===========================================================================
-// MODALE D'ÉDITION DU PSEUDO
-// ===========================================================================
-
-@Composable
-private fun NicknameEditDialog(current: String, onDismiss: () -> Unit, onSave: (String) -> Unit) {
-    var text by rememberSaveable { mutableStateOf(current) }
-    val clean = text.trim()
-    val valid = clean.length in 2..16
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = Color.White,
-        title = { Text("Modifier ton pseudo", fontWeight = FontWeight.ExtraBold, color = KalynoText) },
-        text = {
-            OutlinedTextField(
-                value = text,
-                onValueChange = { text = it.take(16) },
-                singleLine = true,
-                shape = RoundedCornerShape(16.dp),
-                supportingText = { Text("2 à 16 caractères", color = KalynoMuted) },
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                keyboardActions = KeyboardActions(onDone = { if (valid) onSave(clean) }),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = KalynoBlue,
-                    unfocusedBorderColor = KalynoOutline,
-                    cursorColor = KalynoBlue,
-                    focusedTextColor = KalynoText,
-                    unfocusedTextColor = KalynoText
-                )
-            )
-        },
-        confirmButton = {
-            TextButton(onClick = { onSave(clean) }, enabled = valid) {
-                Text(
-                    "Enregistrer",
-                    color = if (valid) KalynoBlue else KalynoMuted,
-                    fontWeight = FontWeight.ExtraBold
-                )
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Annuler", color = KalynoMuted, fontWeight = FontWeight.Bold)
-            }
-        }
-    )
 }

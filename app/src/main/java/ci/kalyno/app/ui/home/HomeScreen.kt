@@ -20,6 +20,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -40,6 +41,7 @@ import ci.kalyno.app.ui.components.ShimmerBlock
 import ci.kalyno.app.ui.icons.KalynoSvgIcon
 import ci.kalyno.app.ui.icons.iconAssetFor
 import ci.kalyno.app.ui.icons.levelIconFallback
+import ci.kalyno.app.ui.theme.KalynoBackground
 import ci.kalyno.app.ui.theme.KalynoBlue
 import ci.kalyno.app.ui.theme.KalynoBlueSoft
 import ci.kalyno.app.ui.theme.KalynoMuted
@@ -48,10 +50,12 @@ import ci.kalyno.app.ui.theme.KalynoShadow
 import ci.kalyno.app.ui.theme.KalynoText
 
 private val CardShape = RoundedCornerShape(24.dp)
+private val CardGap = 10.dp
 
 /**
- * Écran de choix du "combat de l'année" : classe (3e) ou série de Terminale (Tle A1, Tle A2, Tle C, Tle D…).
- * Les classes viennent de l'admin via Room : aucune série n'est écrite en dur ici.
+ * Écran de choix du "combat de l'année" : classe (3e) ou série de Terminale.
+ * Version compacte : paddings verticaux 12 dp, espacement entre cartes 10 dp,
+ * titres en bodyMedium, sous-titres en labelSmall. Aucune classe écrite en dur ici.
  */
 @Composable
 fun HomeScreen(
@@ -65,13 +69,14 @@ fun HomeScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .background(KalynoBackground)
             .safeDrawingPadding()
-            .padding(horizontal = 24.dp, vertical = 16.dp)
+            .padding(horizontal = 20.dp, vertical = 12.dp)
     ) {
         Text(
             text = "KALYNO",
             color = KalynoBlue,
-            fontSize = 18.sp,
+            fontSize = 16.sp,
             fontWeight = FontWeight.ExtraBold,
             letterSpacing = 1.sp
         )
@@ -81,42 +86,41 @@ fun HomeScreen(
                 .weight(1f)
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
-                .padding(top = 28.dp, bottom = 12.dp)
+                .padding(top = 18.dp, bottom = 8.dp)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
                     modifier = Modifier
-                        .size(36.dp)
-                        .clip(RoundedCornerShape(12.dp))
+                        .size(30.dp)
+                        .clip(RoundedCornerShape(10.dp))
                         .background(KalynoBlueSoft),
                     contentAlignment = Alignment.Center
                 ) {
-                    KalynoSvgIcon(name = "target", size = 20.dp, tint = KalynoBlue)
+                    KalynoSvgIcon(name = "target", size = 18.dp, tint = KalynoBlue)
                 }
-                Spacer(Modifier.width(10.dp))
+                Spacer(Modifier.width(8.dp))
                 Text(
                     text = "C'est comment, élément ?",
                     color = KalynoMuted,
-                    fontSize = 15.sp,
+                    style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.SemiBold
                 )
             }
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(8.dp))
             Text(
                 text = "Dis-nous, c'est quoi ton combat de cette année ?",
                 color = KalynoText,
-                fontSize = 28.sp,
-                lineHeight = 34.sp,
+                fontSize = 24.sp,
+                lineHeight = 30.sp,
                 fontWeight = FontWeight.ExtraBold
             )
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(6.dp))
             Text(
                 text = "Choisis ta classe, on s'occupe de te mettre dans le bain.",
                 color = KalynoMuted,
-                fontSize = 15.sp,
-                lineHeight = 21.sp
+                style = MaterialTheme.typography.bodyMedium
             )
-            Spacer(Modifier.height(26.dp))
+            Spacer(Modifier.height(18.dp))
 
             when {
                 state.loading -> LevelSkeleton()
@@ -127,12 +131,13 @@ fun HomeScreen(
                 )
 
                 else -> state.groups.forEachIndexed { index, group ->
-                    if (index > 0) Spacer(Modifier.height(24.dp))
+                    if (index > 0) Spacer(Modifier.height(16.dp))
                     LevelGroupSection(group = group, onSelect = onLevelSelected)
                 }
             }
         }
 
+        // Bouton texte clair, sans fond : Vert Pétrole #0F766E
         if (canLogin) {
             TextButton(
                 onClick = onLoginClick,
@@ -141,7 +146,7 @@ fun HomeScreen(
             ) {
                 Text(
                     text = "J'ai déjà un compte",
-                    fontSize = 15.sp,
+                    style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Bold
                 )
             }
@@ -159,20 +164,20 @@ private fun LevelGroupSection(group: LevelGroup, onSelect: (String) -> Unit) {
         Text(
             text = group.cycle.uppercase(),
             color = KalynoMuted,
-            fontSize = 12.sp,
+            style = MaterialTheme.typography.labelSmall,
             fontWeight = FontWeight.ExtraBold,
-            letterSpacing = 1.2.sp
+            letterSpacing = 1.sp
         )
-        Spacer(Modifier.height(10.dp))
+        Spacer(Modifier.height(8.dp))
     }
 
     // Une classe seule (ex. la 3e) occupe toute la largeur ; plusieurs séries se rangent par deux.
     if (group.levels.size == 1) {
         LevelWideCard(level = group.levels.first(), onClick = { onSelect(group.levels.first().id) })
     } else {
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(CardGap)) {
             group.levels.chunked(2).forEach { pair ->
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(CardGap)) {
                     pair.forEach { level ->
                         LevelSeriesCard(
                             level = level,
@@ -191,40 +196,48 @@ private fun LevelGroupSection(group: LevelGroup, onSelect: (String) -> Unit) {
 private fun LevelWideCard(level: LevelInfo, onClick: () -> Unit) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = cardModifier(onClick).padding(18.dp)
+        modifier = cardModifier(onClick).padding(horizontal = 14.dp, vertical = 12.dp)
     ) {
         LevelIcon(level = level)
-        Spacer(Modifier.width(14.dp))
+        Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = level.label,
                 color = KalynoText,
-                fontSize = 20.sp,
+                style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.ExtraBold
             )
             if (!level.tagline.isNullOrBlank()) {
-                Spacer(Modifier.height(2.dp))
-                Text(text = level.tagline, color = KalynoMuted, fontSize = 13.sp, lineHeight = 18.sp)
+                Text(
+                    text = level.tagline,
+                    color = KalynoMuted,
+                    style = MaterialTheme.typography.labelSmall
+                )
             }
         }
-        KalynoSvgIcon(name = "chevron-right", size = 22.dp, tint = KalynoMuted)
+        KalynoSvgIcon(name = "chevron-right", size = 20.dp, tint = KalynoMuted)
     }
 }
 
 @Composable
 private fun LevelSeriesCard(level: LevelInfo, modifier: Modifier, onClick: () -> Unit) {
-    Column(modifier = modifier.then(cardModifier(onClick)).padding(16.dp)) {
+    Column(
+        modifier = modifier.then(cardModifier(onClick)).padding(horizontal = 14.dp, vertical = 12.dp)
+    ) {
         LevelIcon(level = level)
-        Spacer(Modifier.height(14.dp))
+        Spacer(Modifier.height(8.dp))
         Text(
             text = level.label,
             color = KalynoText,
-            fontSize = 20.sp,
+            style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.ExtraBold
         )
         if (!level.tagline.isNullOrBlank()) {
-            Spacer(Modifier.height(2.dp))
-            Text(text = level.tagline, color = KalynoMuted, fontSize = 12.sp, lineHeight = 17.sp)
+            Text(
+                text = level.tagline,
+                color = KalynoMuted,
+                style = MaterialTheme.typography.labelSmall
+            )
         }
     }
 }
@@ -233,14 +246,14 @@ private fun LevelSeriesCard(level: LevelInfo, modifier: Modifier, onClick: () ->
 private fun LevelIcon(level: LevelInfo) {
     Box(
         modifier = Modifier
-            .size(46.dp)
-            .clip(RoundedCornerShape(14.dp))
+            .size(36.dp)
+            .clip(RoundedCornerShape(12.dp))
             .background(KalynoBlueSoft),
         contentAlignment = Alignment.Center
     ) {
         KalynoSvgIcon(
             name = iconAssetFor(level.iconKey, fallback = levelIconFallback(level.cycle)),
-            size = 24.dp,
+            size = 20.dp,
             tint = KalynoBlue
         )
     }
@@ -258,15 +271,15 @@ private fun cardModifier(onClick: () -> Unit): Modifier =
 
 @Composable
 private fun LevelSkeleton() {
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        ShimmerBlock(modifier = Modifier.fillMaxWidth().height(84.dp), shape = CardShape)
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            ShimmerBlock(modifier = Modifier.weight(1f).height(124.dp), shape = CardShape)
-            ShimmerBlock(modifier = Modifier.weight(1f).height(124.dp), shape = CardShape)
+    Column(verticalArrangement = Arrangement.spacedBy(CardGap)) {
+        ShimmerBlock(modifier = Modifier.fillMaxWidth().height(60.dp), shape = CardShape)
+        Row(horizontalArrangement = Arrangement.spacedBy(CardGap)) {
+            ShimmerBlock(modifier = Modifier.weight(1f).height(90.dp), shape = CardShape)
+            ShimmerBlock(modifier = Modifier.weight(1f).height(90.dp), shape = CardShape)
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            ShimmerBlock(modifier = Modifier.weight(1f).height(124.dp), shape = CardShape)
-            ShimmerBlock(modifier = Modifier.weight(1f).height(124.dp), shape = CardShape)
+        Row(horizontalArrangement = Arrangement.spacedBy(CardGap)) {
+            ShimmerBlock(modifier = Modifier.weight(1f).height(90.dp), shape = CardShape)
+            ShimmerBlock(modifier = Modifier.weight(1f).height(90.dp), shape = CardShape)
         }
     }
 }

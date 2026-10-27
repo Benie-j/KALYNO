@@ -56,7 +56,6 @@ fun MainScreen(
     onLoginClick: () -> Unit,
     signedIn: Boolean = false,
     accountLabel: String? = null,
-    lastSyncMillis: Long = 0L,
     onNicknameChange: (String) -> Unit = {},
     onLogoutClick: () -> Unit = {}
 ) {
@@ -138,7 +137,6 @@ fun MainScreen(
                             nickname = nickname,
                             streak = state.streak,
                             userEmail = if (signedIn) (accountLabel ?: "Compte connecté") else null,
-                            lastSyncMillis = lastSyncMillis,
                             onNicknameChange = onNicknameChange,
                             onChangeLevel = onChangeLevel,
                             onLoginClick = onLoginClick,
