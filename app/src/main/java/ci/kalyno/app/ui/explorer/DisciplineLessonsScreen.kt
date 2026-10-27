@@ -328,7 +328,8 @@ private fun LessonStepCard(lesson: ExplorerChapter, onClick: () -> Unit) {
     KalynoCard(
         modifier = Modifier.fillMaxWidth(),
         onClick = onClick,
-        contentPadding = 16.dp
+        shape = RoundedCornerShape(16.dp),
+        contentPadding = 12.dp
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(modifier = Modifier.weight(1f)) {
@@ -339,8 +340,8 @@ private fun LessonStepCard(lesson: ExplorerChapter, onClick: () -> Unit) {
                 Text(
                     text = lesson.title,
                     color = KalynoText,
-                    fontSize = 17.sp,
-                    lineHeight = 22.sp,
+                    fontSize = 15.sp,
+                    lineHeight = 20.sp,
                     fontWeight = FontWeight.ExtraBold,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
@@ -348,7 +349,8 @@ private fun LessonStepCard(lesson: ExplorerChapter, onClick: () -> Unit) {
                 Spacer(Modifier.height(4.dp))
                 val meta = buildList {
                     if (lesson.minutes > 0) add("${lesson.minutes} min")
-                    if (lesson.capsules.isNotEmpty()) add("${lesson.capsules.size} blocs")
+                    if (lesson.sessions.isNotEmpty()) add("${lesson.sessions.size} séances")
+                    else if (lesson.capsules.isNotEmpty()) add("${lesson.capsules.size} blocs")
                     if (lesson.questionCount > 0) add("${lesson.questionCount} questions")
                 }
                 if (meta.isNotEmpty()) {
@@ -368,8 +370,8 @@ private fun LessonStepCard(lesson: ExplorerChapter, onClick: () -> Unit) {
         }
 
         if (lesson.questionCount > 0) {
-            Spacer(Modifier.height(12.dp))
-            KalynoProgressBar(progress = lesson.progress)
+            Spacer(Modifier.height(8.dp))
+            KalynoProgressBar(progress = lesson.progress, height = 6.dp)
         }
     }
 }

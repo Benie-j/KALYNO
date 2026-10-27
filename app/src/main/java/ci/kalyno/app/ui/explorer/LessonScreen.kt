@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -37,8 +38,10 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import ci.kalyno.app.ui.components.KalynoEmptyState
+import ci.kalyno.app.ui.components.KalynoIconEmptyState
 import ci.kalyno.app.ui.components.KalynoPrimaryButton
+import ci.kalyno.app.ui.icons.KalynoSvgIcon
+import ci.kalyno.app.ui.icons.iconAssetFor
 import ci.kalyno.app.ui.theme.KalynoBackground
 import ci.kalyno.app.ui.theme.KalynoBlue
 import ci.kalyno.app.ui.theme.KalynoBlueSoft
@@ -66,17 +69,26 @@ fun LessonScreen(
 ) {
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
-    val blocks = remember(chapter.capsules) { chapter.capsules.map { it.toLessonBlock() } }
+    // Séances chronologiques (Séance 1, 2…) puis leurs blocs ; les anciennes leçons restent une simple pile de blocs.
+    val rows = remember(chapter) { buildLessonRows(chapter) }
+    val hasComplement = !chapter.complement.isNullOrBlank()
     val revealed = remember(chapter.id) { HashSet<String>() }
 
-    // Index 0 = hero ; chaque bloc occupe index (i + 1) ; cette correspondance doit rester
+    // Index 0 = hero ; chaque ligne occupe index (i + 1) ; cette correspondance doit rester
     // synchronisée avec l'ordre des `item { }` du LazyColumn plus bas.
-    val jumpTargets = remember(blocks) {
+    // Avec des séances : une puce par séance. Sans séance : une puce par bloc titré (comportement historique).
+    val jumpTargets = remember(rows) {
+        val hasSessions = rows.any { it is LessonRow.Header }
         buildList {
             add(JumpTarget(0, "Début"))
-            blocks.forEachIndexed { i, block ->
-                val label = block.title?.trim()
-                if (!label.isNullOrEmpty()) add(JumpTarget(i + 1, label))
+            rows.forEachIndexed { i, row ->
+                when {
+                    row is LessonRow.Header -> add(JumpTarget(i + 1, "Séance ${row.group.number}"))
+                    row is LessonRow.Block && !hasSessions -> {
+                        val label = row.block.title?.trim()
+                        if (!label.isNullOrEmpty()) add(JumpTarget(i + 1, label))
+                    }
+                }
             }
         }
     }
@@ -116,8 +128,10 @@ fun LessonScreen(
         ) {
             ExplorerBackButton(onClick = onBack)
             Spacer(Modifier.width(12.dp))
+            KalynoSvgIcon(name = iconAssetFor(chapter.subjectIconKey), size = 18.dp, tint = KalynoBlue)
+            Spacer(Modifier.width(8.dp))
             Text(
-                text = "${chapter.subjectEmoji} ${chapter.subjectName}",
+                text = chapter.subjectName,
                 color = KalynoBlue,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.ExtraBold,
@@ -160,17 +174,22 @@ fun LessonScreen(
                 }
             }
 
-            itemsIndexed(blocks, key = { _, block -> block.id }) { i, block ->
-                RevealOnAppear(id = block.id, index = i + 1, revealed = revealed) {
-                    LessonBlockView(block)
+            itemsIndexed(rows, key = { _, row -> row.key }) { i, row ->
+                when (row) {
+                    is LessonRow.Header -> RevealOnAppear(id = row.key, index = i + 1, revealed = revealed, bottomSpace = 10.dp) {
+                        SessionHeader(row.group)
+                    }
+                    is LessonRow.Block -> RevealOnAppear(id = row.key, index = i + 1, revealed = revealed) {
+                        LessonBlockView(row.block)
+                    }
                 }
             }
 
-            if (blocks.isEmpty()) {
+            if (rows.isEmpty()) {
                 item(key = "empty") {
                     RevealOnAppear(id = "empty", index = 1, revealed = revealed) {
-                        KalynoEmptyState(
-                            emoji = "✍️",
+                        KalynoIconEmptyState(
+                            icon = "pen-line",
                             title = "Leçon en préparation",
                             text = "Le contenu de cette leçon apparaîtra ici dès sa publication."
                         )
@@ -178,9 +197,17 @@ fun LessonScreen(
                 }
             }
 
+            if (hasComplement) {
+                item(key = "complement") {
+                    RevealOnAppear(id = "complement", index = rows.size + 1, revealed = revealed) {
+                        LessonComplementCard(complement = chapter.complement.orEmpty())
+                    }
+                }
+            }
+
             if (chapter.questionCount > 0) {
                 item(key = "cta") {
-                    RevealOnAppear(id = "cta", index = blocks.size + 1, revealed = revealed, bottomSpace = 0.dp) {
+                    RevealOnAppear(id = "cta", index = rows.size + 2, revealed = revealed, bottomSpace = 0.dp) {
                         KalynoPrimaryButton(
                             label = "DÉMARRER LES ${chapter.questionCount} QUESTIONS",
                             onClick = onStartQuestions
@@ -245,29 +272,46 @@ private fun LessonHero(chapter: ExplorerChapter) {
             .fillMaxWidth()
             .clip(RoundedCornerShape(28.dp))
             .background(Brush.linearGradient(listOf(KalynoBlue, KalynoTealDark)))
-            .padding(horizontal = 22.dp, vertical = 26.dp),
+            .padding(horizontal = 20.dp, vertical = 20.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        Text(text = chapter.subjectEmoji, fontSize = 40.sp)
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .clip(RoundedCornerShape(14.dp))
+                .background(Color.White.copy(alpha = 0.18f)),
+            contentAlignment = Alignment.Center
+        ) {
+            KalynoSvgIcon(name = iconAssetFor(chapter.subjectIconKey), size = 24.dp, tint = Color.White)
+        }
         Text(
             text = chapter.title,
             color = Color.White,
-            fontSize = 28.sp,
-            lineHeight = 34.sp,
+            fontSize = 24.sp,
+            lineHeight = 30.sp,
             fontWeight = FontWeight.ExtraBold
         )
         val meta = buildList {
-            if (chapter.minutes > 0) add("⏱️ ${chapter.minutes} min")
-            if (chapter.capsules.isNotEmpty()) add("📖 ${chapter.capsules.size} blocs")
-            if (chapter.questionCount > 0) add("❓ ${chapter.questionCount} questions")
+            if (chapter.minutes > 0) add("clock" to "${chapter.minutes} min")
+            if (chapter.sessions.isNotEmpty()) add("layers" to "${chapter.sessions.size} séances")
+            else if (chapter.capsules.isNotEmpty()) add("book-open" to "${chapter.capsules.size} blocs")
+            if (chapter.questionCount > 0) add("target" to "${chapter.questionCount} questions")
         }
         if (meta.isNotEmpty()) {
-            Text(
-                text = meta.joinToString("  ·  "),
-                color = Color.White.copy(alpha = 0.88f),
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Medium
-            )
+            Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                meta.forEach { (icon, label) ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        KalynoSvgIcon(name = icon, size = 14.dp, tint = Color.White.copy(alpha = 0.9f))
+                        Spacer(Modifier.width(5.dp))
+                        Text(
+                            text = label,
+                            color = Color.White.copy(alpha = 0.9f),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+            }
         }
     }
 }

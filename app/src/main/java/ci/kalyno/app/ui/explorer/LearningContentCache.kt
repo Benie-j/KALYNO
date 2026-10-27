@@ -4,6 +4,7 @@ import android.content.Context
 import ci.kalyno.app.data.LearningCapsule
 import ci.kalyno.app.data.LearningCard
 import ci.kalyno.app.data.LearningChapter
+import ci.kalyno.app.data.LearningSession
 import ci.kalyno.app.data.LearningSubject
 import ci.kalyno.app.data.LearningTheme
 import org.json.JSONArray
@@ -67,6 +68,15 @@ class LearningContentCache(context: Context) {
                                     put("title", ch.title)
                                     put("tag", ch.tag ?: JSONObject.NULL)
                                     put("themeId", ch.themeId ?: JSONObject.NULL)
+                                    put("complement", ch.complement ?: JSONObject.NULL)
+                                    put("sessions", JSONArray().apply {
+                                        ch.sessions.forEach { se ->
+                                            put(JSONObject().apply {
+                                                put("id", se.id)
+                                                put("title", se.title)
+                                            })
+                                        }
+                                    })
                                     put("capsules", JSONArray().apply {
                                         ch.capsules.forEach { cap ->
                                             put(
@@ -76,6 +86,7 @@ class LearningContentCache(context: Context) {
                                                     put("body", cap.body)
                                                     put("minutes", cap.minutes)
                                                     put("kind", cap.kind)
+                                                    put("sessionId", cap.sessionId ?: JSONObject.NULL)
                                                 }
                                             )
                                         }
@@ -124,12 +135,18 @@ class LearningContentCache(context: Context) {
     private fun decodeChapter(ch: JSONObject): LearningChapter {
         val cards = ch.optJSONArray("cards") ?: JSONArray()
         val capsules = ch.optJSONArray("capsules") ?: JSONArray()
+        val sessionsJson = ch.optJSONArray("sessions") ?: JSONArray()
         val cardList = List(cards.length()) { decodeCard(cards.getJSONObject(it)) }
         return LearningChapter(
             id = ch.getString("id"),
             title = ch.optString("title", ""),
             tag = if (ch.isNull("tag")) null else ch.optString("tag").takeIf { it.isNotBlank() },
             themeId = if (ch.isNull("themeId")) null else ch.optString("themeId").takeIf { it.isNotBlank() },
+            complement = if (ch.isNull("complement")) null else ch.optString("complement").takeIf { it.isNotBlank() },
+            sessions = List(sessionsJson.length()) { n ->
+                val se = sessionsJson.getJSONObject(n)
+                LearningSession(id = se.getString("id"), title = se.optString("title", ""))
+            },
             capsules = List(capsules.length()) { k ->
                 val cap = capsules.getJSONObject(k)
                 val capId = cap.getString("id")
@@ -139,7 +156,8 @@ class LearningContentCache(context: Context) {
                     body = cap.optString("body", ""),
                     minutes = cap.optInt("minutes", 0),
                     cards = cardList.filter { it.capsuleId == capId },
-                    kind = cap.optString("kind", "text")
+                    kind = cap.optString("kind", "text"),
+                    sessionId = if (cap.isNull("sessionId")) null else cap.optString("sessionId").takeIf { it.isNotBlank() }
                 )
             },
             cards = cardList

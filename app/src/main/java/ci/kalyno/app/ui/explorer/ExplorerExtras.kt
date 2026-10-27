@@ -36,15 +36,15 @@ private val DIACRITICS = Regex("\\p{InCombiningDiacriticalMarks}+")
 
 /**
  * Valeurs connues ("urgent", "populaire", "nouveau") : style dédié.
- * Toute autre valeur saisie par l'admin s'affiche telle quelle (emoji compris).
+ * Toute autre valeur saisie par l'admin s'affiche telle quelle.
  */
 private fun tagStyleFor(raw: String): TagStyle {
     val key = Normalizer.normalize(raw.trim().lowercase(), Normalizer.Form.NFD)
         .replace(DIACRITICS, "")
     return when (key) {
-        "urgent" -> TagStyle("🔴 Urgent", KalynoDangerSoft, KalynoDanger)
-        "populaire", "popular", "hot" -> TagStyle("⚡ Populaire", KalynoAmberSoft, KalynoAmberDeep)
-        "nouveau", "new" -> TagStyle("✨ Nouveau", KalynoBlueSoft, KalynoBlue)
+        "urgent" -> TagStyle("Urgent", KalynoDangerSoft, KalynoDanger)
+        "populaire", "popular", "hot" -> TagStyle("Populaire", KalynoAmberSoft, KalynoAmberDeep)
+        "nouveau", "new" -> TagStyle("Nouveau", KalynoBlueSoft, KalynoBlue)
         else -> TagStyle(raw.trim(), KalynoBlueSoft, KalynoBlue)
     }
 }
@@ -86,7 +86,8 @@ fun ExplorerHeroBanner(
         },
         background = KalynoBlue,
         borderColor = KalynoBlue,
-        contentPadding = 22.dp
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(18.dp),
+        contentPadding = 16.dp
     ) {
         KalynoPill(
             text = "À LA UNE",
@@ -94,16 +95,16 @@ fun ExplorerHeroBanner(
             content = KalynoAmberDeep,
             fontSize = 11
         )
-        Spacer(Modifier.height(14.dp))
+        Spacer(Modifier.height(10.dp))
         Text(
             text = banner.title,
             color = Color.White,
-            fontSize = 24.sp,
-            lineHeight = 30.sp,
+            fontSize = 20.sp,
+            lineHeight = 26.sp,
             fontWeight = FontWeight.ExtraBold
         )
         if (!banner.subtitle.isNullOrBlank()) {
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(6.dp))
             Text(
                 text = banner.subtitle,
                 color = Color.White.copy(alpha = 0.88f),
@@ -112,7 +113,7 @@ fun ExplorerHeroBanner(
             )
         }
         if (onClick != null) {
-            Spacer(Modifier.height(18.dp))
+            Spacer(Modifier.height(12.dp))
             Text(
                 text = banner.buttonLabel?.takeIf { it.isNotBlank() } ?: "Découvrir",
                 color = KalynoBlue,
@@ -121,7 +122,7 @@ fun ExplorerHeroBanner(
                 modifier = Modifier
                     .clip(CircleShape)
                     .background(Color.White)
-                    .padding(horizontal = 20.dp, vertical = 11.dp)
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
             )
         }
     }

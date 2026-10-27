@@ -34,8 +34,13 @@ data class LearningCapsule(
      * "tip" (astuce) ou "pitfall" (piège à éviter). "text" par défaut : si la colonne `kind`
      * n'existe pas encore côté back-end, l'app reste 100 % fonctionnelle.
      */
-    val kind: String = "text"
+    val kind: String = "text",
+    /** Séance de la leçon à laquelle appartient le bloc ; null = bloc hors séance (leçons créées avant les séances). */
+    val sessionId: String? = null
 )
+
+/** Séance d'une leçon (Séance 1, Séance 2…) : étape chronologique regroupant plusieurs blocs. */
+data class LearningSession(val id: String, val title: String)
 
 data class LearningChapter(
     val id: String,
@@ -45,7 +50,11 @@ data class LearningChapter(
     /** Smart Tag choisi par l'admin ("urgent", "populaire", texte libre…) ; null si absent. */
     val tag: String? = null,
     /** Thème (chapitre global) auquel appartient la leçon ; null tant que l'admin ne l'a pas rangée. */
-    val themeId: String? = null
+    val themeId: String? = null,
+    /** Séances de la leçon, dans l'ordre chronologique défini par l'admin (vide pour les anciennes leçons). */
+    val sessions: List<LearningSession> = emptyList(),
+    /** Notes et ressources complémentaires facultatives saisies par l'admin ; null si absentes. */
+    val complement: String? = null
 )
 
 /** Thème = chapitre global d'une discipline, qui regroupe plusieurs leçons. */
@@ -82,6 +91,7 @@ class SupabaseLearningRepository {
                                 val chapterId = chapter.getString("id")
 
                                 val capsuleRows = loadCapsuleRows(chapterId)
+                                val sessions = loadSessions(chapterId)
 
                                 val cards = loadCards(chapterId)
 
@@ -102,7 +112,8 @@ class SupabaseLearningRepository {
                                                 kind = capsule.optString("kind", "text")
                                                     .takeUnless {
                                                         it.isBlank() || it.equals("null", ignoreCase = true)
-                                                    } ?: "text"
+                                                    } ?: "text",
+                                                sessionId = capsule.textOrNull("session_id")
                                             )
                                         )
                                     }
@@ -115,7 +126,9 @@ class SupabaseLearningRepository {
                                         capsules = capsules,
                                         cards = cards,
                                         tag = chapter.textOrNull("tag"),
-                                        themeId = chapter.textOrNull("theme_id")
+                                        themeId = chapter.textOrNull("theme_id"),
+                                        sessions = sessions,
+                                        complement = chapter.textOrNull("complement")
                                     )
                                 )
                             }
@@ -178,17 +191,19 @@ class SupabaseLearningRepository {
     }
 
     /**
-     * Niveau de colonnes que la table `chapters` sait servir : 2 = tag + theme_id, 1 = tag, 0 = rien.
+     * Niveau de colonnes que la table `chapters` sait servir : 3 = tag + theme_id + complement, 2 = tag + theme_id,
+     * 1 = tag, 0 = rien.
      * On descend d'un cran dès que le back-end répond HTTP 400 (colonne inconnue) : l'app reste fonctionnelle
      * même si la migration SQL n'est pas encore passée.
      */
     @Volatile
-    private var chapterColumnsLevel = 2
+    private var chapterColumnsLevel = 3
 
     private fun loadChapterRows(subjectId: String): JSONArray {
         val filter = "&subject_id=eq.${enc(subjectId)}&status=eq.published&order=position.asc"
         while (true) {
             val columns = when (chapterColumnsLevel) {
+                3 -> "id,title,position,tag,theme_id,complement"
                 2 -> "id,title,position,tag,theme_id"
                 1 -> "id,title,position,tag"
                 else -> "id,title,position"
@@ -287,28 +302,57 @@ class SupabaseLearningRepository {
     private fun JSONObject.textOrNull(key: String): String? =
         optString(key).takeUnless { it.isBlank() || it.equals("null", ignoreCase = true) }
 
-    /** Faux dès qu'on sait que la table `capsules` n'a pas (encore) la colonne `kind`. */
+    /** Colonnes que la table `capsules` sait servir : 2 = kind + session_id, 1 = kind, 0 = rien (HTTP 400 = colonne inconnue). */
     @Volatile
-    private var capsuleKindSupported = true
+    private var capsuleColumnsLevel = 2
 
     /**
-     * Charge les blocs d'une leçon. On demande d'abord la colonne `kind` ; si le back-end ne la
-     * connaît pas encore (HTTP 400), on retombe sur l'ancienne requête sans casser l'écran.
+     * Charge les blocs d'une leçon. On demande d'abord `kind` et `session_id` ; si le back-end ne les
+     * connaît pas encore (HTTP 400), on descend d'un cran sans casser l'écran.
      */
     private fun loadCapsuleRows(chapterId: String): JSONArray {
         val filter = "&chapter_id=eq.${enc(chapterId)}&order=position.asc"
-        if (capsuleKindSupported) {
+        while (true) {
+            val columns = when (capsuleColumnsLevel) {
+                2 -> "id,title,body,minutes,position,kind,session_id"
+                1 -> "id,title,body,minutes,position,kind"
+                else -> "id,title,body,minutes,position"
+            }
             try {
-                return getArray("capsules?select=id,title,body,minutes,position,kind$filter")
+                return getArray("capsules?select=$columns$filter")
             } catch (e: IOException) {
-                if (e.message?.startsWith("Supabase HTTP 400") == true) {
-                    capsuleKindSupported = false
+                if (e.message?.startsWith("Supabase HTTP 400") == true && capsuleColumnsLevel > 0) {
+                    capsuleColumnsLevel--
                 } else {
                     throw e
                 }
             }
         }
-        return getArray("capsules?select=id,title,body,minutes,position$filter")
+    }
+
+    /** Séances d'une leçon. Table facultative : absente (404) ou non migrée (400) = aucune séance, rien ne casse. */
+    @Volatile
+    private var sessionsSupported = true
+
+    private fun loadSessions(chapterId: String): List<LearningSession> {
+        if (!sessionsSupported) return emptyList()
+        return try {
+            val rows = getArray(
+                "lesson_sessions?select=id,title,position&chapter_id=eq.${enc(chapterId)}&order=position.asc"
+            )
+            List(rows.length()) { i ->
+                val row = rows.getJSONObject(i)
+                LearningSession(id = row.getString("id"), title = row.optString("title", "").trim())
+            }
+        } catch (e: IOException) {
+            val message = e.message.orEmpty()
+            if (message.startsWith("Supabase HTTP 404") || message.startsWith("Supabase HTTP 400")) {
+                sessionsSupported = false
+                emptyList()
+            } else {
+                throw e
+            }
+        }
     }
 
     /** Faux dès qu'on sait que la table `cards` n'a pas (encore) la colonne `correct_indices`. */

@@ -220,15 +220,15 @@ private fun ExplorerHome(
             .fillMaxSize()
             .statusBarsPadding()
             .verticalScroll(scroll)
-            .padding(top = 20.dp, bottom = 28.dp),
-        verticalArrangement = Arrangement.spacedBy(18.dp)
+            .padding(top = 12.dp, bottom = 20.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         ui.banner?.let { banner ->
             val target = ui.chapters.firstOrNull { it.id == banner.chapterId }
             ExplorerHeroBanner(
                 banner = banner,
                 onClick = target?.let { chapter -> { onOpenLesson(chapter) } },
-                modifier = Modifier.padding(horizontal = 20.dp)
+                modifier = Modifier.padding(horizontal = 16.dp)
             )
         }
 
@@ -242,7 +242,7 @@ private fun ExplorerHome(
         SearchField(
             value = ui.query,
             onValueChange = viewModel::onQueryChange,
-            modifier = Modifier.padding(horizontal = 20.dp)
+            modifier = Modifier.padding(horizontal = 16.dp)
         )
 
         FilterChips(selected = ui.filter, onSelect = viewModel::onFilterChange)
@@ -251,7 +251,7 @@ private fun ExplorerHome(
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
-                    .padding(horizontal = 20.dp)
+                    .padding(horizontal = 16.dp)
                     .clip(CircleShape)
                     .background(KalynoAmberSoft)
                     .padding(horizontal = 14.dp, vertical = 8.dp)
@@ -275,7 +275,7 @@ private fun ExplorerHome(
             ui.error != null -> KalynoErrorCard(
                 message = ui.error ?: "",
                 onRetry = viewModel::retry,
-                modifier = Modifier.padding(horizontal = 20.dp)
+                modifier = Modifier.padding(horizontal = 16.dp)
             )
 
             ui.chapters.isEmpty() -> KalynoIconEmptyState(
@@ -288,7 +288,7 @@ private fun ExplorerHome(
                 progress = ui.subjectProgress,
                 levelLabel = Levels.label(levelId),
                 onOpenLeaderboard = onOpenLeaderboard,
-                modifier = Modifier.padding(horizontal = 20.dp)
+                modifier = Modifier.padding(horizontal = 16.dp)
             )
 
             visible.isEmpty() -> KalynoIconEmptyState(
@@ -335,29 +335,29 @@ private fun DisciplinesSection(
     // Rien à montrer (pas de discipline publiée) : on masque toute la section
     if (!loading && disciplines.isEmpty()) return
 
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         SectionHeader(
             title = "Disciplines",
             subtitle = "Choisis une matière pour voir ses leçons",
-            modifier = Modifier.padding(horizontal = 20.dp)
+            modifier = Modifier.padding(horizontal = 16.dp)
         )
 
         if (loading) {
             Row(
-                modifier = Modifier.padding(horizontal = 20.dp),
+                modifier = Modifier.padding(horizontal = 16.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 repeat(3) {
                     ShimmerBlock(
-                        modifier = Modifier.width(110.dp).height(46.dp),
-                        shape = RoundedCornerShape(18.dp)
+                        modifier = Modifier.width(96.dp).height(36.dp),
+                        shape = RoundedCornerShape(14.dp)
                     )
                 }
             }
         } else {
             LazyRow(
-                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 2.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(disciplines, key = { it.id }) { discipline ->
                     DisciplineChip(
@@ -375,7 +375,7 @@ private fun DisciplinesSection(
 @Composable
 private fun DisciplineChip(discipline: Discipline, selected: Boolean, onClick: () -> Unit) {
     val haptic = rememberHaptic()
-    val shape = RoundedCornerShape(18.dp)
+    val shape = RoundedCornerShape(14.dp)
 
     // Transition courte (120 ms) : le retour visuel est perçu comme instantané
     val container by animateColorAsState(
@@ -396,7 +396,7 @@ private fun DisciplineChip(discipline: Discipline, selected: Boolean, onClick: (
 
     Row(
         modifier = Modifier
-            .shadow(2.dp, shape, ambientColor = ChipShadow, spotColor = ChipShadow)
+            .shadow(1.dp, shape, ambientColor = ChipShadow, spotColor = ChipShadow)
             .background(container, shape)
             .border(1.dp, border, shape)
             .clip(shape)
@@ -404,15 +404,15 @@ private fun DisciplineChip(discipline: Discipline, selected: Boolean, onClick: (
                 haptic()
                 onClick()
             }
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+            .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        KalynoSvgIcon(name = iconAssetFor(discipline.iconKey), size = 18.dp, tint = content)
+        KalynoSvgIcon(name = iconAssetFor(discipline.iconKey), size = 16.dp, tint = content)
         Text(
             text = discipline.name,
             color = content,
-            fontSize = 14.sp,
+            fontSize = 13.sp,
             fontWeight = FontWeight.ExtraBold,
             maxLines = 1
         )
@@ -433,20 +433,21 @@ private fun SearchField(
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth().height(46.dp),
         singleLine = true,
-        shape = RoundedCornerShape(18.dp),
-        placeholder = { Text("Rechercher un cours, une matière…", color = KalynoMuted) },
-        leadingIcon = { KalynoSvgIcon(name = "search", size = 20.dp, tint = KalynoMuted) },
+        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 14.sp),
+        shape = RoundedCornerShape(14.dp),
+        placeholder = { Text("Rechercher un cours, une matière…", color = KalynoMuted, fontSize = 14.sp) },
+        leadingIcon = { KalynoSvgIcon(name = "search", size = 18.dp, tint = KalynoMuted) },
         trailingIcon = {
             if (value.isNotEmpty()) {
                 Box(
                     modifier = Modifier
                         .clip(CircleShape)
                         .clickable { onValueChange("") }
-                        .padding(12.dp)
+                        .padding(10.dp)
                 ) {
-                    KalynoSvgIcon(name = "x", size = 18.dp, tint = KalynoMuted)
+                    KalynoSvgIcon(name = "x", size = 16.dp, tint = KalynoMuted)
                 }
             }
         },
@@ -468,8 +469,8 @@ private fun SearchField(
 private fun FilterChips(selected: ExplorerFilter, onSelect: (ExplorerFilter) -> Unit) {
     val haptic = rememberHaptic()
     LazyRow(
-        contentPadding = PaddingValues(horizontal = 20.dp),
-        horizontalArrangement = Arrangement.spacedBy(10.dp)
+        contentPadding = PaddingValues(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         items(ExplorerFilter.entries.filter { it != ExplorerFilter.COMMUNITY }, key = { it.name }) { filter ->
             val isSelected = filter == selected
@@ -484,7 +485,7 @@ private fun FilterChips(selected: ExplorerFilter, onSelect: (ExplorerFilter) -> 
             Text(
                 text = filter.label,
                 color = content,
-                fontSize = 14.sp,
+                fontSize = 13.sp,
                 fontWeight = FontWeight.ExtraBold,
                 modifier = Modifier
                     .clip(CircleShape)
@@ -494,7 +495,7 @@ private fun FilterChips(selected: ExplorerFilter, onSelect: (ExplorerFilter) -> 
                         haptic()
                         onSelect(filter)
                     }
-                    .padding(horizontal = 18.dp, vertical = 10.dp)
+                    .padding(horizontal = 14.dp, vertical = 7.dp)
             )
         }
     }
@@ -524,30 +525,30 @@ private fun ForYouSection(
             .take(10)
     }
 
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         SectionHeader(
             title = "Sélection pour toi",
             subtitle = "Choisie pour ta classe",
-            modifier = Modifier.padding(horizontal = 20.dp)
+            modifier = Modifier.padding(horizontal = 16.dp)
         )
         if (picks.isEmpty()) {
             Text(
                 text = "Les cartes de tes chapitres arrivent bientôt.",
                 color = KalynoMuted,
                 fontSize = 14.sp,
-                modifier = Modifier.padding(horizontal = 20.dp)
+                modifier = Modifier.padding(horizontal = 16.dp)
             )
         } else {
             LazyRow(
-                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(14.dp)
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 2.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 items(picks, key = { it.id }) { chapter ->
                     CourseCard(
                         chapter = chapter,
                         onStart = { onStart(chapter) },
                         onOpen = { onOpen(chapter) },
-                        modifier = Modifier.width(272.dp)
+                        modifier = Modifier.width(248.dp)
                     )
                 }
             }
@@ -560,13 +561,13 @@ private fun NewPathsSection(chapters: List<ExplorerChapter>, onOpen: (ExplorerCh
     val latest = remember(chapters) { chapters.takeLast(6).reversed() }
     if (latest.isEmpty()) return
 
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         SectionHeader(
             title = "Nouveaux parcours",
             subtitle = "Publiés en direct",
-            modifier = Modifier.padding(horizontal = 20.dp)
+            modifier = Modifier.padding(horizontal = 16.dp)
         )
-        PathGrid(chapters = latest, onOpen = onOpen, modifier = Modifier.padding(horizontal = 20.dp))
+        PathGrid(chapters = latest, onOpen = onOpen, modifier = Modifier.padding(horizontal = 16.dp))
     }
 }
 
@@ -579,8 +580,8 @@ private fun ChallengesSection(
     val challenges = remember(chapters) { chapters.filter { it.questionCount > 0 } }
 
     Column(
-        modifier = Modifier.padding(horizontal = 20.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+        modifier = Modifier.padding(horizontal = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         SectionHeader(title = "Défis", subtitle = "Teste-toi chapitre par chapitre")
         if (challenges.isEmpty()) {
@@ -602,11 +603,11 @@ private fun PathsSection(chapters: List<ExplorerChapter>, onOpen: (ExplorerChapt
     val bySubject = remember(chapters) { chapters.groupBy { it.subjectId }.values.toList() }
 
     Column(
-        modifier = Modifier.padding(horizontal = 20.dp),
-        verticalArrangement = Arrangement.spacedBy(20.dp)
+        modifier = Modifier.padding(horizontal = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         bySubject.forEach { list ->
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 SectionHeader(title = list.first().subjectName)
                 PathGrid(chapters = list, onOpen = onOpen)
             }
@@ -630,9 +631,14 @@ private fun CourseCard(
     onOpen: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    KalynoCard(modifier = modifier, onClick = onOpen) {
+    KalynoCard(
+        modifier = modifier,
+        onClick = onOpen,
+        shape = RoundedCornerShape(16.dp),
+        contentPadding = 14.dp
+    ) {
         Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             KalynoPill(
@@ -641,20 +647,20 @@ private fun CourseCard(
             )
             SmartTagPill(chapter.tag)
         }
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(8.dp))
         Text(
             text = chapter.title,
             color = KalynoText,
-            fontSize = 18.sp,
-            lineHeight = 24.sp,
+            fontSize = 16.sp,
+            lineHeight = 21.sp,
             fontWeight = FontWeight.ExtraBold,
             minLines = 2,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis
         )
-        Spacer(Modifier.height(14.dp))
-        KalynoProgressBar(progress = chapter.progress)
-        Spacer(Modifier.height(6.dp))
+        Spacer(Modifier.height(10.dp))
+        KalynoProgressBar(progress = chapter.progress, height = 6.dp)
+        Spacer(Modifier.height(5.dp))
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 KalynoSvgIcon(name = "layers", size = 13.dp, tint = KalynoMuted)
@@ -682,7 +688,7 @@ private fun CourseCard(
                 fontWeight = FontWeight.ExtraBold
             )
         }
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(8.dp))
 
         // ----- Action secondaire : lire la théorie -----
         Row(
@@ -690,7 +696,7 @@ private fun CourseCard(
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(12.dp))
                 .clickable(onClick = onOpen)
-                .padding(vertical = 10.dp),
+                .padding(vertical = 7.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             KalynoSvgIcon(name = "book-open", size = 16.dp, tint = KalynoBlue)
@@ -704,14 +710,14 @@ private fun CourseCard(
             )
             KalynoSvgIcon(name = "chevron-right", size = 14.dp, tint = KalynoBlue)
         }
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(2.dp))
 
         // ----- Action principale : lancer l'exercice -----
         KalynoPrimaryButton(
             label = "DÉMARRER L'EXERCICE",
             onClick = onStart,
             enabled = chapter.questionCount > 0,
-            height = 48.dp
+            height = 42.dp
         )
     }
 }
@@ -723,9 +729,9 @@ private fun PathGrid(
     onOpen: (ExplorerChapter) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(14.dp)) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
         chapters.chunked(2).forEach { pair ->
-            Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 pair.forEach { chapter ->
                     PathCard(
                         chapter = chapter,
@@ -746,35 +752,40 @@ private fun PathCard(chapter: ExplorerChapter, onClick: () -> Unit, modifier: Mo
     val tileColor = if (warm) KalynoAmberSoft else KalynoBlueSoft
     val tint = if (warm) KalynoYellow else KalynoBlue
 
-    KalynoCard(modifier = modifier, onClick = onClick, contentPadding = 16.dp) {
+    KalynoCard(
+        modifier = modifier,
+        onClick = onClick,
+        shape = RoundedCornerShape(16.dp),
+        contentPadding = 12.dp
+    ) {
         Box(
             modifier = Modifier
-                .size(52.dp)
-                .clip(RoundedCornerShape(16.dp))
+                .size(38.dp)
+                .clip(RoundedCornerShape(12.dp))
                 .background(tileColor),
             contentAlignment = Alignment.Center
         ) {
-            KalynoSvgIcon(name = PATH_ICONS[index], size = 28.dp, tint = tint)
+            KalynoSvgIcon(name = PATH_ICONS[index], size = 22.dp, tint = tint)
         }
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(8.dp))
         Text(
             text = chapter.title,
             color = KalynoText,
-            fontSize = 15.sp,
-            lineHeight = 20.sp,
+            fontSize = 14.sp,
+            lineHeight = 18.sp,
             fontWeight = FontWeight.ExtraBold,
             minLines = 2,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis
         )
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(3.dp))
         Text(
             text = if (chapter.questionCount > 0) questionsLabel(chapter.questionCount) else "Leçons",
             color = KalynoMuted,
             fontSize = 12.sp
         )
         if (!chapter.tag.isNullOrBlank()) {
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(6.dp))
             SmartTagPill(chapter.tag)
         }
     }
@@ -890,24 +901,24 @@ private fun CommunityBanner(
 @Composable
 private fun ExplorerSkeleton() {
     Column(
-        modifier = Modifier.padding(horizontal = 20.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        modifier = Modifier.padding(horizontal = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        ShimmerBlock(Modifier.width(180.dp).height(22.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+        ShimmerBlock(Modifier.width(180.dp).height(20.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             repeat(2) {
                 ShimmerBlock(
-                    modifier = Modifier.weight(1f).height(210.dp),
-                    shape = RoundedCornerShape(24.dp)
+                    modifier = Modifier.weight(1f).height(150.dp),
+                    shape = RoundedCornerShape(16.dp)
                 )
             }
         }
-        ShimmerBlock(Modifier.width(160.dp).height(22.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+        ShimmerBlock(Modifier.width(160.dp).height(20.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             repeat(2) {
                 ShimmerBlock(
-                    modifier = Modifier.weight(1f).height(130.dp),
-                    shape = RoundedCornerShape(24.dp)
+                    modifier = Modifier.weight(1f).height(96.dp),
+                    shape = RoundedCornerShape(16.dp)
                 )
             }
         }

@@ -53,7 +53,11 @@ data class ExplorerChapter(
     /** Icône vectorielle de la discipline (clé admin), null = icône par défaut. */
     val subjectIconKey: String? = null,
     /** Thème (chapitre global) de la leçon, null tant que l'admin ne l'a pas rangée. */
-    val themeId: String? = null
+    val themeId: String? = null,
+    /** Séances chronologiques de la leçon (vide pour les anciennes leçons). */
+    val sessions: List<ci.kalyno.app.data.LearningSession> = emptyList(),
+    /** Notes et ressources complémentaires facultatives (admin), null si absentes. */
+    val complement: String? = null
 ) {
     val questionCount: Int get() = items.size
     val progress: Float
@@ -348,7 +352,9 @@ class ExplorerViewModel(app: Application) : AndroidViewModel(app) {
                     items = items,
                     tag = chapter.tag,
                     subjectIconKey = subject.iconKey,
-                    themeId = chapter.themeId
+                    themeId = chapter.themeId,
+                    sessions = chapter.sessions,
+                    complement = chapter.complement
                 )
             }
         }

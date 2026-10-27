@@ -212,7 +212,7 @@ fun LessonBlockView(block: LessonBlock, modifier: Modifier = Modifier) {
         LessonBlockType.TEXT -> TextBlock(block, modifier)
         LessonBlockType.RULE -> AccentBlock(
             block = block,
-            label = "⭐ FORMULE · RÈGLE D'OR",
+            label = "FORMULE · RÈGLE D'OR",
             labelColor = KalynoBlue,
             accent = KalynoBlue,
             container = KalynoBlueSoft,
@@ -221,7 +221,7 @@ fun LessonBlockView(block: LessonBlock, modifier: Modifier = Modifier) {
         )
         LessonBlockType.TIP -> AccentBlock(
             block = block,
-            label = "💡 ASTUCE",
+            label = "ASTUCE",
             labelColor = KalynoAmberDeep,
             accent = KalynoYellow,
             container = KalynoAmberSoft,
@@ -229,7 +229,7 @@ fun LessonBlockView(block: LessonBlock, modifier: Modifier = Modifier) {
         )
         LessonBlockType.PITFALL -> AccentBlock(
             block = block,
-            label = "⚠️ PIÈGE À ÉVITER",
+            label = "PIÈGE À ÉVITER",
             labelColor = ci.kalyno.app.ui.theme.KalynoDanger,
             accent = ci.kalyno.app.ui.theme.KalynoDanger,
             container = ci.kalyno.app.ui.theme.KalynoDangerSoft,
