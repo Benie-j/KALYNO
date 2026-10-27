@@ -36,13 +36,27 @@ data class MissionUi(
     val subjectName: String,
     val subjectEmoji: String,
     val chapterTitle: String,
-    val minutes: Int,
     val doneToday: Int,
     val targetToday: Int,
     val items: List<ReviewItem>
 ) {
     val progress: Float
         get() = if (targetToday <= 0) 0f else (doneToday.toFloat() / targetToday).coerceIn(0f, 1f)
+
+    /** Nombre de cartes de CET exercice (jamais le nombre de blocs de la leçon). */
+    val questionCount: Int get() = items.size
+
+    /**
+     * Durée estimée de RÉSOLUTION de l'exercice (≈35 s/carte), pas la durée de lecture
+     * de la leçon dont ces cartes sont issues. Null si l'exercice est vide.
+     */
+    val estimatedMinutes: Int?
+        get() = items.size.takeIf { it > 0 }
+            ?.let { kotlin.math.ceil(it * SECONDS_PER_CARD / 60.0).toInt().coerceAtLeast(1) }
+
+    private companion object {
+        const val SECONDS_PER_CARD = 35.0
+    }
 }
 
 data class UrgentTopic(val label: String, val count: Int)

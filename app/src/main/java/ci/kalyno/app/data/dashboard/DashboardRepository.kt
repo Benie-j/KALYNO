@@ -327,7 +327,6 @@ class DashboardRepository(context: Context) {
             subjectName = chosen.subject.name,
             subjectEmoji = chosen.subject.emoji,
             chapterTitle = firstChapter.title,
-            minutes = firstChapter.capsules.sumOf { it.minutes },
             doneToday = doneToday,
             targetToday = targetToday,
             items = items

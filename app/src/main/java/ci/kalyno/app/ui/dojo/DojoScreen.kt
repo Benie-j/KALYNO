@@ -28,6 +28,7 @@ import ci.kalyno.app.data.dashboard.DashboardUiState
 import ci.kalyno.app.data.dashboard.MissionStatus
 import ci.kalyno.app.ui.components.KalynoCard
 import ci.kalyno.app.ui.components.KalynoErrorCard
+import ci.kalyno.app.ui.icons.KalynoSvgIcon
 import ci.kalyno.app.ui.components.KalynoPill
 import ci.kalyno.app.ui.components.KalynoPrimaryButton
 import ci.kalyno.app.ui.components.KalynoProgressBar
@@ -183,6 +184,36 @@ private fun UrgentHero(state: DashboardUiState, onReview: () -> Unit) {
     }
 }
 
+/**
+ * Métadonnées propres à L'EXERCICE (pas à la leçon dont il est issu) : nombre de cartes
+ * et durée estimée de résolution. [difficultyLevel] n'existe pas encore côté admin —
+ * cette carte est prête à l'afficher dès qu'il sera publié, mais ne l'invente pas.
+ */
+@Composable
+private fun ExerciseHeaderStats(questionCount: Int, estimatedMinutes: Int?) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        KalynoSvgIcon(name = "help-circle", size = 15.dp, tint = KalynoMuted)
+        Spacer(Modifier.width(6.dp))
+        Text(
+            text = if (questionCount == 1) "1 carte à découvrir" else "$questionCount cartes à découvrir",
+            color = KalynoMuted,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Medium
+        )
+        if (estimatedMinutes != null) {
+            Spacer(Modifier.width(14.dp))
+            KalynoSvgIcon(name = "clock", size = 15.dp, tint = KalynoMuted)
+            Spacer(Modifier.width(6.dp))
+            Text(
+                text = "$estimatedMinutes min",
+                color = KalynoMuted,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium
+            )
+        }
+    }
+}
+
 @Composable
 private fun MissionBlock(
     state: DashboardUiState,
@@ -192,7 +223,11 @@ private fun MissionBlock(
     val mission = state.mission
 
     KalynoCard(modifier = Modifier.fillMaxWidth()) {
-        SectionHeader(title = "🎯 Mission du jour")
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            KalynoSvgIcon(name = "target", size = 18.dp, tint = KalynoBlue)
+            Spacer(Modifier.width(8.dp))
+            SectionHeader(title = "Mission du jour")
+        }
         Spacer(Modifier.height(12.dp))
 
         when {
@@ -221,15 +256,10 @@ private fun MissionBlock(
                     lineHeight = 26.sp,
                     fontWeight = FontWeight.ExtraBold
                 )
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    text = buildString {
-                        val n = mission.items.size
-                        append(if (n == 1) "⏱️ 1 carte à découvrir" else "⏱️ $n cartes à découvrir")
-                        if (mission.minutes > 0) append(" • ${mission.minutes} min")
-                    },
-                    color = KalynoMuted,
-                    fontSize = 14.sp
+                Spacer(Modifier.height(10.dp))
+                ExerciseHeaderStats(
+                    questionCount = mission.questionCount,
+                    estimatedMinutes = mission.estimatedMinutes
                 )
                 Spacer(Modifier.height(14.dp))
                 KalynoProgressBar(progress = mission.progress)
