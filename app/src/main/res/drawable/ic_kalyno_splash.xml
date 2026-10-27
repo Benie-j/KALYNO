@@ -9,15 +9,15 @@
         android:scaleX="0.228"
         android:scaleY="0.228"
         android:translateX="-22.5">
-        <path android:fillColor="#2457C5" android:pathData="M54,4 A50,50 0,1 1,54 104 A50,50 0,1 1,54 4"/>
+        <path android:fillColor="@color/kalyno_blue" android:pathData="M54,4 A50,50 0,1 1,54 104 A50,50 0,1 1,54 4"/>
         <path android:fillColor="#FFFFFF" android:pathData="M25,31 C35,28 44,31 54,37 L54,78 C44,72 35,69 25,73 Z"/>
-        <path android:fillColor="#EAF0FF" android:pathData="M83,31 C73,28 64,31 54,37 L54,78 C64,72 73,69 83,73 Z"/>
-        <path android:fillColor="#FFC857" android:pathData="M52,37 L56,37 L56,80 L52,80 Z"/>
+        <path android:fillColor="@color/kalyno_splash_page" android:pathData="M83,31 C73,28 64,31 54,37 L54,78 C64,72 73,69 83,73 Z"/>
+        <path android:fillColor="@color/kalyno_yellow" android:pathData="M52,37 L56,37 L56,80 L52,80 Z"/>
     </group>
-    <path android:fillColor="#2457C5" android:pathData="M48.75,50.37 H50.35 V52.75 L52.45,50.37 H54.3 L51.65,53.85 L54.3,57.63 H52.4 L50.35,55.4 V57.63 H48.75 Z"/>
-    <path android:fillColor="#2457C5" android:fillType="evenOdd" android:pathData="M55.05,57.63 L57.3,50.37 H59.02 L61.27,57.63 H59.5 L59.05,56.1 H57.27 L56.82,57.63 Z M57.62,54.75 H58.7 L58.16,52.5 Z"/>
-    <path android:fillColor="#2457C5" android:pathData="M62.02,50.37 H63.62 V56.13 H66.7 V57.63 H62.02 Z"/>
-    <path android:fillColor="#2457C5" android:pathData="M67.35,50.37 H69.2 L70.4,52.3 L71.6,50.37 H73.46 L71.2,54.2 V57.63 H69.6 V54.2 Z"/>
-    <path android:fillColor="#2457C5" android:pathData="M74.16,50.37 H76 L78.87,54.9 V50.37 H80.47 V57.63 H78.65 L75.76,52.95 V57.63 H74.16 Z"/>
-    <path android:fillColor="#2457C5" android:fillType="evenOdd" android:pathData="M81.37,54 a3.07,3.7 0 1,0 6.14,0 a3.07,3.7 0 1,0 -6.14,0 z M83.04,54 a1.4,2.2 0 1,0 2.8,0 a1.4,2.2 0 1,0 -2.8,0 z"/>
+    <path android:fillColor="@color/kalyno_blue" android:pathData="M48.75,50.37 H50.35 V52.75 L52.45,50.37 H54.3 L51.65,53.85 L54.3,57.63 H52.4 L50.35,55.4 V57.63 H48.75 Z"/>
+    <path android:fillColor="@color/kalyno_blue" android:fillType="evenOdd" android:pathData="M55.05,57.63 L57.3,50.37 H59.02 L61.27,57.63 H59.5 L59.05,56.1 H57.27 L56.82,57.63 Z M57.62,54.75 H58.7 L58.16,52.5 Z"/>
+    <path android:fillColor="@color/kalyno_blue" android:pathData="M62.02,50.37 H63.62 V56.13 H66.7 V57.63 H62.02 Z"/>
+    <path android:fillColor="@color/kalyno_blue" android:pathData="M67.35,50.37 H69.2 L70.4,52.3 L71.6,50.37 H73.46 L71.2,54.2 V57.63 H69.6 V54.2 Z"/>
+    <path android:fillColor="@color/kalyno_blue" android:pathData="M74.16,50.37 H76 L78.87,54.9 V50.37 H80.47 V57.63 H78.65 L75.76,52.95 V57.63 H74.16 Z"/>
+    <path android:fillColor="@color/kalyno_blue" android:fillType="evenOdd" android:pathData="M81.37,54 a3.07,3.7 0 1,0 6.14,0 a3.07,3.7 0 1,0 -6.14,0 z M83.04,54 a1.4,2.2 0 1,0 2.8,0 a1.4,2.2 0 1,0 -2.8,0 z"/>
 </vector>

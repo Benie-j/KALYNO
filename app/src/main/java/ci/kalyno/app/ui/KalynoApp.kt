@@ -67,7 +67,7 @@ fun KalynoApp() {
 
     val current = level
     val name = nickname
-    val accountLabel = if (auth.signedIn) (authStore.userName() ?: authStore.userEmail()) else null
+    val accountLabel = if (auth.signedIn) (authStore.userEmail() ?: authStore.userName()) else null
 
     when {
         showLogin -> {

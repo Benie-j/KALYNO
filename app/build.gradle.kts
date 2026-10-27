@@ -5,6 +5,14 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+// Version auto-incrémentée : 1 commit git = +1 (versionCode et dernier chiffre du versionName)
+val gitCommitCount: Int = runCatching {
+    providers.exec {
+        commandLine("git", "rev-list", "--count", "HEAD")
+        isIgnoreExitValue = true
+    }.standardOutput.asText.get().trim().toInt()
+}.getOrDefault(1).coerceAtLeast(1)
+
 android {
     namespace = "ci.kalyno.app"
     compileSdk = 36
@@ -35,8 +43,8 @@ android {
         applicationId = "ci.kalyno.app"
         minSdk = 23
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = gitCommitCount
+        versionName = "1.0.$gitCommitCount"
     }
 
     buildFeatures {
@@ -76,6 +84,7 @@ dependencies {
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-core")
+    implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.compose.animation:animation")
     implementation("ru.noties:jlatexmath-android:0.2.0")
 

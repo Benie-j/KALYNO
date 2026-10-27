@@ -39,6 +39,7 @@ import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import ci.kalyno.app.ui.theme.KalynoBackground
 import ci.kalyno.app.ui.theme.KalynoBlue
 import ci.kalyno.app.ui.KalynoApp
+import ci.kalyno.app.ui.splash.SplashVersionFooter
 import ci.kalyno.app.ui.theme.KalynoTheme
 import ci.kalyno.app.ui.theme.KalynoYellow
 import ci.kalyno.app.ui.theme.KalynoText
@@ -79,7 +80,10 @@ class MainActivity : ComponentActivity() {
                     if (showHome) {
                         KalynoApp()
                     } else {
-                        ComposeSplash()
+                        Box(Modifier.fillMaxSize()) {
+                            ComposeSplash()
+                            SplashVersionFooter(Modifier.align(Alignment.BottomCenter))
+                        }
                     }
                 }
             }

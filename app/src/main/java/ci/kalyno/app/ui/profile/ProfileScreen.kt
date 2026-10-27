@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -14,10 +15,23 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BugReport
+import androidx.compose.material.icons.filled.ChatBubbleOutline
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.CloudOff
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Lightbulb
+import androidx.compose.material.icons.filled.LocalFireDepartment
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.School
+import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -49,14 +63,7 @@ import ci.kalyno.app.ui.theme.KalynoDanger
 import ci.kalyno.app.ui.theme.KalynoDangerBorder
 import ci.kalyno.app.ui.theme.KalynoMuted
 import ci.kalyno.app.ui.theme.KalynoText
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewmodel.compose.viewModel
-import ci.kalyno.app.ui.badges.BadgesScreen
-import ci.kalyno.app.ui.badges.BadgesViewModel
-import ci.kalyno.app.ui.badges.RewardUnlockedDialog
 import ci.kalyno.app.ui.theme.KalynoYellow
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
 
 // Fonds de bulles d'icônes (doux, jamais criards)
 private val SkyBubble = Color(0xFFE0F2FE)
@@ -66,15 +73,16 @@ private val SlateBubble = Color(0xFFF1F5F9)
  * Écran Profil & Paramètres ("Settings Hub").
  *
  * Écran sans état : toute la navigation sort par callbacks, MainScreen décide quoi ouvrir.
+ *
+ * @param userEmail e-mail du compte connecté. `null` = invité / non connecté : aucun statut
+ *                  de synchronisation n'est alors affiché (ni check vert, ni "sauvegarde active").
  */
 @Composable
 fun ProfileScreen(
     levelId: String,
     nickname: String,
     streak: Int,
-    signedIn: Boolean,
-    accountLabel: String?,
-    appVersionLabel: String,
+    userEmail: String?,
     onChangeLevel: () -> Unit,
     onLoginClick: () -> Unit,
     onLogoutClick: () -> Unit,
@@ -85,37 +93,7 @@ fun ProfileScreen(
     onOpenPrivacy: () -> Unit
 ) {
     var showLogoutDialog by rememberSaveable { mutableStateOf(false) }
-    var showBadges by rememberSaveable { mutableStateOf(false) }
-
-    if (showBadges) {
-        val badgesViewModel: BadgesViewModel = viewModel()
-        val badgesState by badgesViewModel.state.collectAsStateWithLifecycle()
-        androidx.compose.runtime.LaunchedEffect(Unit) { badgesViewModel.refresh() }
-
-        androidx.compose.foundation.layout.Column(
-            modifier = Modifier.fillMaxSize().background(KalynoBackground).statusBarsPadding()
-        ) {
-            androidx.compose.material3.IconButton(
-                onClick = { showBadges = false },
-                modifier = Modifier.padding(start = 12.dp, top = 8.dp)
-            ) {
-                androidx.compose.material3.Icon(
-                    androidx.compose.material.icons.Icons.Default.ArrowBack,
-                    contentDescription = "Retour",
-                    tint = KalynoText
-                )
-            }
-            BadgesScreen(badges = badgesState.badges, modifier = Modifier.weight(1f))
-        }
-        badgesState.pendingReward?.let { reward ->
-            RewardUnlockedDialog(
-                badge = reward,
-                onShare = { /* réutilise le pipeline de partage existant (QuoteShareActions) — à brancher si besoin d'une image dédiée au badge */ },
-                onDismiss = { badgesViewModel.consumeReward() }
-            )
-        }
-        return
-    }
+    val isConnected = userEmail != null
 
     LazyColumn(
         modifier = Modifier
@@ -138,38 +116,13 @@ fun ProfileScreen(
         item {
             SettingsGroup(title = "MON COMPTE") {
                 SettingsItem(
-                    icon = "🏆",
-                    title = "Mes trophées",
-                    subtitle = "Badges débloqués et progression",
-                    iconBackground = KalynoAmberSoft,
-                    onClick = { showBadges = true }
-                )
-                SettingsItem(
-                    icon = "🎓",
+                    icon = Icons.Default.School,
                     title = "Changer de classe",
                     subtitle = Levels.label(levelId),
                     iconBackground = KalynoBlueSoft,
                     onClick = onChangeLevel
                 )
-                if (signedIn) {
-                    SettingsItem(
-                        icon = "☁️",
-                        title = "Synchronisation Cloud",
-                        subtitle = "Sauvegarde en temps réel" + (accountLabel?.let { " · $it" } ?: ""),
-                        iconBackground = KalynoCorrectSoft,
-                        trailing = { SuccessCheck() },
-                        showDivider = false
-                    )
-                } else {
-                    SettingsItem(
-                        icon = "☁️",
-                        title = "Synchronisation Cloud",
-                        subtitle = "Connecte-toi pour sauvegarder ta progression",
-                        iconBackground = KalynoAmberSoft,
-                        onClick = onLoginClick,
-                        showDivider = false
-                    )
-                }
+                CloudStatusItem(userEmail = userEmail, onLoginClick = onLoginClick)
             }
         }
 
@@ -177,50 +130,47 @@ fun ProfileScreen(
         item {
             SettingsGroup(title = "AIDE & ASSISTANCE") {
                 SettingsItem(
-                    icon = "💡",
+                    icon = Icons.Default.Lightbulb,
                     title = "Centre d'aide & FAQ",
                     subtitle = "Comprendre l'Active Recall et le SRS",
                     iconBackground = KalynoBlueSoft,
                     onClick = onOpenHelp
                 )
                 SettingsItem(
-                    icon = "💬",
+                    icon = Icons.Default.ChatBubbleOutline,
                     title = "Contacter l'assistance",
                     subtitle = "Échange avec l'équipe KALYNO",
                     iconBackground = SkyBubble,
                     onClick = onContactSupport
                 )
                 SettingsItem(
-                    icon = "⚠️",
+                    icon = Icons.Default.BugReport,
                     title = "Signaler un bug ou un contenu",
                     subtitle = "Une erreur dans un cours ? Dis-le-nous",
                     iconBackground = KalynoAmberSoft,
+                    iconTint = KalynoAmberDeep,
                     onClick = onReportIssue,
                     showDivider = false
                 )
             }
         }
 
-        // ----- D. Légal & à propos -----
+        // ----- D. Légal (la version de l'app vit désormais sur le splash) -----
         item {
-            SettingsGroup(title = "LÉGAL & À PROPOS") {
+            SettingsGroup(title = "LÉGAL") {
                 SettingsItem(
-                    icon = "📄",
+                    icon = Icons.Default.Description,
                     title = "Conditions Générales d'Utilisation",
                     iconBackground = SlateBubble,
+                    iconTint = KalynoMuted,
                     onClick = onOpenTerms
                 )
                 SettingsItem(
-                    icon = "🔒",
+                    icon = Icons.Default.Lock,
                     title = "Politique de confidentialité",
                     iconBackground = SlateBubble,
-                    onClick = onOpenPrivacy
-                )
-                SettingsItem(
-                    icon = "📱",
-                    title = "Version de l'application",
-                    subtitle = appVersionLabel,
-                    iconBackground = SlateBubble,
+                    iconTint = KalynoMuted,
+                    onClick = onOpenPrivacy,
                     showDivider = false
                 )
             }
@@ -228,10 +178,10 @@ fun ProfileScreen(
 
         // ----- E. Déconnexion (ou connexion pour un invité) -----
         item {
-            if (signedIn) {
+            if (isConnected) {
                 LogoutButton(label = "Se déconnecter", onClick = { showLogoutDialog = true })
             } else {
-                KalynoPrimaryButton(label = "SE CONNECTER AVEC GOOGLE", onClick = onLoginClick)
+                KalynoPrimaryButton(label = "SE CONNECTER", onClick = onLoginClick)
             }
         }
     }
@@ -243,7 +193,7 @@ fun ProfileScreen(
             title = { Text("Se déconnecter ?", fontWeight = FontWeight.ExtraBold, color = KalynoText) },
             text = {
                 Text(
-                    "Tu pourras te reconnecter à tout moment avec Google pour retrouver ta progression.",
+                    "Tu pourras te reconnecter à tout moment pour retrouver ta progression.",
                     color = KalynoMuted
                 )
             },
@@ -260,6 +210,47 @@ fun ProfileScreen(
                     Text("Annuler", color = KalynoMuted, fontWeight = FontWeight.Bold)
                 }
             }
+        )
+    }
+}
+
+// ===========================================================================
+// CLOUD : jamais de faux statut
+// ===========================================================================
+
+/**
+ * Carte Cloud, deux états exclusifs :
+ * - connecté (`userEmail != null`) : e-mail + icône de synchro active + CheckCircle vert ;
+ * - invité : "Compte non connecté", icône neutre CloudOff, carte cliquable vers la connexion.
+ */
+@Composable
+private fun CloudStatusItem(userEmail: String?, onLoginClick: () -> Unit) {
+    if (userEmail != null) {
+        SettingsItem(
+            icon = Icons.Default.Sync,
+            title = "Synchronisation Cloud",
+            subtitle = userEmail,
+            iconBackground = KalynoCorrectSoft,
+            iconTint = KalynoCorrect,
+            trailing = {
+                Icon(
+                    imageVector = Icons.Default.CheckCircle,
+                    contentDescription = "Synchronisation active",
+                    tint = KalynoCorrect,
+                    modifier = Modifier.size(26.dp)
+                )
+            },
+            showDivider = false
+        )
+    } else {
+        SettingsItem(
+            icon = Icons.Default.CloudOff,
+            title = "Compte non connecté",
+            subtitle = "Connecte-toi pour sauvegarder ta progression",
+            iconBackground = SlateBubble,
+            iconTint = KalynoMuted,
+            onClick = onLoginClick,
+            showDivider = false
         )
     }
 }
@@ -311,38 +302,35 @@ private fun ProfileHeader(nickname: String, classLabel: String, streak: Int) {
     }
 }
 
-/** Badge de série : flamme + accent orange chaleureux. */
+/** Badge de série : flamme vectorielle + accent orange chaleureux. */
 @Composable
 private fun StreakChip(streak: Int) {
     val label = when (streak) {
-        0 -> "🔥 Lance ta série aujourd'hui"
-        1 -> "🔥 1 jour de série"
-        else -> "🔥 $streak jours de série"
+        0 -> "Lance ta série aujourd'hui"
+        1 -> "1 jour de série"
+        else -> "$streak jours de série"
     }
-    Text(
-        text = label,
-        color = KalynoAmberDeep,
-        fontSize = 14.sp,
-        fontWeight = FontWeight.ExtraBold,
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .clip(CircleShape)
             .background(KalynoAmberSoft)
             .border(1.dp, KalynoYellow, CircleShape)
-            .padding(horizontal = 16.dp, vertical = 9.dp)
-    )
-}
-
-/** Pastille verte de succès (synchronisation active). */
-@Composable
-private fun SuccessCheck() {
-    Box(
-        modifier = Modifier
-            .size(26.dp)
-            .clip(CircleShape)
-            .background(KalynoCorrect),
-        contentAlignment = Alignment.Center
+            .padding(horizontal = 14.dp, vertical = 8.dp)
     ) {
-        Text(text = "✓", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold)
+        Icon(
+            imageVector = Icons.Default.LocalFireDepartment,
+            contentDescription = null,
+            tint = KalynoAmberDeep,
+            modifier = Modifier.size(18.dp)
+        )
+        Spacer(Modifier.width(6.dp))
+        Text(
+            text = label,
+            color = KalynoAmberDeep,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.ExtraBold
+        )
     }
 }
 

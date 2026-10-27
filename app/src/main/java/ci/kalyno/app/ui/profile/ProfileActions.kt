@@ -49,3 +49,9 @@ fun Context.appVersionLabel(): String {
         ?: "1.0"
     return "KALYNO v$version · Online Edition"
 }
+
+/** Ex. "1.0.57" : versionName du build (auto-incrémenté), vide si illisible. */
+fun Context.appVersionName(): String =
+    runCatching { packageManager.getPackageInfo(packageName, 0).versionName }
+        .getOrNull()
+        .orEmpty()

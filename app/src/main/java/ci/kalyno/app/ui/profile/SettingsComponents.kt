@@ -15,6 +15,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -22,12 +25,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ci.kalyno.app.ui.components.rememberHaptic
+import ci.kalyno.app.ui.theme.KalynoBlue
 import ci.kalyno.app.ui.theme.KalynoBlueSoft
 import ci.kalyno.app.ui.theme.KalynoMuted
 import ci.kalyno.app.ui.theme.KalynoOutline
@@ -78,18 +83,19 @@ fun SettingsGroup(
 }
 
 /**
- * Une ligne de réglage : icône (emoji) dans une bulle colorée, titre, sous-titre optionnel,
+ * Une ligne de réglage : icône vectorielle dans une bulle colorée, titre, sous-titre optionnel,
  * puis [trailing] ou une flèche si la ligne est cliquable (ripple + vibration légère).
  *
  * [showDivider] : filet fin sous la ligne (à désactiver sur la dernière ligne du groupe).
  */
 @Composable
 fun SettingsItem(
-    icon: String,
+    icon: ImageVector,
     title: String,
     modifier: Modifier = Modifier,
     subtitle: String? = null,
     iconBackground: Color = KalynoBlueSoft,
+    iconTint: Color = KalynoBlue,
     titleColor: Color = KalynoText,
     onClick: (() -> Unit)? = null,
     trailing: (@Composable () -> Unit)? = null,
@@ -122,7 +128,12 @@ fun SettingsItem(
                     .background(iconBackground),
                 contentAlignment = Alignment.Center
             ) {
-                Text(text = icon, fontSize = 18.sp)
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = iconTint,
+                    modifier = Modifier.size(22.dp)
+                )
             }
 
             Spacer(Modifier.width(14.dp))
@@ -152,11 +163,11 @@ fun SettingsItem(
                 trailing()
             } else if (onClick != null) {
                 Spacer(Modifier.width(8.dp))
-                Text(
-                    text = "›",
-                    color = KalynoMuted,
-                    fontSize = 26.sp,
-                    fontWeight = FontWeight.Bold
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    contentDescription = null,
+                    tint = KalynoMuted,
+                    modifier = Modifier.size(24.dp)
                 )
             }
         }

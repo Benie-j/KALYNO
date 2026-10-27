@@ -6,4 +6,5 @@
     <color name="kalyno_purple">#8457D9</color>
     <color name="kalyno_background">#F8FAFC</color>
     <color name="kalyno_text">#0F172A</color>
+    <color name="kalyno_splash_page">#EAF0FF</color>
 </resources>
