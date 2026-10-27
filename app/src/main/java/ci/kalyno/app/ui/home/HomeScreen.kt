@@ -19,7 +19,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -131,23 +133,17 @@ fun HomeScreen(
             }
         }
 
-        if (canLogin) Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(24.dp))
-                    .background(KalynoBlueSoft)
-                    .clickable(onClick = onLoginClick)
-                    .padding(horizontal = 24.dp, vertical = 12.dp)
+        if (canLogin) {
+            TextButton(
+                onClick = onLoginClick,
+                modifier = Modifier.align(Alignment.CenterHorizontally),
+                colors = ButtonDefaults.textButtonColors(contentColor = KalynoBlue)
             ) {
                 Text(
-                    text = "Je suis un ancien",
-                    color = KalynoBlue,
+                    text = "J'ai déjà un compte",
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Bold
                 )
-                Spacer(Modifier.width(6.dp))
-                KalynoSvgIcon(name = "chevron-right", size = 18.dp, tint = KalynoBlue)
             }
         }
     }
