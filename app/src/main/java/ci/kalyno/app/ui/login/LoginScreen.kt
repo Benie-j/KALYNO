@@ -17,6 +17,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import ci.kalyno.app.ui.auth.EmailStage
 import ci.kalyno.app.ui.theme.*
 
 /** Connexion pour un élève qui a déjà un compte (même flux Google que l'inscription). */
