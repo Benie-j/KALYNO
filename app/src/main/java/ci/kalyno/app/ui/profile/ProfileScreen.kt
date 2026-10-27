@@ -55,6 +55,8 @@ import ci.kalyno.app.ui.badges.BadgesScreen
 import ci.kalyno.app.ui.badges.BadgesViewModel
 import ci.kalyno.app.ui.badges.RewardUnlockedDialog
 import ci.kalyno.app.ui.theme.KalynoYellow
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
 
 // Fonds de bulles d'icônes (doux, jamais criards)
 private val SkyBubble = Color(0xFFE0F2FE)
