@@ -10,6 +10,9 @@ import java.time.LocalDate
 /** Citation du jour affichée sur l'Accueil. */
 data class DailyQuote(val text: String, val author: String?)
 
+/** Une citation et le jour où elle était (ou sera) la citation du jour. */
+data class QuoteDay(val date: LocalDate, val quote: DailyQuote)
+
 /**
  * Citations publiées par l'admin (table `daily_quotes` de Supabase).
  *
@@ -41,6 +44,19 @@ class DailyQuotes(context: Context) {
             // hors connexion ou table absente : on garde la liste déjà connue
         }
         return cached(levelId, today)
+    }
+
+    /** Toutes les citations déjà gardées sur le téléphone pour cette classe (sert au shuffle). */
+    fun all(levelId: String): List<DailyQuote> = readAll(levelId)
+
+    /** Les 7 derniers jours, aujourd'hui en premier, dans le même ordre fixe que la citation du jour. */
+    fun week(levelId: String, today: LocalDate = LocalDate.now()): List<QuoteDay> {
+        val list = readAll(levelId)
+        if (list.isEmpty()) return emptyList()
+        return (0L..6L).mapNotNull { back ->
+            val day = today.minusDays(back)
+            pick(list, day)?.let { QuoteDay(day, it) }
+        }
     }
 
     private fun pick(list: List<DailyQuote>, today: LocalDate): DailyQuote? =

@@ -26,15 +26,17 @@ import ci.kalyno.app.data.srs.SubjectEntity
         CatalogLevelEntity::class,
         CatalogSubjectEntity::class,
         CatalogThemeEntity::class,
-        CatalogLessonEntity::class
+        CatalogLessonEntity::class,
+        QuoteFavoriteEntity::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 abstract class KalynoDatabase : RoomDatabase() {
     abstract fun srsDao(): SrsDao
     abstract fun dashboardDao(): DashboardDao
     abstract fun catalogDao(): CatalogDao
+    abstract fun quoteFavoriteDao(): QuoteFavoriteDao
 
     companion object {
         @Volatile
@@ -105,13 +107,24 @@ abstract class KalynoDatabase : RoomDatabase() {
             }
         }
 
+        /** Citations épinglées par l'élève (cœur de la carte "Citation du jour"). */
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `quote_favorites` (`quoteKey` TEXT NOT NULL, " +
+                        "`content` TEXT NOT NULL, `author` TEXT, `savedAt` INTEGER NOT NULL, " +
+                        "PRIMARY KEY(`quoteKey`))"
+                )
+            }
+        }
+
         fun get(context: Context): KalynoDatabase =
             instance ?: synchronized(this) {
                 instance ?: Room.databaseBuilder(
                     context.applicationContext,
                     KalynoDatabase::class.java,
                     "kalyno.db"
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4).build().also { instance = it }
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5).build().also { instance = it }
             }
     }
 }

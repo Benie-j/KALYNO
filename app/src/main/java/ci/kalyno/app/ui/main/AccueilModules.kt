@@ -42,7 +42,7 @@ import ci.kalyno.app.ui.theme.KalynoText
 
 /** En-tête commun des modules : pastille d'icône vectorielle + titre. */
 @Composable
-private fun ModuleHeader(
+internal fun ModuleHeader(
     icon: String,
     title: String,
     tint: Color = KalynoBlue,
@@ -72,52 +72,12 @@ private fun ModuleHeader(
 }
 
 @Composable
-private fun SkeletonLines() {
+internal fun SkeletonLines() {
     ShimmerBlock(Modifier.fillMaxWidth().height(14.dp))
     Spacer(Modifier.height(8.dp))
     ShimmerBlock(Modifier.fillMaxWidth(0.8f).height(14.dp))
     Spacer(Modifier.height(8.dp))
     ShimmerBlock(Modifier.fillMaxWidth(0.55f).height(14.dp))
-}
-
-// ---------- Bloc 1 : citation du jour (publiée par l'admin) ----------
-
-@Composable
-internal fun QuoteModule(quote: DailyQuote?, modifier: Modifier = Modifier) {
-    KalynoCard(modifier = modifier) {
-        ModuleHeader(
-            icon = "lightbulb",
-            title = "Citation du jour",
-            tint = KalynoAmberDeep,
-            container = KalynoAmberSoft
-        )
-        Spacer(Modifier.height(14.dp))
-        if (quote == null) {
-            SkeletonLines()
-        } else {
-            Text(
-                text = quote.text,
-                color = KalynoText,
-                fontSize = 15.sp,
-                lineHeight = 22.sp,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 8,
-                overflow = TextOverflow.Ellipsis
-            )
-            Spacer(Modifier.height(12.dp))
-            Spacer(Modifier.weight(1f))
-            if (quote.author != null) {
-                Text(
-                    text = quote.author,
-                    color = KalynoMuted,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-        }
-    }
 }
 
 // ---------- Bloc 2 : alerte de révision (moteur FSRS, ouvre le Dojo) ----------

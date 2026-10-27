@@ -79,7 +79,13 @@ data class DashboardUiState(
     /** Citation du jour publiée par l'admin ; null tant qu'aucune n'est disponible. */
     val dailyQuote: DailyQuote? = null,
     /** Faux tant que la citation n'a pas fini de se charger (affiche un squelette). */
-    val quoteReady: Boolean = false
+    val quoteReady: Boolean = false,
+    /** Citation piochée par l'élève (shuffle) ; remplace celle du jour tant que l'écran reste ouvert. */
+    val shuffledQuote: DailyQuote? = null,
+    /** Les 7 derniers jours de citations (aujourd'hui en premier), pour la bottom sheet. */
+    val quoteWeek: List<QuoteDay> = emptyList(),
+    /** Citations épinglées par l'élève (Room), de la plus récente à la plus ancienne. */
+    val favoriteQuotes: List<FavoriteQuote> = emptyList()
 )
 
 data class LastLessonUi(

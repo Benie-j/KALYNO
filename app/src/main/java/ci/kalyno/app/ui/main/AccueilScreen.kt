@@ -36,6 +36,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import ci.kalyno.app.data.dashboard.DailyQuote
 import ci.kalyno.app.data.dashboard.DashboardUiState
 import ci.kalyno.app.data.dashboard.LastLessonUi
 import ci.kalyno.app.ui.components.KalynoErrorCard
@@ -67,7 +68,9 @@ fun AccueilScreen(
     onStartMission: () -> Unit,
     onReviewUrgent: () -> Unit,
     onRetry: () -> Unit,
-    onResumeLastLesson: (LastLessonUi) -> Unit
+    onResumeLastLesson: (LastLessonUi) -> Unit,
+    onShuffleQuote: () -> Unit = {},
+    onToggleFavoriteQuote: (DailyQuote) -> Unit = {}
 ) {
     BoxWithConstraints(
         modifier = Modifier
@@ -126,7 +129,9 @@ fun AccueilScreen(
                                 .fillMaxHeight()
                             when (module) {
                                 HomeModule.QUOTE -> QuoteModule(
-                                    quote = state.dailyQuote,
+                                    state = state,
+                                    onShuffle = onShuffleQuote,
+                                    onToggleFavorite = onToggleFavoriteQuote,
                                     modifier = slot
                                 )
                                 HomeModule.URGENT -> UrgentReviewModule(

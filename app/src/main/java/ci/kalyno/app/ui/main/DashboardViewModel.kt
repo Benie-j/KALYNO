@@ -19,7 +19,12 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import ci.kalyno.app.data.dashboard.DailyQuote
 import ci.kalyno.app.data.dashboard.DailyQuotes
+import ci.kalyno.app.data.dashboard.FavoriteQuote
+import ci.kalyno.app.data.dashboard.KalynoDatabase
+import ci.kalyno.app.data.dashboard.QuoteFavoriteEntity
+import ci.kalyno.app.data.dashboard.favoriteKey
 import ci.kalyno.app.data.dashboard.ExamSchedule
 import ci.kalyno.app.data.srs.SrsEngine
 import kotlinx.coroutines.Dispatchers
@@ -33,9 +38,21 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     private val studentId = StudentId.get(app)
     private val exams = ExamSchedule(app)
     private val quotes = DailyQuotes(app)
+    private val favoritesDao = KalynoDatabase.get(app).quoteFavoriteDao()
 
     private val _state = MutableStateFlow(DashboardUiState(streak = streakStore.current()))
     val state: StateFlow<DashboardUiState> = _state.asStateFlow()
+
+    init {
+        // Les favoris viennent de Room : la liste se met à jour toute seule (cœur, bottom sheet).
+        viewModelScope.launch {
+            favoritesDao.observeAll().collect { rows ->
+                _state.update { s ->
+                    s.copy(favoriteQuotes = rows.map { FavoriteQuote(it.quoteKey, DailyQuote(it.content, it.author)) })
+                }
+            }
+        }
+    }
 
     private var loadedLevel: String? = null
     private var loadJob: Job? = null
@@ -53,7 +70,9 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
             it.copy(
                 examDaysLeft = cachedExamDays(levelId),
                 examLabel = exams.label(levelId),
-                dailyQuote = cachedQuote
+                dailyQuote = cachedQuote,
+                shuffledQuote = null,
+                quoteWeek = quotes.week(levelId)
             )
         }
         refresh(levelId)
@@ -74,8 +93,8 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun refreshQuote(levelId: String) {
         viewModelScope.launch {
-            val quote = withContext(Dispatchers.IO) { quotes.refresh(levelId) }
-            _state.update { it.copy(dailyQuote = quote, quoteReady = true) }
+            val (quote, week) = withContext(Dispatchers.IO) { quotes.refresh(levelId) to quotes.week(levelId) }
+            _state.update { it.copy(dailyQuote = quote, quoteWeek = week, quoteReady = true) }
         }
     }
 
@@ -112,6 +131,28 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                             ?: "Impossible de charger ton tableau de bord."
                     )
                 }
+            }
+        }
+    }
+
+    /** Pioche une autre citation que celle affichée, parmi celles gardées sur le téléphone. */
+    fun shuffleQuote() {
+        val level = loadedLevel ?: return
+        val current = _state.value.shuffledQuote ?: _state.value.dailyQuote
+        val pool = quotes.all(level).filter { it != current }
+        if (pool.isEmpty()) return
+        _state.update { it.copy(shuffledQuote = pool.random()) }
+    }
+
+    /** Épingle ou retire une citation des favoris (écriture Room hors du thread principal). */
+    fun toggleFavorite(quote: DailyQuote) {
+        val key = quote.favoriteKey()
+        val alreadyFavorite = _state.value.favoriteQuotes.any { it.key == key }
+        viewModelScope.launch(Dispatchers.IO) {
+            if (alreadyFavorite) {
+                favoritesDao.delete(key)
+            } else {
+                favoritesDao.upsert(QuoteFavoriteEntity(key, quote.text, quote.author, System.currentTimeMillis()))
             }
         }
     }

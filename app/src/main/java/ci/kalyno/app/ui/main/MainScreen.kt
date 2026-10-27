@@ -112,7 +112,9 @@ fun MainScreen(
                         onStartMission = viewModel::startMission,
                         onReviewUrgent = viewModel::startUrgentReview,
                         onRetry = viewModel::retry,
-                        onResumeLastLesson = { tab = 2 } // ouvre l'onglet Explorer
+                        onResumeLastLesson = { tab = 2 }, // ouvre l'onglet Explorer
+                        onShuffleQuote = viewModel::shuffleQuote,
+                        onToggleFavoriteQuote = viewModel::toggleFavorite
                     )
                     1 -> DojoScreen(
                         levelId = levelId,
