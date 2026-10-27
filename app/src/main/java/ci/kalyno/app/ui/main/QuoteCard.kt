@@ -78,6 +78,7 @@ import ci.kalyno.app.data.dashboard.FavoriteQuote
 import ci.kalyno.app.data.dashboard.QuoteDay
 import ci.kalyno.app.data.dashboard.favoriteKey
 import ci.kalyno.app.ui.icons.KalynoSvgIcon
+import ci.kalyno.app.ui.share.QuoteShareSheet
 import ci.kalyno.app.ui.theme.KalynoAmberDeep
 import ci.kalyno.app.ui.theme.KalynoAmberSoft
 import ci.kalyno.app.ui.theme.KalynoBackground
@@ -118,6 +119,7 @@ internal fun QuoteModule(
     val haptic = LocalHapticFeedback.current
     val scope = rememberCoroutineScope()
     var sheetOpen by rememberSaveable { mutableStateOf(false) }
+    var shareTarget by remember { mutableStateOf<DailyQuote?>(null) }
 
     val shape = RoundedCornerShape(24.dp)
     val interaction = remember { MutableInteractionSource() }
@@ -167,7 +169,7 @@ internal fun QuoteModule(
     val share: () -> Unit = {
         if (quote != null) {
             haptic.performHapticFeedback(HapticFeedbackType.Confirm)
-            shareOnWhatsApp(context, quote)
+            shareTarget = quote
         }
     }
     val openHistory: () -> Unit = {
@@ -305,12 +307,19 @@ internal fun QuoteModule(
             }
         }
 
+        shareTarget?.let { target ->
+            QuoteShareSheet(quote = target, onDismiss = { shareTarget = null })
+        }
+
         if (sheetOpen) {
             QuoteHistorySheet(
                 week = state.quoteWeek,
                 favorites = state.favoriteQuotes,
                 onToggleFavorite = onToggleFavorite,
-                onShare = { shareOnWhatsApp(context, it) },
+                onShare = {
+                    sheetOpen = false
+                    shareTarget = it
+                },
                 onDismiss = { sheetOpen = false }
             )
         }
@@ -533,29 +542,4 @@ private fun dayLabel(date: LocalDate, today: LocalDate = LocalDate.now()): Strin
     today.minusDays(1) -> "Hier"
     else -> date.format(DateTimeFormatter.ofPattern("EEEE d MMMM", Locale.FRENCH))
         .replaceFirstChar { it.uppercase() }
-}
-
-// ---------- Partage WhatsApp (levier de viralité) ----------
-
-private fun shareText(quote: DailyQuote): String = buildString {
-    append("« ").append(quote.text.trim()).append(" »")
-    if (!quote.author.isNullOrBlank()) append("\n— ").append(quote.author.trim())
-    append("\n\nCitation du jour sur KALYNO, l'appli qui t'aide à réviser autrement.")
-}
-
-/** WhatsApp (ou WhatsApp Business) pré-rempli ; sinon le sélecteur Android classique. */
-private fun shareOnWhatsApp(context: Context, quote: DailyQuote) {
-    val base = Intent(Intent.ACTION_SEND).apply {
-        type = "text/plain"
-        putExtra(Intent.EXTRA_TEXT, shareText(quote))
-    }
-    for (pkg in listOf("com.whatsapp", "com.whatsapp.w4b")) {
-        try {
-            context.startActivity(Intent(base).setPackage(pkg))
-            return
-        } catch (_: ActivityNotFoundException) {
-            // application absente : on essaie la suivante
-        }
-    }
-    runCatching { context.startActivity(Intent.createChooser(base, "Partager la citation")) }
 }
