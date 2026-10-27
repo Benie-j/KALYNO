@@ -5,6 +5,7 @@ import ci.kalyno.app.data.AppPrefs
 import ci.kalyno.app.data.StreakStore
 import ci.kalyno.app.data.dashboard.KalynoDatabase
 import ci.kalyno.app.data.srs.ReviewRating
+import ci.kalyno.app.data.srs.SrsEngine
 
 /** État d'un badge pour l'écran : progression réelle + date de déblocage si atteint. */
 data class BadgeUiState(
@@ -43,7 +44,7 @@ class BadgesRepository(private val context: Context) {
                 val last = row.lastReviewedAt ?: return@mapNotNull null
                 val stability = row.stability.takeIf { it > 0.0 } ?: return@mapNotNull null
                 val elapsedDays = (System.currentTimeMillis() - last) / 86_400_000.0
-                kotlin.math.exp(-elapsedDays / stability)
+                SrsEngine.retrievability(elapsedDays, stability)
             }
             .takeIf { it.isNotEmpty() }
             ?.average()

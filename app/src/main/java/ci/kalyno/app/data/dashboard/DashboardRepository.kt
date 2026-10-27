@@ -168,9 +168,9 @@ class DashboardRepository(context: Context) {
             .mapNotNull { row ->
                 val last = row.lastReviewedAt ?: return@mapNotNull null
                 val stability = row.stability.takeIf { it > 0.0 } ?: return@mapNotNull null
-                // Courbe de l'oubli FSRS : R(t) = exp(-t / S), t et S en jours.
+                // Courbe de l'oubli FSRS-6, la même que celle du moteur SRS.
                 val elapsedDays = (now - last) / DAY_MS.toDouble()
-                kotlin.math.exp(-elapsedDays / stability)
+                SrsEngine.retrievability(elapsedDays, stability)
             }
             .takeIf { it.isNotEmpty() }
             ?.average()
