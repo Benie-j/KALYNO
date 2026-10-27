@@ -183,7 +183,6 @@ class DashboardRepository(context: Context) {
                     subjectName = "",
                     subjectEmoji = "",
                     chapterTitle = "",
-                    minutes = 0,
                     doneToday = introducedToday,
                     targetToday = maxOf(allowedToday, introducedToday),
                     items = emptyList()
