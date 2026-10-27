@@ -34,6 +34,67 @@ class SupabaseAuthApi {
             body = JSONObject().put("refresh_token", refreshToken)
         )
 
+    /**
+     * Envoie un code à usage unique par e-mail (pas de mot de passe — adapté aux téléphones
+     * partagés). Crée le compte automatiquement si l'adresse est inconnue.
+     */
+    suspend fun sendEmailOtp(email: String) {
+        withContext(Dispatchers.IO) {
+            val connection = URL("${SupabaseConfig.BASE_URL}/auth/v1/otp")
+                .openConnection() as HttpURLConnection
+            try {
+                connection.requestMethod = "POST"
+                connection.doOutput = true
+                connection.connectTimeout = 15_000
+                connection.readTimeout = 15_000
+                connection.setRequestProperty("apikey", SupabaseConfig.PUBLISHABLE_KEY)
+                connection.setRequestProperty("Content-Type", "application/json")
+                connection.setRequestProperty("Accept", "application/json")
+                val body = JSONObject().put("email", email).put("create_user", true)
+                connection.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
+
+                val code = connection.responseCode
+                val stream = if (code in 200..299) connection.inputStream else connection.errorStream
+                val text = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
+                if (code !in 200..299) {
+                    Log.w(TAG, "Supabase OTP HTTP $code: $text")
+                    throw AuthException(friendlyMessage(code, text))
+                }
+            } finally {
+                connection.disconnect()
+            }
+        }
+    }
+
+    /** Vérifie le code reçu par e-mail et ouvre la session (inscription = connexion, comme Google). */
+    suspend fun verifyEmailOtp(email: String, token: String): AuthSession =
+        withContext(Dispatchers.IO) {
+            val connection = URL("${SupabaseConfig.BASE_URL}/auth/v1/verify")
+                .openConnection() as HttpURLConnection
+            try {
+                connection.requestMethod = "POST"
+                connection.doOutput = true
+                connection.connectTimeout = 15_000
+                connection.readTimeout = 15_000
+                connection.setRequestProperty("apikey", SupabaseConfig.PUBLISHABLE_KEY)
+                connection.setRequestProperty("Content-Type", "application/json")
+                connection.setRequestProperty("Accept", "application/json")
+                val body = JSONObject().put("type", "email").put("email", email).put("token", token)
+                connection.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
+
+                val code = connection.responseCode
+                val stream = if (code in 200..299) connection.inputStream else connection.errorStream
+                val text = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
+                if (code !in 200..299) {
+                    Log.w(TAG, "Supabase verify HTTP $code: $text")
+                    throw AuthException(friendlyMessage(code, text))
+                }
+                parseSession(text)
+            } finally {
+                connection.disconnect()
+            }
+        }
+
     private suspend fun requestSession(grantType: String, body: JSONObject): AuthSession =
         withContext(Dispatchers.IO) {
             val connection = URL("${SupabaseConfig.BASE_URL}/auth/v1/token?grant_type=$grantType")
@@ -74,6 +135,12 @@ class SupabaseAuthApi {
         return when {
             detail.contains("provider is not enabled", ignoreCase = true) ->
                 "La connexion Google n'est pas encore activée sur le serveur."
+            detail.contains("signups not allowed", ignoreCase = true) ->
+                "L'inscription par e-mail n'est pas encore activée sur le serveur."
+            detail.contains("token has expired", ignoreCase = true) || detail.contains("otp_expired", ignoreCase = true) ->
+                "Ce code a expiré. Demande-en un nouveau."
+            detail.contains("token is invalid", ignoreCase = true) || detail.contains("invalid", ignoreCase = true) && detail.contains("otp", ignoreCase = true) ->
+                "Code incorrect. Vérifie et réessaie."
             detail.contains("nonce", ignoreCase = true) ->
                 "Vérification de sécurité échouée. Réessaie."
             detail.contains("audience", ignoreCase = true) || detail.contains("client", ignoreCase = true) ->

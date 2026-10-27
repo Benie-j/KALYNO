@@ -81,6 +81,12 @@ fun KalynoApp() {
                     showLogin = false
                 },
                 onGoogleClick = startGoogle,
+                emailStage = auth.emailStage,
+                pendingEmail = auth.pendingEmail,
+                onStartEmailFlow = authViewModel::startEmailFlow,
+                onSendEmail = authViewModel::sendEmailCode,
+                onVerifyCode = authViewModel::verifyEmailCode,
+                onCancelEmailFlow = authViewModel::cancelEmailFlow,
                 isLoading = auth.loading,
                 errorMessage = auth.error
             )
@@ -119,6 +125,12 @@ fun KalynoApp() {
                 authStore.registrationChoiceDone = true
                 choiceDone = true
             },
+            emailStage = auth.emailStage,
+            pendingEmail = auth.pendingEmail,
+            onStartEmailFlow = authViewModel::startEmailFlow,
+            onSendEmail = authViewModel::sendEmailCode,
+            onVerifyCode = authViewModel::verifyEmailCode,
+            onCancelEmailFlow = authViewModel::cancelEmailFlow,
             isLoading = auth.loading,
             errorMessage = auth.error
         )

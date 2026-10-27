@@ -59,6 +59,12 @@ fun RegistrationChoiceScreen(
     pseudo: String,
     onGoogleClick: () -> Unit,
     onGuestClick: () -> Unit,
+    emailStage: ci.kalyno.app.ui.auth.EmailStage? = null,
+    pendingEmail: String = "",
+    onStartEmailFlow: () -> Unit = {},
+    onSendEmail: (String) -> Unit = {},
+    onVerifyCode: (String) -> Unit = {},
+    onCancelEmailFlow: () -> Unit = {},
     modifier: Modifier = Modifier,
     isLoading: Boolean = false,
     errorMessage: String? = null
@@ -127,65 +133,37 @@ fun RegistrationChoiceScreen(
 
                 Spacer(Modifier.height(28.dp))
 
-                // ----- Bouton principal : Google -----
-                Button(
-                    onClick = onGoogleClick,
-                    enabled = !isLoading,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(50.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = KalynoBlue,
-                        contentColor = Color.White,
-                        disabledContainerColor = KalynoBlue.copy(alpha = 0.6f),
-                        disabledContentColor = Color.White
-                    )
-                ) {
-                    if (isLoading) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(22.dp),
-                            strokeWidth = 2.5.dp,
-                            color = Color.White
-                        )
-                    } else {
-                        GoogleGlyph()
-                    }
-                    Spacer(Modifier.width(12.dp))
-                    Text(
-                        text = if (isLoading) "Connexion…" else "S'inscrire avec Google",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
+                ci.kalyno.app.ui.auth.AuthMethodSection(
+                    emailStage = emailStage,
+                    pendingEmail = pendingEmail,
+                    isLoading = isLoading,
+                    errorMessage = errorMessage,
+                    onStartEmailFlow = onStartEmailFlow,
+                    onSendEmail = onSendEmail,
+                    onVerifyCode = onVerifyCode,
+                    onCancelEmailFlow = onCancelEmailFlow,
+                    onGoogleClick = onGoogleClick,
+                    googleLabel = "S'inscrire avec Google"
+                )
 
-                if (errorMessage != null) {
+                if (emailStage == null) {
                     Spacer(Modifier.height(12.dp))
-                    Text(
-                        text = errorMessage,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = KalynoRetryText,
-                        textAlign = TextAlign.Center
-                    )
-                }
-
-                Spacer(Modifier.height(12.dp))
-
-                // ----- Bouton secondaire : invité (discret) -----
-                TextButton(
-                    onClick = onGuestClick,
-                    enabled = !isLoading,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(48.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.textButtonColors(contentColor = KalynoText)
-                ) {
-                    Text(
-                        text = "Continuer en tant qu'invité",
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
+                    // ----- Bouton tertiaire : invité (discret) -----
+                    TextButton(
+                        onClick = onGuestClick,
+                        enabled = !isLoading,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.textButtonColors(contentColor = KalynoText)
+                    ) {
+                        Text(
+                            text = "Continuer en tant qu'invité",
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
                 }
             }
         }

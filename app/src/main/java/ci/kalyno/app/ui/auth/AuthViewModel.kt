@@ -25,12 +25,17 @@ import kotlinx.coroutines.launch
 import java.io.IOException
 import java.util.UUID
 
+enum class EmailStage { ENTER_EMAIL, ENTER_CODE }
+
 data class AuthUiState(
     val loading: Boolean = false,
     val error: String? = null,
     val signedIn: Boolean = false,
     /** Profil retrouvé dans le cloud à la connexion (nouveau téléphone, réinstallation). */
-    val restored: RemoteProfile? = null
+    val restored: RemoteProfile? = null,
+    /** Étape du flux e-mail (null = l'élève n'a pas encore choisi cette voie). */
+    val emailStage: EmailStage? = null,
+    val pendingEmail: String = ""
 )
 
 class AuthViewModel(app: Application) : AndroidViewModel(app) {
@@ -113,6 +118,76 @@ class AuthViewModel(app: Application) : AndroidViewModel(app) {
 
     fun fail(message: String) {
         _state.update { it.copy(loading = false, error = message) }
+    }
+
+    /** Démarre (ou relance) le flux e-mail : demande une adresse. */
+    fun startEmailFlow() {
+        _state.update { it.copy(emailStage = EmailStage.ENTER_EMAIL, error = null) }
+    }
+
+    /** Abandonne le flux e-mail et revient aux deux boutons (e-mail / Google). */
+    fun cancelEmailFlow() {
+        _state.update { it.copy(emailStage = null, pendingEmail = "", error = null) }
+    }
+
+    /** Envoie le code à l'adresse saisie. */
+    fun sendEmailCode(email: String) {
+        if (_state.value.loading) return
+        val clean = email.trim()
+        if (!clean.contains("@") || clean.length < 5) {
+            _state.update { it.copy(error = "Adresse e-mail invalide.") }
+            return
+        }
+        _state.update { it.copy(loading = true, error = null, pendingEmail = clean) }
+        viewModelScope.launch {
+            try {
+                api.sendEmailOtp(clean)
+                _state.update { it.copy(loading = false, emailStage = EmailStage.ENTER_CODE) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: AuthException) {
+                fail(e.message ?: "Envoi du code impossible.")
+            } catch (e: IOException) {
+                fail("Pas de connexion internet. Vérifie ton réseau et réessaie.")
+            } catch (e: Exception) {
+                Log.w(TAG, "Erreur envoi OTP", e)
+                fail("Une erreur est survenue. Réessaie.")
+            }
+        }
+    }
+
+    /** Vérifie le code reçu et ouvre la session (même logique de reprise de profil que Google). */
+    fun verifyEmailCode(code: String) {
+        if (_state.value.loading) return
+        val email = _state.value.pendingEmail
+        val clean = code.trim()
+        if (clean.length < 4) {
+            _state.update { it.copy(error = "Code incomplet.") }
+            return
+        }
+        _state.update { it.copy(loading = true, error = null) }
+        viewModelScope.launch {
+            try {
+                val session = api.verifyEmailOtp(email, clean)
+                store.saveSession(session)
+                val remote = fetchProfileOrNull()
+                if (remote != null) {
+                    prefs.nickname = remote.nickname
+                    prefs.level = remote.levelId
+                    prefs.demoDone = true
+                }
+                _state.update { AuthUiState(signedIn = true, restored = remote) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: AuthException) {
+                fail(e.message ?: "Code incorrect.")
+            } catch (e: IOException) {
+                fail("Pas de connexion internet. Vérifie ton réseau et réessaie.")
+            } catch (e: Exception) {
+                Log.w(TAG, "Erreur vérification OTP", e)
+                fail("Une erreur est survenue. Réessaie.")
+            }
+        }
     }
 
     private companion object {
