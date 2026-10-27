@@ -110,6 +110,7 @@ internal fun QuoteModule(
     state: DashboardUiState,
     onShuffle: () -> Unit,
     onToggleFavorite: (DailyQuote) -> Unit,
+    showShuffle: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     val quote = state.shuffledQuote ?: state.dailyQuote
@@ -261,8 +262,7 @@ internal fun QuoteModule(
 
                 // Micro-footer d'action : 4 boutons si la place le permet, 3 sur petit écran
                 // (le shuffle reste alors accessible d'un simple toucher sur la carte).
-                BoxWithConstraints(Modifier.fillMaxWidth()) {
-                    val showShuffle = maxWidth >= 140.dp
+                Box(Modifier.fillMaxWidth()) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,

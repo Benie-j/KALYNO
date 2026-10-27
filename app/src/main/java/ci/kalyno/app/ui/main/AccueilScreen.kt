@@ -81,6 +81,8 @@ fun AccueilScreen(
         val wide = maxWidth >= 600.dp
         val gap = if (wide) 18.dp else 14.dp
         val sidePadding = if (wide) 32.dp else 20.dp
+        // Largeur utile d'une carte : décide si le footer de la citation affiche le bouton shuffle
+        val cardInnerWidth = (minOf(maxWidth, 840.dp) - sidePadding * 2 - gap * (columns - 1)) / columns - 36.dp
 
         Column(
             modifier = Modifier
@@ -132,6 +134,7 @@ fun AccueilScreen(
                                     state = state,
                                     onShuffle = onShuffleQuote,
                                     onToggleFavorite = onToggleFavoriteQuote,
+                                    showShuffle = cardInnerWidth >= 140.dp,
                                     modifier = slot
                                 )
                                 HomeModule.URGENT -> UrgentReviewModule(
