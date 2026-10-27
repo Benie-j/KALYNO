@@ -618,7 +618,11 @@ private fun PathsSection(chapters: List<ExplorerChapter>, onOpen: (ExplorerChapt
 // CARTES
 // ===========================================================================
 
-/** Carte de cours : badge matière, titre, progression, durée, bouton "Démarrer". */
+/**
+ * Carte de défi/leçon : deux actions clairement séparées visuellement —
+ * "Lire le cours" (théorie, lien secondaire) et "Démarrer l'exercice" (bouton principal).
+ * Toucher la carte elle-même équivaut à "Lire le cours" (grande zone de touche).
+ */
 @Composable
 private fun CourseCard(
     chapter: ExplorerChapter,
@@ -652,12 +656,25 @@ private fun CourseCard(
         KalynoProgressBar(progress = chapter.progress)
         Spacer(Modifier.height(6.dp))
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(
-                text = "${questionsLabel(chapter.questionCount)} • ${chapter.minutes} min",
-                color = KalynoMuted,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Medium
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                KalynoSvgIcon(name = "layers", size = 13.dp, tint = KalynoMuted)
+                Spacer(Modifier.width(4.dp))
+                Text(
+                    text = questionsLabel(chapter.questionCount),
+                    color = KalynoMuted,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium
+                )
+                Spacer(Modifier.width(10.dp))
+                KalynoSvgIcon(name = "clock", size = 13.dp, tint = KalynoMuted)
+                Spacer(Modifier.width(4.dp))
+                Text(
+                    text = "${chapter.minutes} min",
+                    color = KalynoMuted,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium
+                )
+            }
             Text(
                 text = "${(chapter.progress * 100).toInt()}%",
                 color = KalynoBlue,
@@ -665,9 +682,33 @@ private fun CourseCard(
                 fontWeight = FontWeight.ExtraBold
             )
         }
-        Spacer(Modifier.height(14.dp))
+        Spacer(Modifier.height(16.dp))
+
+        // ----- Action secondaire : lire la théorie -----
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .clickable(onClick = onOpen)
+                .padding(vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            KalynoSvgIcon(name = "book-open", size = 16.dp, tint = KalynoBlue)
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = "Lire le cours",
+                color = KalynoBlue,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.weight(1f)
+            )
+            KalynoSvgIcon(name = "chevron-right", size = 14.dp, tint = KalynoBlue)
+        }
+        Spacer(Modifier.height(4.dp))
+
+        // ----- Action principale : lancer l'exercice -----
         KalynoPrimaryButton(
-            label = "DÉMARRER",
+            label = "DÉMARRER L'EXERCICE",
             onClick = onStart,
             enabled = chapter.questionCount > 0,
             height = 48.dp

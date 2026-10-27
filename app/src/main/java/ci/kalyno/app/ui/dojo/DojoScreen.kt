@@ -192,7 +192,7 @@ private fun UrgentHero(state: DashboardUiState, onReview: () -> Unit) {
 @Composable
 private fun ExerciseHeaderStats(questionCount: Int, estimatedMinutes: Int?) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        KalynoSvgIcon(name = "help-circle", size = 15.dp, tint = KalynoMuted)
+        KalynoSvgIcon(name = "layers", size = 15.dp, tint = KalynoMuted)
         Spacer(Modifier.width(6.dp))
         Text(
             text = if (questionCount == 1) "1 carte à découvrir" else "$questionCount cartes à découvrir",
