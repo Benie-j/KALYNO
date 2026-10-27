@@ -247,8 +247,11 @@ class DashboardRepository(context: Context) {
         subjects: List<LearningSubject>,
         coefficients: Map<String, Float>
     ) {
+        // Si la lecture des coefficients a échoué (hors ligne…), on garde ceux déjà en base locale
+        // au lieu de les écraser par 1 : le moteur FSRS continue avec la dernière valeur de l'admin.
+        val known = dao.subjectsForLevel(levelId).associate { it.id to it.coefficient }
         dao.upsertSubjects(
-            subjects.map { SubjectEntity(it.id, it.name, levelId, coefficients[it.id] ?: 1f) }
+            subjects.map { SubjectEntity(it.id, it.name, levelId, coefficients[it.id] ?: known[it.id] ?: 1f) }
         )
         val cards = subjects.flatMap { s ->
             s.chapters.flatMap { ch ->
