@@ -104,7 +104,12 @@ fun AccueilScreen(
                     enter = fadeIn() + expandVertically()
                 ) {
                     state.examDaysLeft?.let { days ->
-                        ExamHero(daysLeft = days, label = state.examLabel, wide = wide)
+                        ExamHero(
+                            daysLeft = days,
+                            label = state.examLabel,
+                            coachLine = coachLine(state),
+                            wide = wide
+                        )
                     }
                 }
 
@@ -154,6 +159,7 @@ fun AccueilScreen(
                                 HomeModule.PROGRESS -> ProgressModule(
                                     masteredCount = state.masteredCount,
                                     retentionScore = state.retentionScore,
+                                    urgentTopics = state.urgentTopics,
                                     loading = state.loading,
                                     modifier = slot
                                 )
@@ -206,7 +212,7 @@ private fun HomeTopBar(streak: Int) {
 // ---------- 2. Hero : compte à rebours (date et intitulé publiés par l'admin) ----------
 
 @Composable
-private fun ExamHero(daysLeft: Int, label: String?, wide: Boolean) {
+private fun ExamHero(daysLeft: Int, label: String?, coachLine: String?, wide: Boolean) {
     val shape = RoundedCornerShape(24.dp)
     Box(
         modifier = Modifier
@@ -260,6 +266,62 @@ private fun ExamHero(daysLeft: Int, label: String?, wide: Boolean) {
                     fontWeight = FontWeight.ExtraBold
                 )
             }
+            if (!coachLine.isNullOrBlank()) {
+                Spacer(Modifier.height(14.dp))
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(Color.White.copy(alpha = 0.14f))
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    KalynoSvgIcon(name = "message-circle", size = 16.dp, tint = KalynoYellow)
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = coachLine,
+                        color = Color.White,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        lineHeight = 18.sp
+                    )
+                }
+            }
         }
     }
+}
+
+/**
+ * Message du coach : priorité au texte publié par l'admin ([DashboardUiState.heroMessage]).
+ * À défaut, une phrase générée côté client selon l'activité de l'élève — pas une donnée
+ * éducative, juste une tournure motivante en nouchi léger, jamais la même à chaque relance
+ * d'écran pour un même état (choisie sur le jour courant).
+ */
+private fun coachLine(state: DashboardUiState): String? {
+    state.heroMessage?.takeIf { it.isNotBlank() }?.let { return it }
+
+    val pool = when {
+        state.urgentTotal >= 10 ->
+            listOf(
+                "Y'a du taf qui t'attend au Dojo, mais tu gères ça tranquille !",
+                "Le cerveau est chaud, il faut juste le nourrir un peu, on y va !"
+            )
+        state.urgentTotal > 0 ->
+            listOf(
+                "Petit coup au Dojo et c'est réglé, on avance doucement mais sûrement !",
+                "Quelques notions à revoir, rien de sorcier, tu connais la musique !"
+            )
+        state.streak >= 7 ->
+            listOf(
+                "Ça fait des jours que tu tiens, respect, continue comme ça !",
+                "Série solide, le cerveau commence à kiffer la routine !"
+            )
+        else ->
+            listOf(
+                "Tout est à jour, profite pour avancer dans l'Explorer !",
+                "Rien d'urgent pour le moment, c'est le bon moment pour explorer un nouveau chapitre !"
+            )
+    }
+    if (pool.isEmpty()) return null
+    val dayIndex = (System.currentTimeMillis() / 86_400_000L).toInt()
+    return pool[((dayIndex % pool.size) + pool.size) % pool.size]
 }

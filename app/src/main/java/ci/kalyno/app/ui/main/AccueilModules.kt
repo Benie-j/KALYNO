@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -20,6 +21,21 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import ci.kalyno.app.data.dashboard.DailyQuote
 import ci.kalyno.app.data.dashboard.LastLessonUi
 import ci.kalyno.app.data.dashboard.UrgentTopic
@@ -30,6 +46,7 @@ import ci.kalyno.app.ui.components.ShimmerBlock
 import ci.kalyno.app.ui.icons.KalynoSvgIcon
 import ci.kalyno.app.ui.theme.KalynoAmberDeep
 import ci.kalyno.app.ui.theme.KalynoAmberSoft
+import ci.kalyno.app.ui.theme.KalynoBackground
 import ci.kalyno.app.ui.theme.KalynoBlue
 import ci.kalyno.app.ui.theme.KalynoBlueSoft
 import ci.kalyno.app.ui.theme.KalynoCorrectText
@@ -222,13 +239,26 @@ internal fun ResumeModule(lesson: LastLessonUi, onClick: () -> Unit, modifier: M
 internal fun ProgressModule(
     masteredCount: Int?,
     retentionScore: Float?,
+    urgentTopics: List<UrgentTopic>,
     loading: Boolean,
     modifier: Modifier = Modifier
 ) {
-    KalynoCard(modifier = modifier) {
+    val haptic = LocalHapticFeedback.current
+    var detailOpen by rememberSaveable { mutableStateOf(false) }
+    val hasData = masteredCount != null || retentionScore != null
+
+    KalynoCard(
+        modifier = modifier,
+        onClick = if (hasData) {
+            {
+                haptic.performHapticFeedback(HapticFeedbackType.ContextClick)
+                detailOpen = true
+            }
+        } else null
+    ) {
         ModuleHeader(icon = "target", title = "Ma progression")
         Spacer(Modifier.height(14.dp))
-        if (masteredCount == null && retentionScore == null) {
+        if (!hasData) {
             if (loading) {
                 SkeletonLines()
             } else {
@@ -254,6 +284,150 @@ internal fun ProgressModule(
                 StatValue(value = "${(score * 100).toInt()} %", label = "rétention estimée")
                 Spacer(Modifier.height(6.dp))
                 KalynoProgressBar(progress = score, height = 6.dp)
+            }
+            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.weight(1f))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = "Voir le détail",
+                    color = KalynoBlue,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.ExtraBold
+                )
+                Spacer(Modifier.width(4.dp))
+                KalynoSvgIcon(name = "chevron-right", size = 14.dp, tint = KalynoBlue)
+            }
+        }
+    }
+
+    if (detailOpen) {
+        ProgressDetailSheet(
+            masteredCount = masteredCount,
+            retentionScore = retentionScore,
+            urgentTopics = urgentTopics,
+            onDismiss = { detailOpen = false }
+        )
+    }
+}
+
+/** Modal analytique : détail de la maîtrise et de la rétention FSRS, matière par matière. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ProgressDetailSheet(
+    masteredCount: Int?,
+    retentionScore: Float?,
+    urgentTopics: List<UrgentTopic>,
+    onDismiss: () -> Unit
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val shape = RoundedCornerShape(20.dp)
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = Color.White,
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+    ) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 28.dp)
+        ) {
+            Text("Ma progression", color = KalynoText, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold)
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = "Basé sur ton moteur de révision (FSRS).",
+                color = KalynoMuted,
+                fontSize = 13.sp
+            )
+            Spacer(Modifier.height(18.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(shape)
+                        .background(KalynoBlueSoft)
+                        .padding(16.dp)
+                ) {
+                    Text(
+                        text = masteredCount?.toString() ?: "—",
+                        color = KalynoText,
+                        fontSize = 26.sp,
+                        fontWeight = FontWeight.ExtraBold
+                    )
+                    Text("Notions maîtrisées", color = KalynoMuted, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                }
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(shape)
+                        .background(KalynoBlueSoft)
+                        .padding(16.dp)
+                ) {
+                    Text(
+                        text = retentionScore?.let { "${(it.coerceIn(0f, 1f) * 100).toInt()} %" } ?: "—",
+                        color = KalynoText,
+                        fontSize = 26.sp,
+                        fontWeight = FontWeight.ExtraBold
+                    )
+                    Text("Rétention estimée", color = KalynoMuted, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                }
+            }
+
+            Spacer(Modifier.height(22.dp))
+            Text(
+                text = "Révisions en attente par matière",
+                color = KalynoText,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.ExtraBold
+            )
+            Spacer(Modifier.height(10.dp))
+
+            if (urgentTopics.isEmpty()) {
+                Text(
+                    text = "Aucune matière en attente pour le moment.",
+                    color = KalynoMuted,
+                    fontSize = 13.sp,
+                    lineHeight = 18.sp,
+                    modifier = Modifier.padding(vertical = 8.dp)
+                )
+            } else {
+                LazyColumn(
+                    modifier = Modifier.heightIn(max = 280.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    contentPadding = PaddingValues(vertical = 4.dp)
+                ) {
+                    items(urgentTopics, key = { it.label }) { topic ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(KalynoBackground)
+                                .padding(horizontal = 14.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = topic.label,
+                                color = KalynoText,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Text(
+                                text = topic.count.toString(),
+                                color = KalynoRetryText,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.ExtraBold
+                            )
+                        }
+                    }
+                }
             }
         }
     }
