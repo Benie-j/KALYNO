@@ -111,9 +111,14 @@ interface SrsDao {
             "WHERE studentId = :studentId ORDER BY flashcardId ASC, reviewedAt ASC"
     )
     suspend fun reviewHistory(studentId: String): List<ReviewLogRow>
+
+    /** Chaque carte publiée avec sa matière : sert à mesurer la progression par discipline ("Major du Canton"). */
+    @Query("SELECT id, subjectId FROM flashcards")
+    suspend fun allFlashcardSubjects(): List<FlashcardSubjectRow>
 }
 
 data class ReviewLogRow(val flashcardId: String, val rating: ReviewRating, val reviewedAt: Long)
+data class FlashcardSubjectRow(val id: String, val subjectId: String)
 
 /** Ligne minimale pour le calcul de la grille KPI (notions maitrisees, retention). */
 data class MasteryRow(

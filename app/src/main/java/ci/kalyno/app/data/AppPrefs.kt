@@ -56,6 +56,15 @@ class AppPrefs(context: Context) {
     val openedLessonsCount: Int
         get() = (prefs.getStringSet(KEY_OPENED_LESSONS, emptySet()) ?: emptySet()).size
 
+    /** Premier partage (citation ou score) réussi, pour le badge "C'est Carré". */
+    fun markFirstShare() {
+        if (!prefs.getBoolean(KEY_FIRST_SHARE, false)) {
+            prefs.edit().putBoolean(KEY_FIRST_SHARE, true).apply()
+        }
+    }
+
+    val hasSharedOnce: Boolean get() = prefs.getBoolean(KEY_FIRST_SHARE, false)
+
     private companion object {
         /**
          * Anciennes classes supprimées : "TLE_A" a été scindée en Tle A1 et Tle A2 (programmes différents).
@@ -71,5 +80,6 @@ class AppPrefs(context: Context) {
         const val KEY_LAST_LESSON_CHAPTER = "last_lesson_chapter"
         const val KEY_LAST_LESSON_PROGRESS = "last_lesson_progress"
         const val KEY_OPENED_LESSONS = "opened_lessons"
+        const val KEY_FIRST_SHARE = "first_share_done"
     }
 }

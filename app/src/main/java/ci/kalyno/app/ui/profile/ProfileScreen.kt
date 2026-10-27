@@ -49,6 +49,11 @@ import ci.kalyno.app.ui.theme.KalynoDanger
 import ci.kalyno.app.ui.theme.KalynoDangerBorder
 import ci.kalyno.app.ui.theme.KalynoMuted
 import ci.kalyno.app.ui.theme.KalynoText
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import ci.kalyno.app.ui.badges.BadgesScreen
+import ci.kalyno.app.ui.badges.BadgesViewModel
+import ci.kalyno.app.ui.badges.RewardUnlockedDialog
 import ci.kalyno.app.ui.theme.KalynoYellow
 
 // Fonds de bulles d'icônes (doux, jamais criards)
@@ -78,6 +83,37 @@ fun ProfileScreen(
     onOpenPrivacy: () -> Unit
 ) {
     var showLogoutDialog by rememberSaveable { mutableStateOf(false) }
+    var showBadges by rememberSaveable { mutableStateOf(false) }
+
+    if (showBadges) {
+        val badgesViewModel: BadgesViewModel = viewModel()
+        val badgesState by badgesViewModel.state.collectAsStateWithLifecycle()
+        androidx.compose.runtime.LaunchedEffect(Unit) { badgesViewModel.refresh() }
+
+        androidx.compose.foundation.layout.Column(
+            modifier = Modifier.fillMaxSize().background(KalynoBackground).statusBarsPadding()
+        ) {
+            androidx.compose.material3.IconButton(
+                onClick = { showBadges = false },
+                modifier = Modifier.padding(start = 12.dp, top = 8.dp)
+            ) {
+                androidx.compose.material3.Icon(
+                    androidx.compose.material.icons.Icons.Default.ArrowBack,
+                    contentDescription = "Retour",
+                    tint = KalynoText
+                )
+            }
+            BadgesScreen(badges = badgesState.badges, modifier = Modifier.weight(1f))
+        }
+        badgesState.pendingReward?.let { reward ->
+            RewardUnlockedDialog(
+                badge = reward,
+                onShare = { /* réutilise le pipeline de partage existant (QuoteShareActions) — à brancher si besoin d'une image dédiée au badge */ },
+                onDismiss = { badgesViewModel.consumeReward() }
+            )
+        }
+        return
+    }
 
     LazyColumn(
         modifier = Modifier
@@ -99,6 +135,13 @@ fun ProfileScreen(
         // ----- B. Mon compte -----
         item {
             SettingsGroup(title = "MON COMPTE") {
+                SettingsItem(
+                    icon = "🏆",
+                    title = "Mes trophées",
+                    subtitle = "Badges débloqués et progression",
+                    iconBackground = KalynoAmberSoft,
+                    onClick = { showBadges = true }
+                )
                 SettingsItem(
                     icon = "🎓",
                     title = "Changer de classe",

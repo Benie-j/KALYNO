@@ -130,7 +130,7 @@ internal fun QuoteShareSheet(quote: DailyQuote, onDismiss: () -> Unit) {
     val shareVia: (String, List<String>) -> Unit = { id, packages ->
         file?.let { f ->
             val ok = QuoteShareActions.shareImage(context, QuoteShareActions.uriFor(context, f), packages)
-            if (!ok) flash(id, false)
+            if (ok) ci.kalyno.app.data.AppPrefs(context).markFirstShare() else flash(id, false)
         }
     }
 
@@ -138,6 +138,7 @@ internal fun QuoteShareSheet(quote: DailyQuote, onDismiss: () -> Unit) {
         bitmap?.let { bmp ->
             scope.launch {
                 val ok = withContext(Dispatchers.IO) { QuoteShareActions.saveToGallery(context, bmp) }
+                if (ok) ci.kalyno.app.data.AppPrefs(context).markFirstShare()
                 flash("gallery", ok)
             }
         }

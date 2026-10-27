@@ -18,6 +18,7 @@ class BadgesRepository(private val context: Context) {
 
     private val dao = KalynoDatabase.get(context).badgeDao()
     private val srs = KalynoDatabase.get(context).srsDao()
+    private val dashboard = KalynoDatabase.get(context).dashboardDao()
     private val prefs = AppPrefs(context)
     private val streak = StreakStore(context)
 
@@ -48,6 +49,17 @@ class BadgesRepository(private val context: Context) {
             ?.average()
             ?.let { (it * 100).toInt() }
 
+        // "Major du Canton" : plus haute proportion de cartes déjà introduites, discipline par discipline.
+        val disciplineBestPercent = run {
+            val introduced = runCatching { dashboard.progressedCardIds(studentId).toHashSet() }.getOrDefault(hashSetOf())
+            val bySubject = srs.allFlashcardSubjects().groupBy { it.subjectId }
+            if (bySubject.isEmpty()) 0
+            else bySubject.values.maxOf { cards ->
+                if (cards.isEmpty()) 0
+                else (cards.count { it.id in introduced } * 100) / cards.size
+            }
+        }
+
         val progressByBadge: Map<String, Int> = mapOf(
             "streak_1" to streak.current(),
             "streak_7" to streak.current(),
@@ -55,8 +67,9 @@ class BadgesRepository(private val context: Context) {
             "fsrs_50cards" to masteryRows.size,
             "fsrs_zero_pioche" to (firstAttemptSuccessRate ?: 0),
             "fsrs_retention_85" to (retentionPercent ?: 0),
-            "explo_5_chapters" to prefs.openedLessonsCount
-            // "explo_discipline_100" et "social_first_share" : pas encore câblés, voir note.
+            "explo_5_chapters" to prefs.openedLessonsCount,
+            "explo_discipline_100" to disciplineBestPercent,
+            "social_first_share" to (if (prefs.hasSharedOnce) 1 else 0)
         )
 
         val freshlyUnlocked = mutableListOf<BadgeDef>()

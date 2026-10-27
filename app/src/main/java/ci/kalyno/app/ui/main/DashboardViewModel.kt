@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import ci.kalyno.app.data.StreakStore
+import ci.kalyno.app.data.badges.BadgesRepository
 import ci.kalyno.app.data.dashboard.DashboardRepository
 import ci.kalyno.app.data.dashboard.DashboardUiState
 import ci.kalyno.app.data.dashboard.ReviewItem
@@ -35,6 +36,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
 
     private val repository = DashboardRepository(app)
     private val streakStore = StreakStore(app)
+    private val badges = BadgesRepository(app)
     private val studentId = StudentId.get(app)
     private val exams = ExamSchedule(app)
     private val quotes = DailyQuotes(app)
@@ -208,6 +210,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
             if (completed) streakStore.recordCompletion()
             _state.update { it.copy(session = null) }
             loadedLevel?.let { refresh(it) }
+            runCatching { badges.refresh(studentId) } // recalcule en silence ; la modale vit dans BadgesViewModel (écran Profil)
         }
     }
 }
