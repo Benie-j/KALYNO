@@ -10,6 +10,8 @@ import ci.kalyno.app.data.catalog.CatalogDao
 import ci.kalyno.app.data.catalog.CatalogLessonEntity
 import ci.kalyno.app.data.catalog.CatalogLevelEntity
 import ci.kalyno.app.data.catalog.CatalogSubjectEntity
+import ci.kalyno.app.data.badges.BadgeDao
+import ci.kalyno.app.data.badges.BadgeUnlockEntity
 import ci.kalyno.app.data.catalog.CatalogThemeEntity
 import ci.kalyno.app.data.srs.CardProgressEntity
 import ci.kalyno.app.data.srs.FlashcardEntity
@@ -27,9 +29,10 @@ import ci.kalyno.app.data.srs.SubjectEntity
         CatalogSubjectEntity::class,
         CatalogThemeEntity::class,
         CatalogLessonEntity::class,
-        QuoteFavoriteEntity::class
+        QuoteFavoriteEntity::class,
+        BadgeUnlockEntity::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 abstract class KalynoDatabase : RoomDatabase() {
@@ -37,6 +40,7 @@ abstract class KalynoDatabase : RoomDatabase() {
     abstract fun dashboardDao(): DashboardDao
     abstract fun catalogDao(): CatalogDao
     abstract fun quoteFavoriteDao(): QuoteFavoriteDao
+    abstract fun badgeDao(): BadgeDao
 
     companion object {
         @Volatile
@@ -118,13 +122,25 @@ abstract class KalynoDatabase : RoomDatabase() {
             }
         }
 
+        /** Déblocages de badges (une ligne par élève + badge, jamais écrasée une fois posée). */
+        private val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `badge_unlocks` (`studentId` TEXT NOT NULL, " +
+                        "`badgeId` TEXT NOT NULL, `unlockedAt` INTEGER NOT NULL, " +
+                        "PRIMARY KEY(`studentId`, `badgeId`))"
+                )
+            }
+        }
+
         fun get(context: Context): KalynoDatabase =
             instance ?: synchronized(this) {
                 instance ?: Room.databaseBuilder(
                     context.applicationContext,
                     KalynoDatabase::class.java,
                     "kalyno.db"
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5).build().also { instance = it }
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+                    .build().also { instance = it }
             }
     }
 }

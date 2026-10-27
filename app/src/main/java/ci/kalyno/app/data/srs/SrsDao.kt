@@ -104,7 +104,16 @@ interface SrsDao {
             "WHERE studentId = :studentId AND repetitions > 0"
     )
     suspend fun masteryRows(studentId: String): List<MasteryRow>
+
+    /** Historique brut (carte, note, date), trié par carte puis par date : sert à isoler le TOUT premier passage de chaque carte. */
+    @Query(
+        "SELECT flashcardId, rating, reviewedAt FROM review_log " +
+            "WHERE studentId = :studentId ORDER BY flashcardId ASC, reviewedAt ASC"
+    )
+    suspend fun reviewHistory(studentId: String): List<ReviewLogRow>
 }
+
+data class ReviewLogRow(val flashcardId: String, val rating: ReviewRating, val reviewedAt: Long)
 
 /** Ligne minimale pour le calcul de la grille KPI (notions maitrisees, retention). */
 data class MasteryRow(

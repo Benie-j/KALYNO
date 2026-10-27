@@ -236,6 +236,7 @@ class ExplorerViewModel(app: Application) : AndroidViewModel(app) {
             chapterTitle = chapter.title,
             progress = chapter.progress
         )
+        prefs.markLessonOpened(chapter.id)
         _state.update { it.copy(openLessonId = chapter.id) }
     }
 

@@ -45,6 +45,17 @@ class AppPrefs(context: Context) {
     val lastLessonChapterTitle: String? get() = prefs.getString(KEY_LAST_LESSON_CHAPTER, null)
     val lastLessonProgress: Float get() = prefs.getFloat(KEY_LAST_LESSON_PROGRESS, 0f)
 
+    /** Enregistre qu'une leçon a été ouverte (pour le badge "Rat de Bibliothèque 2.0"). */
+    fun markLessonOpened(lessonId: String) {
+        val current = prefs.getStringSet(KEY_OPENED_LESSONS, emptySet()) ?: emptySet()
+        if (lessonId !in current) {
+            prefs.edit().putStringSet(KEY_OPENED_LESSONS, current + lessonId).apply()
+        }
+    }
+
+    val openedLessonsCount: Int
+        get() = (prefs.getStringSet(KEY_OPENED_LESSONS, emptySet()) ?: emptySet()).size
+
     private companion object {
         /**
          * Anciennes classes supprimées : "TLE_A" a été scindée en Tle A1 et Tle A2 (programmes différents).
@@ -59,5 +70,6 @@ class AppPrefs(context: Context) {
         const val KEY_LAST_LESSON_EMOJI = "last_lesson_emoji"
         const val KEY_LAST_LESSON_CHAPTER = "last_lesson_chapter"
         const val KEY_LAST_LESSON_PROGRESS = "last_lesson_progress"
+        const val KEY_OPENED_LESSONS = "opened_lessons"
     }
 }
