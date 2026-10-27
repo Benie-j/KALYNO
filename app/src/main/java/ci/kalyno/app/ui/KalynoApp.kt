@@ -14,7 +14,7 @@ import ci.kalyno.app.data.auth.findActivity
 import ci.kalyno.app.ui.auth.AuthViewModel
 import ci.kalyno.app.ui.challenge.ChallengeScreen
 import ci.kalyno.app.ui.home.HomeScreen
-import ci.kalyno.app.ui.login.LoginScreen
+import ci.kalyno.app.ui.auth.KalynoAuthScreen
 import ci.kalyno.app.ui.main.MainScreen
 import ci.kalyno.app.ui.onboarding.NicknameScreen
 import ci.kalyno.app.ui.onboarding.RegistrationChoiceScreen
@@ -75,7 +75,7 @@ fun KalynoApp() {
                 authViewModel.clearError()
                 showLogin = false
             }
-            LoginScreen(
+            KalynoAuthScreen(
                 onBack = {
                     authViewModel.clearError()
                     showLogin = false
