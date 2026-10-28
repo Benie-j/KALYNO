@@ -30,6 +30,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Calculate
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.EmojiEvents
+import androidx.compose.material.icons.rounded.FitnessCenter
+import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
@@ -47,6 +54,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -64,6 +72,12 @@ import ci.kalyno.app.ui.components.KalynoPill
 import ci.kalyno.app.ui.components.KalynoPrimaryButton
 import ci.kalyno.app.ui.components.StreakBadge
 import ci.kalyno.app.ui.components.rememberHaptic
+import ci.kalyno.app.ui.quiz.FeedbackTone
+import ci.kalyno.app.ui.quiz.KalynoChoiceCard
+import ci.kalyno.app.ui.quiz.KalynoQuestionCard
+import ci.kalyno.app.ui.quiz.QuizColors
+import ci.kalyno.app.ui.quiz.QuizFeedbackPanel
+import ci.kalyno.app.ui.quiz.QuizStickyFooter
 import ci.kalyno.app.ui.theme.KalynoAmberDeep
 import ci.kalyno.app.ui.theme.KalynoAmberSoft
 import ci.kalyno.app.ui.theme.KalynoBackground
@@ -119,7 +133,6 @@ fun DojoSessionScreen(
             .fillMaxSize()
             .background(KalynoBackground)
             .safeDrawingPadding()
-            .padding(horizontal = 20.dp, vertical = 12.dp)
     ) {
         if (!state.finished) {
             TopBar(
@@ -127,6 +140,7 @@ fun DojoSessionScreen(
                 index = state.index,
                 total = state.total,
                 dayStreak = dayStreak,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
                 calculatorSuggested = state.exercise?.calculatorSuggested == true,
                 onClose = {
                     haptic()
@@ -183,6 +197,7 @@ private fun TopBar(
     index: Int,
     total: Int,
     dayStreak: Int,
+    modifier: Modifier = Modifier,
     calculatorSuggested: Boolean,
     onClose: () -> Unit,
     onCalculator: () -> Unit
@@ -193,7 +208,7 @@ private fun TopBar(
         label = "dojoProgress"
     )
 
-    Column(modifier = Modifier.fillMaxWidth()) {
+    Column(modifier = modifier.fillMaxWidth()) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -223,7 +238,7 @@ private fun TopBar(
                     .clickable(onClick = onClose),
                 contentAlignment = Alignment.Center
             ) {
-                Text("✕", color = KalynoMuted, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                Icon(Icons.Rounded.Close, contentDescription = "Fermer", tint = KalynoMuted, modifier = Modifier.size(22.dp))
             }
             Spacer(Modifier.width(4.dp))
             Text(
@@ -233,17 +248,28 @@ private fun TopBar(
                 fontWeight = FontWeight.ExtraBold
             )
             Spacer(Modifier.weight(1f))
-            Text(
-                text = "🧮 Calculatrice",
-                color = if (calculatorSuggested) KalynoAmberDeep else KalynoBlue,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.ExtraBold,
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
                     .clip(CircleShape)
                     .background(if (calculatorSuggested) KalynoAmberSoft else KalynoBlueSoft)
                     .clickable(onClick = onCalculator)
-                    .padding(horizontal = 12.dp, vertical = 8.dp)
-            )
+                    .padding(horizontal = 12.dp, vertical = 7.dp)
+            ) {
+                Icon(
+                    Icons.Rounded.Calculate,
+                    contentDescription = null,
+                    tint = if (calculatorSuggested) KalynoAmberDeep else KalynoBlue,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    text = "Calculatrice",
+                    color = if (calculatorSuggested) KalynoAmberDeep else KalynoBlue,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.ExtraBold
+                )
+            }
             Spacer(Modifier.width(8.dp))
             StreakBadge(count = dayStreak)
         }
@@ -252,6 +278,7 @@ private fun TopBar(
 
 // ---------------------------------------------------------------------------
 // Un exercice : question -> validation -> correction (jamais avant la validation)
+// La rétroaction vit dans un footer fixe : aucun scroll nécessaire pour la voir.
 // ---------------------------------------------------------------------------
 
 @Composable
@@ -262,46 +289,35 @@ private fun ExercisePane(state: DojoUiState, exercise: DojoExercise, vm: DojoVie
     val enter = remember { Animatable(0f) }
     LaunchedEffect(Unit) { enter.animateTo(1f, tween(320)) }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .graphicsLayer {
-                alpha = enter.value
-                translationX = (1f - enter.value) * 48.dp.toPx()
-            }
-    ) {
+    Column(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
+                .graphicsLayer {
+                    alpha = enter.value
+                    translationX = (1f - enter.value) * 48.dp.toPx()
+                }
                 .verticalScroll(rememberScrollState())
-                .padding(top = 14.dp, bottom = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+                .padding(horizontal = 16.dp)
+                .padding(top = 10.dp, bottom = 12.dp)
         ) {
             QuestionCard(state = state, exercise = exercise, vm = vm)
-
-            if (result != null) {
-                AnimatedVisibility(
-                    visible = true,
-                    enter = fadeIn(tween(350)) + expandVertically(tween(350))
-                ) {
-                    CorrectionCard(exercise = exercise, result = result)
-                }
-            }
         }
 
-        if (result == null) {
-            KalynoPrimaryButton(
-                label = "VALIDER MA RÉPONSE",
-                onClick = vm::submit,
-                enabled = state.canSubmit
-            )
-        } else {
-            KalynoPrimaryButton(
-                label = if (isLast) "VOIR MON BILAN" else "CONTINUER",
-                onClick = vm::next
-            )
-        }
+        QuizStickyFooter(
+            validated = result != null,
+            actionLabel = when {
+                result == null -> "VALIDER MA RÉPONSE"
+                isLast -> "VOIR MON BILAN"
+                else -> "CONTINUER"
+            },
+            actionEnabled = result != null || state.canSubmit,
+            onAction = { if (result == null) vm.submit() else vm.next() },
+            feedback = if (result != null) {
+                { DojoFeedback(exercise = exercise, result = result) }
+            } else null
+        )
     }
 }
 
@@ -312,89 +328,24 @@ private fun QuestionCard(state: DojoUiState, exercise: DojoExercise, vm: DojoVie
     val locked = result != null
     val haptic = rememberHaptic()
 
-    val cardBackground by animateColorAsState(
-        targetValue = when {
-            result == null -> Color.White
-            result.correct -> KalynoCorrectSoft
-            else -> KalynoDangerSoft
+    val lessonLabel = listOfNotNull(
+        item.subjectName.takeIf { it.isNotBlank() },
+        item.chapterTitle.takeIf { it.isNotBlank() }
+    ).distinct().joinToString(" · ").ifBlank { state.title.orEmpty() }
+
+    KalynoQuestionCard(
+        question = item.front,
+        lessonLabel = lessonLabel,
+        typeLabel = when (exercise.kind) {
+            ExerciseKind.SINGLE_CHOICE -> "Une bonne réponse"
+            ExerciseKind.MULTIPLE_CHOICE -> "Plusieurs réponses"
+            ExerciseKind.FREE_TEXT -> "Saisie libre"
         },
-        label = "dojoCardBackground"
-    )
-    val cardBorder by animateColorAsState(
-        targetValue = when {
-            result == null -> KalynoOutline
-            result.correct -> KalynoCorrect
-            else -> KalynoDangerBorder
-        },
-        label = "dojoCardBorder"
-    )
-
-    KalynoCard(
-        modifier = Modifier.fillMaxWidth(),
-        contentPadding = 22.dp,
-        background = cardBackground,
-        borderColor = cardBorder
-    ) {
-        KalynoPill(
-            text = when (exercise.kind) {
-                ExerciseKind.SINGLE_CHOICE -> "🎯 UNE BONNE RÉPONSE"
-                ExerciseKind.MULTIPLE_CHOICE -> "☑️ PLUSIEURS RÉPONSES"
-                ExerciseKind.FREE_TEXT -> "✍️ SAISIE LIBRE"
-            }
-        )
-
-        val context = listOfNotNull(
-            state.title,
-            item.subjectName.takeIf { it.isNotBlank() },
-            item.chapterTitle.takeIf { it.isNotBlank() }
-        ).distinct().joinToString(" · ")
-        if (context.isNotBlank()) {
-            Spacer(Modifier.height(8.dp))
-            Text(text = context, color = KalynoMuted, fontSize = 12.sp, fontWeight = FontWeight.Medium)
-        }
-
-        Spacer(Modifier.height(16.dp))
-        MathText(
-            text = item.front,
-            color = KalynoText,
-            fontSize = 21.sp,
-            lineHeight = 30.sp,
-            fontWeight = FontWeight.ExtraBold
-        )
-
         // Indice : seulement à la demande (la carte reviendra alors plus tôt)
-        val hint = item.hint
-        if (!hint.isNullOrBlank()) {
-            Spacer(Modifier.height(12.dp))
-            if (state.hintShown) {
-                MathText(
-                    text = hint,
-                    color = KalynoAmberDeep,
-                    fontSize = 14.sp,
-                    lineHeight = 20.sp,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(KalynoAmberSoft)
-                        .padding(12.dp)
-                )
-            } else if (!locked) {
-                Text(
-                    text = "💡 Voir un indice",
-                    color = KalynoAmberDeep,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    modifier = Modifier
-                        .clip(CircleShape)
-                        .background(KalynoAmberSoft)
-                        .clickable { vm.showHint() }
-                        .padding(horizontal = 12.dp, vertical = 8.dp)
-                )
-            }
-        }
-
-        Spacer(Modifier.height(18.dp))
-
+        hint = item.hint,
+        hintVisible = state.hintShown,
+        onRequestHint = if (!locked) ({ vm.showHint() }) else null
+    ) {
         when (exercise.kind) {
             ExerciseKind.FREE_TEXT -> OutlinedTextField(
                 value = state.typed,
@@ -402,22 +353,22 @@ private fun QuestionCard(state: DojoUiState, exercise: DojoExercise, vm: DojoVie
                 modifier = Modifier.fillMaxWidth(),
                 enabled = !locked,
                 singleLine = true,
-                shape = RoundedCornerShape(16.dp),
-                textStyle = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.Bold),
-                placeholder = { Text("Écris ta réponse ici...", color = KalynoMuted) },
+                shape = RoundedCornerShape(14.dp),
+                textStyle = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.Bold),
+                placeholder = { Text("Écris ta réponse ici...", color = QuizColors.Muted) },
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                 keyboardActions = KeyboardActions(onDone = { vm.submit() }),
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedContainerColor = Color.White,
-                    unfocusedContainerColor = Color.White,
-                    disabledContainerColor = Color.White,
-                    focusedBorderColor = KalynoBlue,
-                    unfocusedBorderColor = KalynoOutline,
-                    disabledBorderColor = if (result?.correct == true) KalynoCorrect else KalynoDangerBorder,
-                    cursorColor = KalynoBlue,
-                    focusedTextColor = KalynoText,
-                    unfocusedTextColor = KalynoText,
-                    disabledTextColor = KalynoText
+                    focusedContainerColor = QuizColors.Surface,
+                    unfocusedContainerColor = QuizColors.Surface,
+                    disabledContainerColor = if (result?.correct == true) QuizColors.CorrectBg else QuizColors.WrongBg,
+                    focusedBorderColor = QuizColors.Primary,
+                    unfocusedBorderColor = QuizColors.Border,
+                    disabledBorderColor = if (result?.correct == true) QuizColors.CorrectBorder else QuizColors.WrongBorder,
+                    cursorColor = QuizColors.Primary,
+                    focusedTextColor = QuizColors.Ink,
+                    unfocusedTextColor = QuizColors.Ink,
+                    disabledTextColor = QuizColors.Ink
                 )
             )
 
@@ -426,17 +377,16 @@ private fun QuestionCard(state: DojoUiState, exercise: DojoExercise, vm: DojoVie
                 if (multiple && !locked) {
                     Text(
                         text = "Coche toutes les bonnes réponses.",
-                        color = KalynoMuted,
-                        fontSize = 13.sp
+                        color = QuizColors.Muted,
+                        fontSize = 12.sp
                     )
-                    Spacer(Modifier.height(10.dp))
+                    Spacer(Modifier.height(8.dp))
                 }
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     item.choices.forEachIndexed { i, choice ->
-                        ChoiceRow(
+                        KalynoChoiceCard(
                             letter = ('A'.code + i).toChar().toString(),
                             text = choice,
-                            multiple = multiple,
                             selected = i in state.selected,
                             locked = locked,
                             // La bonne réponse n'est révélée qu'après la validation
@@ -453,6 +403,7 @@ private fun QuestionCard(state: DojoUiState, exercise: DojoExercise, vm: DojoVie
     }
 }
 
+/** Conservé pour le Défi : même carte de suggestion que le Dojo. */
 @Composable
 internal fun ChoiceRow(
     letter: String,
@@ -463,69 +414,14 @@ internal fun ChoiceRow(
     isCorrect: Boolean,
     onClick: () -> Unit
 ) {
-    val shape = RoundedCornerShape(16.dp)
-    val wrongPick = locked && selected && !isCorrect
-
-    val container = when {
-        isCorrect -> KalynoCorrectSoft
-        wrongPick -> KalynoDangerSoft
-        selected -> KalynoBlueSoft
-        else -> Color.White
-    }
-    val borderColor = when {
-        isCorrect -> KalynoCorrect
-        wrongPick -> KalynoDanger
-        selected -> KalynoBlue
-        else -> KalynoOutline
-    }
-    val badgeColor = when {
-        isCorrect -> KalynoCorrect
-        wrongPick -> KalynoDanger
-        selected -> KalynoBlue
-        else -> KalynoBackground
-    }
-    val badgeText = when {
-        isCorrect -> "✓"
-        wrongPick -> "✕"
-        else -> letter
-    }
-    val dimmed = locked && !isCorrect && !wrongPick
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .graphicsLayer { alpha = if (dimmed) 0.55f else 1f }
-            .clip(shape)
-            .background(container)
-            .border(if (selected || isCorrect) 2.dp else 1.dp, borderColor, shape)
-            .clickable(enabled = !locked, onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(
-            modifier = Modifier
-                .size(30.dp)
-                .clip(if (multiple) RoundedCornerShape(8.dp) else CircleShape)
-                .background(badgeColor),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = badgeText,
-                color = if (selected || isCorrect || wrongPick) Color.White else KalynoMuted,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.ExtraBold
-            )
-        }
-        Spacer(Modifier.width(12.dp))
-        MathText(
-            text = text,
-            color = KalynoText,
-            fontSize = 16.sp,
-            lineHeight = 22.sp,
-            fontWeight = if (selected || isCorrect) FontWeight.Bold else FontWeight.Medium,
-            modifier = Modifier.weight(1f)
-        )
-    }
+    KalynoChoiceCard(
+        letter = letter,
+        text = text,
+        selected = selected,
+        locked = locked,
+        isCorrect = isCorrect,
+        onClick = onClick
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -533,134 +429,26 @@ internal fun ChoiceRow(
 // ---------------------------------------------------------------------------
 
 @Composable
-private fun CorrectionCard(exercise: DojoExercise, result: DojoResult) {
+private fun DojoFeedback(exercise: DojoExercise, result: DojoResult) {
     val item = exercise.item
-    val accent = when {
-        result.correct -> KalynoCorrectText
-        result.partial -> KalynoAmberDeep
-        else -> KalynoDanger
-    }
-    val tint = when {
-        result.correct -> KalynoCorrectSoft
-        result.partial -> KalynoAmberSoft
-        else -> KalynoDangerSoft
-    }
+    // La bonne réponse : affichée en cas d'erreur, et toujours pour la saisie libre
+    val showAnswer = !result.correct || exercise.kind == ExerciseKind.FREE_TEXT
 
-    KalynoCard(modifier = Modifier.fillMaxWidth(), contentPadding = 20.dp) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(14.dp))
-                .background(tint)
-                .padding(14.dp)
-        ) {
-            val emoji = when {
-                result.correct -> "🎉"
-                result.partial -> "🤏"
-                else -> "💪"
-            }
-            Text(
-                text = "$emoji ${result.message}",
-                color = accent,
-                fontSize = 15.sp,
-                lineHeight = 21.sp,
-                fontWeight = FontWeight.Bold
-            )
-            if (result.partial) {
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    text = "Tu n'as pas coché toutes les bonnes réponses.",
-                    color = KalynoText,
-                    fontSize = 13.sp
-                )
-            }
-            result.nextReviewDays?.let { days ->
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    text = "🧠 Prochaine révision : " + if (days <= 1) "demain" else "dans $days jours",
-                    color = KalynoMuted,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium
-                )
-            }
-        }
-
-        // La bonne réponse : affichée en cas d'erreur, et toujours pour la saisie libre
-        if (!result.correct || exercise.kind == ExerciseKind.FREE_TEXT) {
-            Spacer(Modifier.height(16.dp))
-            Text(
-                text = "BONNE RÉPONSE",
-                color = KalynoCorrectText,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.ExtraBold,
-                letterSpacing = 1.sp
-            )
-            Spacer(Modifier.height(8.dp))
-            MathText(
-                text = exercise.acceptedAnswers.firstOrNull() ?: item.answer,
-                color = KalynoCorrect,
-                fontSize = 22.sp,
-                lineHeight = 30.sp,
-                fontWeight = FontWeight.ExtraBold,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(KalynoCorrectSoft)
-                    .padding(16.dp)
-            )
-            if (exercise.acceptedAnswers.size > 1) {
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    text = "Aussi accepté : " + exercise.acceptedAnswers.drop(1).joinToString(" · "),
-                    color = KalynoMuted,
-                    fontSize = 12.sp
-                )
-            }
-        }
-
-        val steps = explanationSteps(item.explanation)
-        if (steps.isNotEmpty()) {
-            Spacer(Modifier.height(18.dp))
-            Text(
-                text = "EXPLICATION",
-                color = KalynoBlue,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.ExtraBold,
-                letterSpacing = 1.sp
-            )
-            Spacer(Modifier.height(10.dp))
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                steps.forEachIndexed { i, step ->
-                    Row(verticalAlignment = Alignment.Top) {
-                        if (steps.size > 1) {
-                            Box(
-                                modifier = Modifier
-                                    .size(24.dp)
-                                    .clip(CircleShape)
-                                    .background(KalynoBlueSoft),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = "${i + 1}",
-                                    color = KalynoBlue,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.ExtraBold
-                                )
-                            }
-                            Spacer(Modifier.width(10.dp))
-                        }
-                        MathText(
-                            text = step,
-                            color = KalynoText,
-                            fontSize = 15.sp,
-                            lineHeight = 22.sp,
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                }
-            }
-        }
-    }
+    QuizFeedbackPanel(
+        tone = when {
+            result.correct -> FeedbackTone.Correct
+            result.partial -> FeedbackTone.Partial
+            else -> FeedbackTone.Wrong
+        },
+        message = result.message,
+        detail = if (result.partial) "Tu n'as pas coché toutes les bonnes réponses." else null,
+        meta = result.nextReviewDays?.let { days ->
+            "Prochaine révision : " + if (days <= 1) "demain" else "dans $days jours"
+        },
+        correctAnswer = if (showAnswer) (exercise.acceptedAnswers.firstOrNull() ?: item.answer) else null,
+        alsoAccepted = exercise.acceptedAnswers.drop(1),
+        explanationSteps = explanationSteps(item.explanation)
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -679,7 +467,12 @@ private fun FinishedPane(total: Int, correct: Int, onDone: () -> Unit) {
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(if (good) "🏆" else "💪", fontSize = 64.sp)
+        Icon(
+            imageVector = if (good) Icons.Rounded.EmojiEvents else Icons.Rounded.FitnessCenter,
+            contentDescription = null,
+            tint = QuizColors.Primary,
+            modifier = Modifier.size(64.dp)
+        )
         Spacer(Modifier.height(12.dp))
         Text(
             text = "Session terminée !",
@@ -705,8 +498,8 @@ private fun FinishedPane(total: Int, correct: Int, onDone: () -> Unit) {
         )
         Spacer(Modifier.height(24.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            SummaryChip("✅ $correct", KalynoCorrectSoft, KalynoCorrectText)
-            SummaryChip("❌ ${total - correct}", KalynoDangerSoft, KalynoDanger)
+            SummaryChip(Icons.Rounded.Check, "$correct", QuizColors.CorrectBg, QuizColors.CorrectText)
+            SummaryChip(Icons.Rounded.Close, "${total - correct}", QuizColors.WrongBg, QuizColors.WrongText)
         }
         Spacer(Modifier.height(32.dp))
         KalynoPrimaryButton(label = "TERMINER", onClick = onDone)
@@ -714,17 +507,18 @@ private fun FinishedPane(total: Int, correct: Int, onDone: () -> Unit) {
 }
 
 @Composable
-private fun SummaryChip(text: String, container: Color, content: Color) {
-    Text(
-        text = text,
-        color = content,
-        fontSize = 16.sp,
-        fontWeight = FontWeight.ExtraBold,
+private fun SummaryChip(icon: ImageVector, text: String, container: Color, content: Color) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .clip(CircleShape)
             .background(container)
-            .padding(horizontal = 18.dp, vertical = 10.dp)
-    )
+            .padding(horizontal = 16.dp, vertical = 9.dp)
+    ) {
+        Icon(icon, contentDescription = null, tint = content, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(6.dp))
+        Text(text = text, color = content, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold)
+    }
 }
 
 /** Découpe l'explication de l'admin en étapes (une par ligne, sinon une par phrase). */

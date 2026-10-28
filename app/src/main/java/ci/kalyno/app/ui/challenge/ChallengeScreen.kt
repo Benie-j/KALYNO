@@ -64,6 +64,9 @@ import ci.kalyno.app.ui.dojo.ChoiceRow
 import ci.kalyno.app.ui.dojo.DojoMessages
 import ci.kalyno.app.ui.dojo.ScientificCalculatorDialog
 import ci.kalyno.app.ui.dojo.explanationSteps
+import ci.kalyno.app.ui.quiz.FeedbackTone
+import ci.kalyno.app.ui.quiz.QuizFeedbackPanel
+import ci.kalyno.app.ui.quiz.QuizStickyFooter
 import ci.kalyno.app.ui.theme.*
 import kotlinx.coroutines.CancellationException
 
@@ -288,8 +291,11 @@ private fun QuestionStep(
         label = "progress"
     )
 
-    Column(modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 12.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+    Column(modifier = Modifier.fillMaxSize()) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
+        ) {
             Box(
                 modifier = Modifier
                     .size(40.dp)
@@ -310,8 +316,9 @@ private fun QuestionStep(
                 .weight(1f)
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
-                .padding(top = 16.dp, bottom = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+                .padding(horizontal = 16.dp)
+                .padding(top = 4.dp, bottom = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             ChallengeQuestionCard(
                 title = title,
@@ -331,25 +338,22 @@ private fun QuestionStep(
                     calculatorOpen = true
                 }
             )
-
-            if (locked) {
-                AnimatedVisibility(
-                    visible = true,
-                    enter = fadeIn(tween(350)) + expandVertically(tween(350))
-                ) {
-                    ChallengeCorrection(question = question, outcome = outcome, message = message)
-                }
-            }
         }
 
-        if (!locked) {
-            KalynoPrimaryButton(label = "VALIDER MA RÉPONSE", onClick = ::submit, enabled = canSubmit)
-        } else {
-            KalynoPrimaryButton(
-                label = if (index == total - 1) "TERMINER" else "CONTINUER",
-                onClick = onNext
-            )
-        }
+        // Footer fixe : la correction et l'explication restent visibles sans scroll
+        QuizStickyFooter(
+            validated = locked,
+            actionLabel = when {
+                !locked -> "VALIDER MA RÉPONSE"
+                index == total - 1 -> "TERMINER"
+                else -> "CONTINUER"
+            },
+            actionEnabled = locked || canSubmit,
+            onAction = { if (locked) onNext() else submit() },
+            feedback = if (locked) {
+                { ChallengeCorrection(question = question, outcome = outcome, message = message) }
+            } else null
+        )
     }
 
     if (calculatorOpen) {
@@ -384,28 +388,12 @@ private fun ChallengeQuestionCard(
 ) {
     val locked = outcome != OUTCOME_NONE
 
-    val cardBackground by animateColorAsState(
-        targetValue = when (outcome) {
-            OUTCOME_NONE -> Color.White
-            OUTCOME_CORRECT -> KalynoCorrectSoft
-            else -> KalynoDangerSoft
-        },
-        label = "challengeCardBackground"
-    )
-    val cardBorder by animateColorAsState(
-        targetValue = when (outcome) {
-            OUTCOME_NONE -> KalynoOutline
-            OUTCOME_CORRECT -> KalynoCorrect
-            else -> KalynoDangerBorder
-        },
-        label = "challengeCardBorder"
-    )
-
     KalynoCard(
         modifier = Modifier.fillMaxWidth(),
-        contentPadding = 22.dp,
-        background = cardBackground,
-        borderColor = cardBorder
+        shape = RoundedCornerShape(20.dp),
+        contentPadding = 16.dp,
+        background = Color.White,
+        borderColor = KalynoOutline
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             KalynoPill(
@@ -436,12 +424,12 @@ private fun ChallengeQuestionCard(
             Text(text = title, color = KalynoMuted, fontSize = 12.sp, fontWeight = FontWeight.Medium)
         }
 
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(10.dp))
         MathText(
             text = question.prompt,
             color = KalynoText,
-            fontSize = 21.sp,
-            lineHeight = 30.sp,
+            fontSize = 18.sp,
+            lineHeight = 26.sp,
             fontWeight = FontWeight.ExtraBold
         )
 
@@ -483,7 +471,7 @@ private fun ChallengeQuestionCard(
             }
         }
 
-        Spacer(Modifier.height(18.dp))
+        Spacer(Modifier.height(14.dp))
 
         if (question.kind == ExerciseKind.FREE_TEXT) {
             OutlinedTextField(
@@ -516,7 +504,7 @@ private fun ChallengeQuestionCard(
                 Text(text = "Coche toutes les bonnes réponses.", color = KalynoMuted, fontSize = 13.sp)
                 Spacer(Modifier.height(10.dp))
             }
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 question.choices.forEachIndexed { i, choice ->
                     ChoiceRow(
                         letter = ('A'.code + i).toChar().toString(),
@@ -536,126 +524,25 @@ private fun ChallengeQuestionCard(
 
 @Composable
 private fun ChallengeCorrection(question: Question, outcome: Int, message: String) {
-    val accent = when (outcome) {
-        OUTCOME_CORRECT -> KalynoCorrectText
-        OUTCOME_PARTIAL -> KalynoAmberDeep
-        else -> KalynoDanger
-    }
-    val tint = when (outcome) {
-        OUTCOME_CORRECT -> KalynoCorrectSoft
-        OUTCOME_PARTIAL -> KalynoAmberSoft
-        else -> KalynoDangerSoft
-    }
     val isFree = question.kind == ExerciseKind.FREE_TEXT
+    // La bonne réponse : affichée en cas d'erreur, et toujours pour la saisie libre
+    val answer = if (outcome != OUTCOME_CORRECT || isFree) {
+        if (isFree) question.acceptedAnswers.firstOrNull()
+        else answerText(question.choices, question.correctIndices.sorted(), null)
+    } else null
 
-    KalynoCard(modifier = Modifier.fillMaxWidth(), contentPadding = 20.dp) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(14.dp))
-                .background(tint)
-                .padding(14.dp)
-        ) {
-            Text(
-                text = message,
-                color = accent,
-                fontSize = 15.sp,
-                lineHeight = 21.sp,
-                fontWeight = FontWeight.Bold
-            )
-            if (outcome == OUTCOME_PARTIAL) {
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    text = "Tu n'as pas coché toutes les bonnes réponses.",
-                    color = KalynoText,
-                    fontSize = 13.sp
-                )
-            }
-        }
-
-        // La bonne réponse : affichée en cas d'erreur, et toujours pour la saisie libre
-        if (outcome != OUTCOME_CORRECT || isFree) {
-            val answer = if (isFree) {
-                question.acceptedAnswers.firstOrNull()
-            } else {
-                answerText(question.choices, question.correctIndices.sorted(), null)
-            }
-            if (!answer.isNullOrBlank()) {
-                Spacer(Modifier.height(16.dp))
-                Text(
-                    text = "BONNE RÉPONSE",
-                    color = KalynoCorrectText,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    letterSpacing = 1.sp
-                )
-                Spacer(Modifier.height(8.dp))
-                MathText(
-                    text = answer,
-                    color = KalynoCorrect,
-                    fontSize = 22.sp,
-                    lineHeight = 30.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(KalynoCorrectSoft)
-                        .padding(16.dp)
-                )
-                if (isFree && question.acceptedAnswers.size > 1) {
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        text = "Aussi accepté : " + question.acceptedAnswers.drop(1).joinToString(" · "),
-                        color = KalynoMuted,
-                        fontSize = 12.sp
-                    )
-                }
-            }
-        }
-
-        val steps = explanationSteps(question.explanation)
-        if (steps.isNotEmpty()) {
-            Spacer(Modifier.height(18.dp))
-            Text(
-                text = "EXPLICATION",
-                color = KalynoBlue,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.ExtraBold,
-                letterSpacing = 1.sp
-            )
-            Spacer(Modifier.height(10.dp))
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                steps.forEachIndexed { i, step ->
-                    Row(verticalAlignment = Alignment.Top) {
-                        if (steps.size > 1) {
-                            Box(
-                                modifier = Modifier
-                                    .size(24.dp)
-                                    .clip(CircleShape)
-                                    .background(KalynoBlueSoft),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = "${i + 1}",
-                                    color = KalynoBlue,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.ExtraBold
-                                )
-                            }
-                            Spacer(Modifier.width(10.dp))
-                        }
-                        MathText(
-                            text = step,
-                            color = KalynoText,
-                            fontSize = 15.sp,
-                            lineHeight = 22.sp,
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                }
-            }
-        }
-    }
+    QuizFeedbackPanel(
+        tone = when (outcome) {
+            OUTCOME_CORRECT -> FeedbackTone.Correct
+            OUTCOME_PARTIAL -> FeedbackTone.Partial
+            else -> FeedbackTone.Wrong
+        },
+        message = message,
+        detail = if (outcome == OUTCOME_PARTIAL) "Tu n'as pas coché toutes les bonnes réponses." else null,
+        correctAnswer = answer,
+        alsoAccepted = if (isFree) question.acceptedAnswers.drop(1) else emptyList(),
+        explanationSteps = explanationSteps(question.explanation)
+    )
 }
 
 @Composable
