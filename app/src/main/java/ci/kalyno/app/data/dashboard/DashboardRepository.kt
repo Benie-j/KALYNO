@@ -39,7 +39,7 @@ class DashboardRepository(context: Context) {
         val urgentItems: List<ReviewItem>,
         /** Jours restants avant l'examen publié par l'admin (null si aucune date). */
         val examDaysLeft: Int?,
-        /** Notions revisees au moins MASTERED_REPETITIONS fois d'affilee avec succes. */
+        /** Nombre de notions (chapitres) maitrisees = masteredNotions.size, toujours coherent avec la liste. */
         val masteredCount: Int,
         /** Detail des notions maitrisees (regroupees par chapitre), pour l'ecran "Ma progression". */
         val masteredNotions: List<MasteredNotion>,
@@ -163,9 +163,8 @@ class DashboardRepository(context: Context) {
             else -> MissionStatus.EMPTY
         }
 
-        // ----- KPI : notions maîtrisées et score de rétention -----
+        // ----- KPI : score de rétention (niveau fiche, moyenne globale) -----
         val masteryRows = srs.masteryRows(studentId)
-        val masteredCount = masteryRows.count { it.repetitions >= MASTERED_REPETITIONS }
         val retentionScore = masteryRows
             .mapNotNull { row ->
                 val last = row.lastReviewedAt ?: return@mapNotNull null
@@ -179,6 +178,9 @@ class DashboardRepository(context: Context) {
             ?.toFloat()
 
         // ----- Détail des notions maîtrisées (groupées par chapitre) -----
+        // Une "notion" = un chapitre, pas une fiche isolée : c'est le niveau auquel l'élève
+        // raisonne. masteredCount en dérive directement pour que le chiffre affiché en tête
+        // de l'écran corresponde EXACTEMENT au nombre de cartes listées en dessous.
         val masteredNotions = srs.masteredDetails(studentId, MASTERED_REPETITIONS)
             .groupBy { "${it.subjectId}::${it.chapitre}" }
             .mapNotNull { (key, rows) ->
@@ -209,6 +211,7 @@ class DashboardRepository(context: Context) {
                 )
             }
             .sortedWith(compareByDescending<MasteredNotion> { it.tier }.thenByDescending { it.masteredCards })
+        val masteredCount = masteredNotions.size
 
         Snapshot(
             mission = when (status) {

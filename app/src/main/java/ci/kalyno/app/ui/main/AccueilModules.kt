@@ -570,11 +570,12 @@ private fun MasteredNotionCard(notion: MasteredNotion) {
                 text = notion.label,
                 color = KalynoText,
                 fontSize = 14.sp,
+                lineHeight = 18.sp,
                 fontWeight = FontWeight.Bold,
-                maxLines = 1,
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
-            Spacer(Modifier.height(2.dp))
+            Spacer(Modifier.height(3.dp))
             Text(
                 text = notion.domain,
                 color = KalynoMuted,
@@ -582,6 +583,13 @@ private fun MasteredNotionCard(notion: MasteredNotion) {
                 fontWeight = FontWeight.Medium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = if (notion.masteredCards == 1) "1 fiche maîtrisée" else "${notion.masteredCards} fiches maîtrisées",
+                color = style.tint,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold
             )
         }
         Spacer(Modifier.width(10.dp))

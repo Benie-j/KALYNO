@@ -111,7 +111,7 @@ data class DashboardUiState(
     val session: ReviewSession? = null,
     /** Message de motivation publie par l'admin (banniere heros). Null = rien a afficher. */
     val heroMessage: String? = null,
-    /** Nombre de notions maitrisees (repetitions >= 2 cote SRS). Null = pas encore calcule. */
+    /** Nombre de notions (chapitres) maitrisees = masteredNotions.size. Null = pas encore calcule. */
     val masteredCount: Int? = null,
     /** Détail des notions maîtrisées, regroupées par chapitre, piloté par le moteur SRS. */
     val masteredNotions: List<MasteredNotion> = emptyList(),
