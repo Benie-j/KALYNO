@@ -37,12 +37,23 @@ object QuoteCardRenderer {
     private val AMBER = Color.parseColor("#F59E0B")
     private val AMBER_SOFT = Color.parseColor("#FCD34D")
 
+    // Badges des stores (pied de carte)
+    private const val BADGE_WIDTH = 400f
+    private const val BADGE_HEIGHT = 88f
+    private const val BADGE_RADIUS = 26f
+    private const val BADGE_ICON = 52f
+    private const val BADGE_ICON_GAP = 18f
+    private const val BADGE_CAPTION_GAP = 18f
+    private const val STORE_CAPTION = "Bientôt disponible"
+
     fun render(context: Context, quote: DailyQuote): Bitmap {
         val bitmap = Bitmap.createBitmap(WIDTH, HEIGHT, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
         val w = WIDTH.toFloat()
         val h = HEIGHT.toFloat()
         val quoteSvg = runCatching { SVG.getFromAsset(context.assets, "icons/quote.svg") }.getOrNull()
+        val appleSvg = runCatching { SVG.getFromAsset(context.assets, "icons/apple.svg") }.getOrNull()
+        val playSvg = runCatching { SVG.getFromAsset(context.assets, "icons/google-play.svg") }.getOrNull()
 
         // Fond : dégradé Vert Pétrole -> teal profond
         val background = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -56,7 +67,7 @@ object QuoteCardRenderer {
         canvas.drawCircle(w * 0.02f, h * 0.94f, 470f, soft)
 
         // Grand guillemet en filigrane (retourné, en bas à droite)
-        drawSvg(canvas, quoteSvg, x = w - 600f, y = h - 940f, size = 560f, color = Color.argb(26, 255, 255, 255), rotate = true)
+        drawSvg(canvas, quoteSvg, x = w - 600f, y = h - 1000f, size = 560f, color = Color.argb(26, 255, 255, 255), rotate = true)
 
         // En-tête : point orange + nom de l'application
         val dot = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = AMBER }
@@ -124,12 +135,12 @@ object QuoteCardRenderer {
             canvas.restore()
         }
 
-        // Pied de carte : signature + pastille "Citation du jour"
+        // Pied de carte : signature + pastille "Citation du jour", puis badges des stores
         val line = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.argb(60, 255, 255, 255)
             strokeWidth = 2f
         }
-        canvas.drawLine(MARGIN, 1650f, w - MARGIN, 1650f, line)
+        canvas.drawLine(MARGIN, 1520f, w - MARGIN, 1520f, line)
 
         val footerBrand = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.WHITE
@@ -137,12 +148,12 @@ object QuoteCardRenderer {
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             letterSpacing = 0.16f
         }
-        canvas.drawText("KALYNO", MARGIN, 1744f, footerBrand)
+        canvas.drawText("KALYNO", MARGIN, 1608f, footerBrand)
         val tagline = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.argb(205, 255, 255, 255)
             textSize = 38f
         }
-        canvas.drawText("Révise autrement.", MARGIN, 1804f, tagline)
+        canvas.drawText("Révise autrement.", MARGIN, 1668f, tagline)
 
         val pillText = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = AMBER_SOFT
@@ -151,7 +162,7 @@ object QuoteCardRenderer {
         }
         val label = "Citation du jour"
         val pillWidth = pillText.measureText(label) + 72f
-        val pillRect = RectF(w - MARGIN - pillWidth, 1708f, w - MARGIN, 1792f)
+        val pillRect = RectF(w - MARGIN - pillWidth, 1572f, w - MARGIN, 1656f)
         val pillStroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = AMBER
             style = Paint.Style.STROKE
@@ -160,7 +171,63 @@ object QuoteCardRenderer {
         canvas.drawRoundRect(pillRect, 42f, 42f, pillStroke)
         canvas.drawText(label, pillRect.left + 36f, pillRect.top + 54f, pillText)
 
+        // Badges App Store / Google Play, alignés sur les marges (400 + 60 + 400 = 860 px)
+        val badgeTop = 1722f
+        val badgeGap = (w - 2 * MARGIN) - 2 * BADGE_WIDTH
+        drawStoreBadge(canvas, appleSvg, Color.WHITE, "App Store", MARGIN, badgeTop)
+        drawStoreBadge(canvas, playSvg, null, "Google Play", MARGIN + BADGE_WIDTH + badgeGap, badgeTop)
+
         return bitmap
+    }
+
+    /**
+     * Badge de store : capsule vitrée (fond sombre translucide + liseré clair), logo vectoriel
+     * et nom du store centrés, puis la mention "Bientôt disponible" centrée juste dessous.
+     * [iconTint] = null conserve les couleurs d'origine du logo.
+     */
+    private fun drawStoreBadge(
+        canvas: Canvas,
+        icon: SVG?,
+        iconTint: Int?,
+        storeName: String,
+        left: Float,
+        top: Float
+    ) {
+        val rect = RectF(left, top, left + BADGE_WIDTH, top + BADGE_HEIGHT)
+
+        val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.argb(78, 0, 0, 0) }
+        canvas.drawRoundRect(rect, BADGE_RADIUS, BADGE_RADIUS, fill)
+        val stroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.argb(95, 255, 255, 255)
+            style = Paint.Style.STROKE
+            strokeWidth = 2f
+        }
+        val inset = stroke.strokeWidth / 2f
+        canvas.drawRoundRect(
+            RectF(rect.left + inset, rect.top + inset, rect.right - inset, rect.bottom - inset),
+            BADGE_RADIUS, BADGE_RADIUS, stroke
+        )
+
+        val namePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.WHITE
+            textSize = 36f
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        }
+        val iconSpace = if (icon != null) BADGE_ICON + BADGE_ICON_GAP else 0f
+        val groupWidth = iconSpace + namePaint.measureText(storeName)
+        val startX = rect.centerX() - groupWidth / 2f
+        drawSvg(canvas, icon, x = startX, y = rect.centerY() - BADGE_ICON / 2f, size = BADGE_ICON, color = iconTint)
+        val metrics = namePaint.fontMetrics
+        val baseline = rect.centerY() - (metrics.ascent + metrics.descent) / 2f
+        canvas.drawText(storeName, startX + iconSpace, baseline, namePaint)
+
+        val caption = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.argb(205, 255, 255, 255)
+            textSize = 28f
+            letterSpacing = 0.03f
+            textAlign = Paint.Align.CENTER
+        }
+        canvas.drawText(STORE_CAPTION, rect.centerX(), rect.bottom + BADGE_CAPTION_GAP + 26f, caption)
     }
 
     private fun buildLayout(
@@ -177,18 +244,20 @@ object QuoteCardRenderer {
             .setEllipsize(TextUtils.TruncateAt.END)
             .build()
 
-    /** Dessine une icône SVG (viewBox 24) teintée dans un carré de [size] px. */
+    /** Dessine une icône SVG (viewBox 24) dans un carré de [size] px, teintée si [color] != null. */
     private fun drawSvg(
         canvas: Canvas,
         svg: SVG?,
         x: Float,
         y: Float,
         size: Float,
-        color: Int,
+        color: Int?,
         rotate: Boolean = false
     ) {
         svg ?: return
-        val paint = Paint().apply { colorFilter = PorterDuffColorFilter(color, PorterDuff.Mode.SRC_IN) }
+        val paint = Paint().apply {
+            if (color != null) colorFilter = PorterDuffColorFilter(color, PorterDuff.Mode.SRC_IN)
+        }
         val save = canvas.saveLayer(x, y, x + size, y + size, paint)
         canvas.translate(x, y)
         canvas.scale(size / 24f, size / 24f)
