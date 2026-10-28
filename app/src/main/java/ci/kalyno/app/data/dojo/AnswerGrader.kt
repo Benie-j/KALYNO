@@ -56,7 +56,7 @@ object AnswerGrader {
         return Verdict(false, ReviewRating.OUBLIE)
     }
 
-    /** Réponses acceptées : la réponse de l'admin, avec des variantes séparées par « | ». */
+    /** Mots-clés acceptés : ceux de l'admin, séparés par « | » ; un seul suffit pour valider. */
     fun acceptedAnswers(raw: String): List<String> =
         raw.split('|').map { it.trim() }.filter { it.isNotEmpty() }
 
@@ -95,7 +95,9 @@ object AnswerGrader {
             val typedNumber = numberOf(typedSide)
             val same = answerNumber != null && typedNumber != null &&
                 abs(answerNumber - typedNumber) <= 1e-9 * max(1.0, abs(answerNumber))
-            return if (same) Match.EXACT else Match.NONE
+            if (same) return Match.EXACT
+            // « la réponse est 3 » : un seul nombre dans la phrase, et c'est le bon
+            return if (containsKeyword(typedRaw, answerRaw, answerNumber)) Match.CLOSE else Match.NONE
         }
 
         // Petite faute de frappe tolérée selon la longueur
@@ -115,7 +117,49 @@ object AnswerGrader {
             }
             if (covered.toDouble() / answerTokens.size >= TOKEN_COVERAGE) return Match.CLOSE
         }
+
+        // Mot-clé noyé dans une phrase : « c'est la photosynthèse » valide « photosynthèse »
+        if (containsKeyword(typedRaw, answerRaw, null)) return Match.CLOSE
         return Match.NONE
+    }
+
+    private val WORD = Regex("[a-z0-9]+(?:\\.[0-9]+)?")
+    private val NUMBER = Regex("-?\\d+(?:\\.\\d+)?")
+    private val NEGATIONS = setOf("pas", "non", "jamais", "aucun", "aucune", "ni")
+
+    private fun normalized(value: String): String =
+        Normalizer.normalize(value.lowercase(), Normalizer.Form.NFD)
+            .replace(MARKS, "")
+            .replace('\u2019', '\'')
+            .replace('\u2212', '-')
+            .replace('\u2013', '-')
+            .replace(Regex("(?<=\\d),(?=\\d)"), ".")
+
+    private fun words(value: String): List<String> =
+        WORD.findAll(normalized(value)).map { it.value }.toList()
+
+    /**
+     * Le mot-clé de l'admin apparaît comme mot entier dans la phrase de l'élève.
+     * Refusé si la phrase contient une négation (« ce n'est pas ... ») ou si le mot-clé est trop court.
+     */
+    private fun containsKeyword(typedRaw: String, keywordRaw: String, keywordNumber: Double?): Boolean {
+        val typedWords = words(typedRaw)
+        if (typedWords.size < 2) return false
+        if (typedWords.any { it in NEGATIONS }) return false
+
+        if (keywordNumber != null) {
+            val numbers = NUMBER.findAll(normalized(typedRaw)).mapNotNull { it.value.toDoubleOrNull() }.toList()
+            return numbers.size == 1 && abs(numbers[0] - keywordNumber) <= 1e-9 * max(1.0, abs(keywordNumber))
+        }
+
+        val keywordWords = words(keywordRaw)
+        if (keywordWords.isEmpty() || keywordWords.joinToString("").length < 3) return false
+        val haystack = " " + typedWords.joinToString(" ") + " "
+        if (haystack.contains(" " + keywordWords.joinToString(" ") + " ")) return true
+        if (keywordWords.size == 1 && keywordWords[0].length >= 6) {
+            return typedWords.any { editDistance(it, keywordWords[0]) <= 1 }
+        }
+        return false
     }
 
     /** Minuscules, sans accents ni espaces, virgule décimale -> point. */
