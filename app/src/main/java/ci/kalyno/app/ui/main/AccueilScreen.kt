@@ -159,6 +159,7 @@ fun AccueilScreen(
                                 HomeModule.PROGRESS -> ProgressModule(
                                     masteredCount = state.masteredCount,
                                     retentionScore = state.retentionScore,
+                                    masteredNotions = state.masteredNotions,
                                     urgentTopics = state.urgentTopics,
                                     loading = state.loading,
                                     modifier = slot

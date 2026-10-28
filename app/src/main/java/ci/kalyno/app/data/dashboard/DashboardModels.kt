@@ -61,6 +61,35 @@ data class MissionUi(
 
 data class UrgentTopic(val label: String, val count: Int)
 
+/**
+ * Palier de maîtrise d'une notion, calculé par le moteur SRS à partir du nombre de
+ * répétitions réussies d'affilée. Purement dérivé des données : jamais saisi à la main.
+ */
+enum class MasteryTier {
+    /** Notion tout juste validée par le moteur (seuil de maîtrise franchi). */
+    SOLIDE,
+
+    /** Notion revue avec succès à plusieurs reprises : la mémorisation se consolide. */
+    AVANCEE,
+
+    /** Notion ancrée durablement : haut niveau de répétitions réussies. */
+    EXPERTE
+}
+
+/**
+ * Une notion (regroupée par chapitre) que le moteur a jugée maîtrisée par l'élève.
+ * [masteredCards] est le nombre de cartes de ce chapitre validées par le moteur ;
+ * [score] est la probabilité de rétention moyenne (courbe de l'oubli FSRS), 0..1.
+ */
+data class MasteredNotion(
+    val key: String,
+    val label: String,
+    val domain: String,
+    val masteredCards: Int,
+    val tier: MasteryTier,
+    val score: Float?
+)
+
 data class ReviewSession(
     val id: String,
     val title: String?,
@@ -84,6 +113,8 @@ data class DashboardUiState(
     val heroMessage: String? = null,
     /** Nombre de notions maitrisees (repetitions >= 2 cote SRS). Null = pas encore calcule. */
     val masteredCount: Int? = null,
+    /** Détail des notions maîtrisées, regroupées par chapitre, piloté par le moteur SRS. */
+    val masteredNotions: List<MasteredNotion> = emptyList(),
     /** Score global de retention (0..1), derive de l'ease factor moyen des cartes. */
     val retentionScore: Float? = null,
     /** Derniere lecon consultee dans l'Explorer, pour "Reprendre l'aventure". */

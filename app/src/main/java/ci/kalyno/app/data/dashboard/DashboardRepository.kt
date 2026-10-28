@@ -41,6 +41,8 @@ class DashboardRepository(context: Context) {
         val examDaysLeft: Int?,
         /** Notions revisees au moins MASTERED_REPETITIONS fois d'affilee avec succes. */
         val masteredCount: Int,
+        /** Detail des notions maitrisees (regroupees par chapitre), pour l'ecran "Ma progression". */
+        val masteredNotions: List<MasteredNotion>,
         /** Probabilite moyenne de retention (courbe de l'oubli FSRS), null si aucune carte revisee. */
         val retentionScore: Float?,
         /** Derniere lecon ouverte dans l'Explorer ("Reprendre l'aventure"), null si aucune encore. */
@@ -176,6 +178,38 @@ class DashboardRepository(context: Context) {
             ?.average()
             ?.toFloat()
 
+        // ----- Détail des notions maîtrisées (groupées par chapitre) -----
+        val masteredNotions = srs.masteredDetails(studentId, MASTERED_REPETITIONS)
+            .groupBy { "${it.subjectId}::${it.chapitre}" }
+            .mapNotNull { (key, rows) ->
+                val chapitre = rows.first().chapitre.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+                val subjectName = rows.first().subjectName
+                val maxRepetitions = rows.maxOf { it.repetitions }
+                val tier = when {
+                    maxRepetitions >= EXPERT_REPETITIONS -> MasteryTier.EXPERTE
+                    maxRepetitions >= ADVANCED_REPETITIONS -> MasteryTier.AVANCEE
+                    else -> MasteryTier.SOLIDE
+                }
+                val score = rows
+                    .mapNotNull { row ->
+                        val last = row.lastReviewedAt ?: return@mapNotNull null
+                        val stability = row.stability.takeIf { it > 0.0 } ?: return@mapNotNull null
+                        SrsEngine.retrievability((now - last) / DAY_MS.toDouble(), stability)
+                    }
+                    .takeIf { it.isNotEmpty() }
+                    ?.average()
+                    ?.toFloat()
+                MasteredNotion(
+                    key = key,
+                    label = chapitre,
+                    domain = subjectName,
+                    masteredCards = rows.size,
+                    tier = tier,
+                    score = score
+                )
+            }
+            .sortedWith(compareByDescending<MasteredNotion> { it.tier }.thenByDescending { it.masteredCards })
+
         Snapshot(
             mission = when (status) {
                 MissionStatus.READY -> mission
@@ -197,6 +231,7 @@ class DashboardRepository(context: Context) {
                 ?.let { SrsEngine.daysUntil(now, it) }
                 ?.takeIf { it >= 0 },
             masteredCount = masteredCount,
+            masteredNotions = masteredNotions,
             retentionScore = retentionScore,
             lastLesson = prefs.lastLessonChapterTitle?.let { chapterTitle ->
                 LastLessonUi(
@@ -393,5 +428,8 @@ class DashboardRepository(context: Context) {
         const val DAY_MS = 24 * 60 * 60 * 1000L
         /** Nombre de réussites d'affilée pour considérer une notion comme maîtrisée. */
         const val MASTERED_REPETITIONS = 3
+        /** Paliers d'affichage de l'écran "Ma progression" (dérivés du seuil de maîtrise ci-dessus). */
+        const val ADVANCED_REPETITIONS = 5
+        const val EXPERT_REPETITIONS = 8
     }
 }

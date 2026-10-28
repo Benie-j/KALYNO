@@ -1,6 +1,8 @@
 package ci.kalyno.app.ui.main
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -40,6 +43,8 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import ci.kalyno.app.data.dashboard.DailyQuote
 import ci.kalyno.app.data.dashboard.LastLessonUi
+import ci.kalyno.app.data.dashboard.MasteredNotion
+import ci.kalyno.app.data.dashboard.MasteryTier
 import ci.kalyno.app.data.dashboard.UrgentTopic
 import ci.kalyno.app.ui.components.KalynoCard
 import ci.kalyno.app.ui.components.KalynoPrimaryButton
@@ -51,6 +56,7 @@ import ci.kalyno.app.ui.theme.KalynoAmberSoft
 import ci.kalyno.app.ui.theme.KalynoBackground
 import ci.kalyno.app.ui.theme.KalynoBlue
 import ci.kalyno.app.ui.theme.KalynoBlueSoft
+import ci.kalyno.app.ui.theme.KalynoCorrectSoft
 import ci.kalyno.app.ui.theme.KalynoCorrectText
 import ci.kalyno.app.ui.theme.KalynoMuted
 import ci.kalyno.app.ui.theme.KalynoOutline
@@ -241,6 +247,7 @@ internal fun ResumeModule(lesson: LastLessonUi, onClick: () -> Unit, modifier: M
 internal fun ProgressModule(
     masteredCount: Int?,
     retentionScore: Float?,
+    masteredNotions: List<MasteredNotion> = emptyList(),
     urgentTopics: List<UrgentTopic>,
     loading: Boolean,
     modifier: Modifier = Modifier
@@ -306,6 +313,7 @@ internal fun ProgressModule(
         ProgressDetailSheet(
             masteredCount = masteredCount,
             retentionScore = retentionScore,
+            masteredNotions = masteredNotions,
             urgentTopics = urgentTopics,
             onDismiss = { detailOpen = false }
         )
@@ -318,6 +326,7 @@ internal fun ProgressModule(
 private fun ProgressDetailSheet(
     masteredCount: Int?,
     retentionScore: Float?,
+    masteredNotions: List<MasteredNotion> = emptyList(),
     urgentTopics: List<UrgentTopic>,
     onDismiss: () -> Unit
 ) {
@@ -430,6 +439,174 @@ private fun ProgressDetailSheet(
                         }
                     }
                 }
+            }
+
+            Spacer(Modifier.height(22.dp))
+            MasteredNotionsSection(notions = masteredNotions)
+        }
+    }
+}
+
+/**
+ * Section "Notions maîtrisées" : liste pilotée entièrement par le moteur SRS (aucune saisie
+ * manuelle). Chaque carte affiche le libellé de la notion, sa matière et le palier de
+ * maîtrise calculé par le moteur. État vide sobre tant qu'aucune notion n'est validée.
+ */
+@Composable
+private fun MasteredNotionsSection(notions: List<MasteredNotion>) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            text = "Notions maîtrisées",
+            color = KalynoText,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.ExtraBold,
+            modifier = Modifier.weight(1f)
+        )
+        if (notions.isNotEmpty()) {
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(KalynoCorrectSoft)
+                    .padding(horizontal = 10.dp, vertical = 4.dp)
+            ) {
+                Text(
+                    text = notions.size.toString(),
+                    color = KalynoCorrectText,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.ExtraBold
+                )
+            }
+        }
+    }
+    Spacer(Modifier.height(10.dp))
+
+    if (notions.isEmpty()) {
+        MasteredNotionsEmptyState()
+    } else {
+        LazyColumn(
+            modifier = Modifier.heightIn(max = 360.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+            contentPadding = PaddingValues(vertical = 4.dp)
+        ) {
+            items(notions, key = { it.key }) { notion ->
+                MasteredNotionCard(notion)
+            }
+        }
+    }
+}
+
+/** État vide élégant : incite sans alourdir, sans emoji, icône vectorielle uniquement. */
+@Composable
+private fun MasteredNotionsEmptyState() {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(KalynoBackground)
+            .padding(horizontal = 18.dp, vertical = 22.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .clip(RoundedCornerShape(14.dp))
+                .background(KalynoBlueSoft),
+            contentAlignment = Alignment.Center
+        ) {
+            KalynoSvgIcon(name = "target", size = 22.dp, tint = KalynoBlue)
+        }
+        Spacer(Modifier.height(12.dp))
+        Text(
+            text = "Aucune notion maîtrisée pour l'instant",
+            color = KalynoText,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.ExtraBold,
+            textAlign = TextAlign.Center
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text = "Enchaîne tes révisions dans le Dojo : le moteur valide une notion dès qu'elle est bien ancrée.",
+            color = KalynoMuted,
+            fontSize = 12.sp,
+            lineHeight = 17.sp,
+            textAlign = TextAlign.Center
+        )
+    }
+}
+
+/** Palier de maîtrise -> icône vectorielle, couleurs et libellé (jamais d'emoji). */
+private data class TierStyle(val icon: String, val label: String, val tint: Color, val soft: Color)
+
+private fun MasteryTier.style(): TierStyle = when (this) {
+    MasteryTier.SOLIDE -> TierStyle("check-circle", "Solide", KalynoCorrectText, KalynoCorrectSoft)
+    MasteryTier.AVANCEE -> TierStyle("target", "Avancée", KalynoBlue, KalynoBlueSoft)
+    MasteryTier.EXPERTE -> TierStyle("trophy", "Experte", KalynoAmberDeep, KalynoAmberSoft)
+}
+
+@Composable
+private fun MasteredNotionCard(notion: MasteredNotion) {
+    val style = notion.tier.style()
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(Color.White)
+            .border(BorderStroke(1.dp, KalynoOutline), RoundedCornerShape(16.dp))
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(38.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(style.soft),
+            contentAlignment = Alignment.Center
+        ) {
+            KalynoSvgIcon(name = style.icon, size = 18.dp, tint = style.tint)
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = notion.label,
+                color = KalynoText,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = notion.domain,
+                color = KalynoMuted,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        Spacer(Modifier.width(10.dp))
+        Column(horizontalAlignment = Alignment.End) {
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(style.soft)
+                    .padding(horizontal = 8.dp, vertical = 3.dp)
+            ) {
+                Text(
+                    text = style.label,
+                    color = style.tint,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.ExtraBold
+                )
+            }
+            notion.score?.let { score ->
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = "${(score.coerceIn(0f, 1f) * 100).toInt()} % rétention",
+                    color = KalynoMuted,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Medium
+                )
             }
         }
     }

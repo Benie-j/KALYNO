@@ -119,6 +119,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                         examDaysLeft = snapshot.examDaysLeft,
                         examLabel = exams.label(levelId),
                         masteredCount = snapshot.masteredCount,
+                        masteredNotions = snapshot.masteredNotions,
                         retentionScore = snapshot.retentionScore,
                         lastLesson = snapshot.lastLesson
                     )

@@ -115,10 +115,47 @@ interface SrsDao {
     /** Chaque carte publiée avec sa matière : sert à mesurer la progression par discipline ("Major du Canton"). */
     @Query("SELECT id, subjectId FROM flashcards")
     suspend fun allFlashcardSubjects(): List<FlashcardSubjectRow>
+
+    /**
+     * Détail des cartes jugées maîtrisées par le moteur (repetitions >= seuil), avec leur
+     * contexte pédagogique (matière, chapitre). Sert l'écran "Ma progression" : le moteur
+     * décide seul de ce qui est maîtrisé, l'UI ne fait qu'afficher.
+     */
+    @Query(
+        """
+        SELECT 
+            f.id AS flashcardId,
+            f.subjectId AS subjectId,
+            s.name AS subjectName,
+            f.chapitre AS chapitre,
+            f.question AS question,
+            p.repetitions AS repetitions,
+            p.stability AS stability,
+            p.lastReviewedAt AS lastReviewedAt
+        FROM card_progress p
+        INNER JOIN flashcards f ON f.id = p.flashcardId
+        INNER JOIN subjects s ON s.id = f.subjectId
+        WHERE p.studentId = :studentId AND p.repetitions >= :minRepetitions
+        ORDER BY p.lastReviewedAt DESC
+        """
+    )
+    suspend fun masteredDetails(studentId: String, minRepetitions: Int): List<MasteredCardRow>
 }
 
 data class ReviewLogRow(val flashcardId: String, val rating: ReviewRating, val reviewedAt: Long)
 data class FlashcardSubjectRow(val id: String, val subjectId: String)
+
+/** Une carte jugée maîtrisée par le moteur, avec son contexte pédagogique complet. */
+data class MasteredCardRow(
+    val flashcardId: String,
+    val subjectId: String,
+    val subjectName: String,
+    val chapitre: String,
+    val question: String,
+    val repetitions: Int,
+    val stability: Double,
+    val lastReviewedAt: Long?
+)
 
 /** Ligne minimale pour le calcul de la grille KPI (notions maitrisees, retention). */
 data class MasteryRow(
