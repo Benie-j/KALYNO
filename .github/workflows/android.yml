@@ -40,8 +40,8 @@ jobs:
 
       
 
-      - name: Tests unitaires (non bloquants)
-        continue-on-error: true
+      - name: Tests unitaires (bloquants si erreur)
+        continue-on-error: false
         run: gradle testDebugUnitTest
 
       - name: Prepare release keystore
