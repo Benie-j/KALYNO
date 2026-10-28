@@ -36,6 +36,22 @@ b,strong{font-weight:700}
     t.innerHTML = h.replace(/<br\s*\/?>/gi, ' ').replace(/<[^>]*>/g, '');
     return t.value;
   }
+  // Couleur posée à l'intérieur d'une formule $...$ : les balises seraient retirées, on les convertit en commandes KaTeX.
+  function tint(h) {
+    var prev;
+    do {
+      prev = h;
+      h = h.replace(/<span\b[^>]*?style="([^"]*)"[^>]*>((?:(?!<span\b|<\/span>)[\s\S])*)<\/span>/gi, function (m, st, inner) {
+        var c = /(?:^|[;\s])color\s*:\s*(#[0-9a-f]{3,6})/i.exec(st);
+        var b = /background-color\s*:\s*(#[0-9a-f]{3,6})/i.exec(st);
+        var out = inner;
+        if (c) out = '\\textcolor{' + c[1] + '}{' + out + '}';
+        if (b) out = '\\colorbox{' + b[1] + '}{$' + out + '$}';
+        return out;
+      });
+    } while (h !== prev);
+    return h;
+  }
   var src = document.getElementById('src').innerHTML;
   var doc = new DOMParser().parseFromString(src, 'text/html');
   doc.querySelectorAll('script,style,iframe,object,embed,link,meta,base,form,svg,math,img,video,audio').forEach(function (n) { n.remove(); });
@@ -47,7 +63,7 @@ b,strong{font-weight:700}
   });
   var html = doc.body.innerHTML.replace(/\u25A2/g, '');
   html = html.replace(/\$\$([\s\S]+?)\$\$|\$([^$]+?)\$/g, function (m, block, inline) {
-    var tex = plain(block !== undefined ? block : inline).replace(/\u00A0/g, ' ');
+    var tex = plain(tint(block !== undefined ? block : inline)).replace(/\u00A0/g, ' ');
     try {
       return katex.renderToString(tex, { displayMode: block !== undefined, throwOnError: false, errorColor: '#B91C1C' });
     } catch (e) {
