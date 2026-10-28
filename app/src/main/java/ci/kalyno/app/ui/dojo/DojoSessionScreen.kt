@@ -73,6 +73,7 @@ import ci.kalyno.app.ui.components.KalynoPrimaryButton
 import ci.kalyno.app.ui.components.StreakBadge
 import ci.kalyno.app.ui.components.rememberHaptic
 import ci.kalyno.app.ui.quiz.FeedbackTone
+import ci.kalyno.app.data.dojo.FeynmanParser
 import ci.kalyno.app.ui.quiz.KalynoChoiceCard
 import ci.kalyno.app.ui.quiz.KalynoQuestionCard
 import ci.kalyno.app.ui.quiz.QuizColors
@@ -441,13 +442,18 @@ private fun DojoFeedback(exercise: DojoExercise, result: DojoResult) {
             else -> FeedbackTone.Wrong
         },
         message = result.message,
-        detail = if (result.partial) "Tu n'as pas coché toutes les bonnes réponses." else null,
+        detail = when {
+            result.partial -> "Tu n'as pas coché toutes les bonnes réponses."
+            !result.correct && exercise.kind == ExerciseKind.FREE_TEXT -> "Retiens le mot-clé : il résume l'idée en un mot."
+            else -> null
+        },
         meta = result.nextReviewDays?.let { days ->
             "Prochaine révision : " + if (days <= 1) "demain" else "dans $days jours"
         },
         correctAnswer = if (showAnswer) (exercise.acceptedAnswers.firstOrNull() ?: item.answer) else null,
         alsoAccepted = exercise.acceptedAnswers.drop(1),
-        explanationSteps = explanationSteps(item.explanation)
+        explanationSteps = explanationSteps(item.explanation),
+        feynman = remember(item.explanation) { FeynmanParser.parse(item.explanation) }
     )
 }
 

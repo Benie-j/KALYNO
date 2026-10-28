@@ -51,6 +51,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ci.kalyno.app.ui.components.KalynoPrimaryButton
 import ci.kalyno.app.ui.components.MathText
+import ci.kalyno.app.data.dojo.FeynmanExplanation
+import androidx.compose.material.icons.rounded.AutoAwesome
 
 // ===========================================================================
 // KIT QUIZ KALYNO : carte de question, cartes de réponse, footer fixe de rétroaction.
@@ -374,7 +376,8 @@ fun QuizFeedbackPanel(
     meta: String? = null,
     correctAnswer: String? = null,
     alsoAccepted: List<String> = emptyList(),
-    explanationSteps: List<String> = emptyList()
+    explanationSteps: List<String> = emptyList(),
+    feynman: FeynmanExplanation? = null
 ) {
     val (bg, borderColor, accent, icon) = when (tone) {
         FeedbackTone.Correct -> ToneStyle(QuizColors.CorrectBg, QuizColors.CorrectBorder, QuizColors.CorrectText, Icons.Rounded.Check)
@@ -445,7 +448,10 @@ fun QuizFeedbackPanel(
             }
         }
 
-        if (explanationSteps.isNotEmpty()) {
+        if (feynman != null && feynman.structured) {
+            Spacer(Modifier.height(10.dp))
+            FeynmanBlock(feynman)
+        } else if (explanationSteps.isNotEmpty()) {
             Spacer(Modifier.height(10.dp))
             Text(
                 text = "EXPLICATION",
@@ -482,3 +488,75 @@ fun QuizFeedbackPanel(
 }
 
 private data class ToneStyle(val bg: Color, val border: Color, val accent: Color, val icon: ImageVector)
+
+// ---------------------------------------------------------------------------
+// Technique de Feynman : l'idée en mots simples, une analogie, l'essentiel en une phrase
+// ---------------------------------------------------------------------------
+
+@Composable
+private fun FeynmanBlock(content: FeynmanExplanation) {
+    val shape = RoundedCornerShape(12.dp)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(QuizColors.Surface)
+            .border(1.dp, QuizColors.Border, shape)
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        if (content.steps.isNotEmpty()) {
+            FeynmanSection(label = "EN CLAIR", icon = Icons.Rounded.Lightbulb) {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    content.steps.forEach { FeynmanText(it) }
+                }
+            }
+        }
+        content.analogy?.let { analogy ->
+            FeynmanSection(label = "EN IMAGE", icon = Icons.Rounded.AutoAwesome) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(QuizColors.SelectedBg)
+                        .padding(10.dp)
+                ) { FeynmanText(analogy) }
+            }
+        }
+        content.takeaway?.let { takeaway ->
+            FeynmanSection(label = "À RETENIR", icon = Icons.Rounded.MenuBook) {
+                MathText(
+                    text = takeaway,
+                    color = QuizColors.Primary,
+                    fontSize = 15.sp,
+                    lineHeight = 21.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun FeynmanSection(label: String, icon: ImageVector, body: @Composable ColumnScope.() -> Unit) {
+    Column {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(icon, contentDescription = null, tint = QuizColors.Primary, modifier = Modifier.size(14.dp))
+            Spacer(Modifier.width(6.dp))
+            Text(
+                text = label,
+                color = QuizColors.Primary,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.ExtraBold,
+                letterSpacing = 0.8.sp
+            )
+        }
+        Spacer(Modifier.height(6.dp))
+        body()
+    }
+}
+
+@Composable
+private fun FeynmanText(text: String) {
+    MathText(text = text, color = QuizColors.Ink, fontSize = 14.sp, lineHeight = 21.sp)
+}

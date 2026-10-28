@@ -12,6 +12,7 @@ import ci.kalyno.app.data.dojo.AnswerContext
 import ci.kalyno.app.data.dojo.AnswerGrader
 import ci.kalyno.app.data.dojo.CalculatorPolicy
 import ci.kalyno.app.data.dojo.ExerciseKind
+import ci.kalyno.app.data.dojo.Interleaver
 import ci.kalyno.app.data.dojo.mergeCorrectIndices
 import ci.kalyno.app.data.srs.ReviewRating
 import kotlinx.coroutines.CancellationException
@@ -88,7 +89,8 @@ class DojoViewModel(app: Application) : AndroidViewModel(app) {
         if (sessionId == session.id) return
         sessionId = session.id
         this.levelId = levelId
-        exercises = session.items.map { buildExercise(it) }
+        exercises = Interleaver.mix(session.items, seed = session.id.hashCode().toLong())
+            .map { buildExercise(it) }
         _state.value = DojoUiState(title = session.title, total = exercises.size)
         if (exercises.isEmpty()) {
             _state.update { it.copy(finished = true) }

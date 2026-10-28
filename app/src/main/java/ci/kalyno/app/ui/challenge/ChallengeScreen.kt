@@ -64,6 +64,7 @@ import ci.kalyno.app.ui.dojo.ChoiceRow
 import ci.kalyno.app.ui.dojo.DojoMessages
 import ci.kalyno.app.ui.dojo.ScientificCalculatorDialog
 import ci.kalyno.app.ui.dojo.explanationSteps
+import ci.kalyno.app.data.dojo.FeynmanParser
 import ci.kalyno.app.ui.quiz.FeedbackTone
 import ci.kalyno.app.ui.quiz.QuizFeedbackPanel
 import ci.kalyno.app.ui.quiz.QuizStickyFooter
@@ -541,7 +542,8 @@ private fun ChallengeCorrection(question: Question, outcome: Int, message: Strin
         detail = if (outcome == OUTCOME_PARTIAL) "Tu n'as pas coché toutes les bonnes réponses." else null,
         correctAnswer = answer,
         alsoAccepted = if (isFree) question.acceptedAnswers.drop(1) else emptyList(),
-        explanationSteps = explanationSteps(question.explanation)
+        explanationSteps = explanationSteps(question.explanation),
+        feynman = remember(question.explanation) { FeynmanParser.parse(question.explanation) }
     )
 }
 
