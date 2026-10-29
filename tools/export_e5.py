@@ -89,6 +89,8 @@ def main() -> None:
         ids = [new_id.get(i, 3) for i in tok(text.lower())["input_ids"]]
         feeds = {"input_ids": np.array([ids], dtype=np.int64),
                  "attention_mask": np.ones((1, len(ids)), dtype=np.int64)}
+        if "token_type_ids" in [i.name for i in session.get_inputs()]:
+            feeds["token_type_ids"] = np.zeros_like(feeds["input_ids"])
         hidden = session.run(None, feeds)[0][0]
         v = hidden.mean(axis=0)
         return v / np.linalg.norm(v)
