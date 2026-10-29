@@ -46,7 +46,11 @@ android {
         targetSdk = 35
         versionCode = gitCommitCount
         versionName = "1.0.$gitCommitCount"
+// Ajoute ceci pour filtrer les architectures et réduire drastiquement la taille :
+        ndk {
+            abiFilters.addAll(setOf("armeabi-v7a", "arm64-v8a"))
     }
+}
 
     buildFeatures {
         compose = true
