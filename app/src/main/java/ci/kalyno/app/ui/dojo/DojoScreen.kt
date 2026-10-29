@@ -293,7 +293,7 @@ private fun MissionBlock(
             }
 
             else -> Text(
-                text = "Pas de nouvelle mission pour l'instant. Reviens dès que de nouveaux chapitres seront publiés.",
+                text = "Pas de mission pour l'instant. Termine une leçon dans Explorer (bouton « Terminer ») pour débloquer ses exercices.",
                 color = KalynoMuted,
                 fontSize = 14.sp,
                 lineHeight = 20.sp

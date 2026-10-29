@@ -277,16 +277,28 @@ class SemanticEvaluationEngine private constructor(
                 instance ?: create(context.applicationContext, config).also { instance = it }
             }
 
+        /** Faux quand le garde-fou a coupé le moteur (plantage natif antérieur ou appareil 32 bits) : ne rien charger. */
+        fun isUsable(context: Context): Boolean =
+            instance != null || SemanticEngineGuard(context.applicationContext).isAvailable()
+
         private fun create(context: Context, config: Config): SemanticEvaluationEngine {
-            val modelFile = materializeModel(context)
-            val env = OrtEnvironment.getEnvironment()
-            val options = OrtSession.SessionOptions().apply {
-                setIntraOpNumThreads(config.threads)
-                setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)
+            val guard = SemanticEngineGuard(context)
+            val level = guard.beginAttempt()
+                ?: throw IllegalStateException("Moteur sémantique désactivé sur cet appareil")
+            try {
+                val modelFile = materializeModel(context)
+                val env = OrtEnvironment.getEnvironment()
+                val options = OrtSession.SessionOptions().apply {
+                    setIntraOpNumThreads(config.threads)
+                    setOptimizationLevel(level)
+                }
+                val session = env.createSession(modelFile.absolutePath, options) // un plantage natif a lieu ici
+                val tokenizer = UnigramTokenizer.fromAsset(context, VOCAB_ASSET)
+                return SemanticEvaluationEngine(env, session, tokenizer, config).also { guard.markSuccess() }
+            } catch (t: Throwable) {
+                guard.markJavaFailure()
+                throw t
             }
-            val session = env.createSession(modelFile.absolutePath, options)
-            val tokenizer = UnigramTokenizer.fromAsset(context, VOCAB_ASSET)
-            return SemanticEvaluationEngine(env, session, tokenizer, config)
         }
 
         /**

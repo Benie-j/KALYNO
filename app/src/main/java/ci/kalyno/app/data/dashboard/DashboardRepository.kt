@@ -9,6 +9,7 @@ import ci.kalyno.app.data.AppPrefs
 import ci.kalyno.app.data.SupabaseLearningRepository
 import ci.kalyno.app.data.cloud.CloudSync
 import ci.kalyno.app.data.dojo.DojoStagePolicy
+import ci.kalyno.app.data.lessons.LessonProgressRepository
 import ci.kalyno.app.data.srs.CardProgressEntity
 import ci.kalyno.app.data.srs.FlashcardEntity
 import ci.kalyno.app.data.srs.ReviewLogEntity
@@ -31,6 +32,7 @@ class DashboardRepository(context: Context) {
     private val cloud = CloudSync(context)
     private val exams = ExamSchedule(context)
     private val prefs = AppPrefs(context)
+    private val lessonProgress = LessonProgressRepository.get(context)
 
     data class Snapshot(
         val mission: MissionUi?,
@@ -94,8 +96,11 @@ class DashboardRepository(context: Context) {
         val levelSubjectIds = levelSubjects.map { it.id }.toSet()
         val subjectNames = levelSubjects.associate { it.id to it.name }
 
+        // Règle stricte : le Dojo ne propose que les cartes des leçons que l'élève a marquées « terminées »
+        val unlockedCardIds = lessonProgress.unlockedCardIds(studentId)
+
         var due = SrsEngine.prioritize(srs.getDueCards(studentId, now), now)
-            .filter { it.subjectId in levelSubjectIds }
+            .filter { it.subjectId in levelSubjectIds && it.flashcardId in unlockedCardIds }
         if (content != null) due = due.filter { it.flashcardId in cardIndex }
 
         val entities: Map<String, FlashcardEntity> = due.map { it.flashcardId }
@@ -148,8 +153,8 @@ class DashboardRepository(context: Context) {
                 coefficients = coefficients,
                 introduced = introduced,
                 lastIntroduced = lastIntroduced,
+                unlocked = unlockedCardIds,
                 now = now,
-                startOfToday = startOfToday,
                 remainingQuota = remainingQuota,
                 doneToday = introducedToday,
                 targetToday = maxOf(allowedToday, introducedToday)
@@ -324,7 +329,8 @@ class DashboardRepository(context: Context) {
                             .mergeCorrectIndices(c.correctIndices, c.correctIndex)
                             .joinToString(","),
                         explanation = c.explanation,
-                        adminReference = c.adminReference
+                        adminReference = c.adminReference,
+                        lessonId = ch.id
                     )
                 }
             }
@@ -333,57 +339,55 @@ class DashboardRepository(context: Context) {
     }
 
     /**
-     * Choisit la matière du jour puis les cartes à découvrir :
-     * - on reste sur la matière déjà commencée aujourd'hui (mission stable dans la journée) ;
-     * - sinon, score = coefficient × (1 + jours depuis la dernière nouvelle carte de la matière),
-     *   ce qui fait tourner les matières tout en favorisant les gros coefficients ;
-     * - les cartes sont prises chapitre par chapitre, dans la limite du quota restant.
+     * Construit la mission du jour à partir des SEULES leçons terminées par l'élève :
+     * - une carte n'est candidate que si elle est débloquée ([unlocked]) et pas encore découverte ;
+     * - les matières sont classées par score = coefficient × (1 + jours depuis la dernière nouvelle carte) ;
+     * - les cartes sont ensuite prises à tour de rôle dans chaque matière (entrelacement global),
+     *   dans la limite du quota restant : une session alterne Français, SVT, Maths… au lieu d'enchaîner une matière.
      */
     private fun buildMission(
         subjects: List<LearningSubject>,
         coefficients: Map<String, Float>,
         introduced: Set<String>,
         lastIntroduced: Map<String, Long>,
+        unlocked: Set<String>,
         now: Long,
-        startOfToday: Long,
         remainingQuota: Int,
         doneToday: Int,
         targetToday: Int
     ): MissionUi? {
-        class Candidate(
-            val subject: LearningSubject,
-            val chapters: List<Pair<LearningChapter, List<ReviewItem>>>
-        )
+        class Candidate(val subject: LearningSubject, val score: Float, val queue: ArrayDeque<ReviewItem>)
 
         val candidates = subjects.mapNotNull { s ->
-            val chapters = s.chapters.mapNotNull { ch ->
-                val remaining = ch.cards
+            val items = s.chapters.flatMap { ch ->
+                ch.cards
                     .mapNotNull { itemFrom(it, s.name, ch.title) }
-                    .filter { it.cardId !in introduced }
-                if (remaining.isEmpty()) null else ch to remaining
+                    .filter { it.cardId !in introduced && it.cardId in unlocked }
             }
-            if (chapters.isEmpty()) null else Candidate(s, chapters)
-        }
-        if (candidates.isEmpty()) return null
-
-        val startedToday = candidates
-            .filter { (lastIntroduced[it.subject.id] ?: 0L) >= startOfToday }
-            .maxByOrNull { lastIntroduced[it.subject.id] ?: 0L }
-
-        val chosen = startedToday ?: candidates.maxByOrNull { c ->
-            val last = lastIntroduced[c.subject.id]
+            if (items.isEmpty()) return@mapNotNull null
+            val last = lastIntroduced[s.id]
             val daysSince = if (last == null) SrsConfig.NEVER_STUDIED_DAYS
             else ((now - last) / DAY_MS).toInt().coerceAtLeast(0)
-            (coefficients[c.subject.id] ?: 1f) * (1 + daysSince)
-        } ?: return null
+            Candidate(s, (coefficients[s.id] ?: 1f) * (1 + daysSince), ArrayDeque(items))
+        }.sortedByDescending { it.score }
+        if (candidates.isEmpty()) return null
 
-        val items = chosen.chapters.flatMap { it.second }.take(remainingQuota)
-        val firstChapter = chosen.chapters.first().first
+        val items = ArrayList<ReviewItem>()
+        val used = LinkedHashSet<String>()
+        while (items.size < remainingQuota && candidates.any { it.queue.isNotEmpty() }) {
+            for (c in candidates) {
+                if (items.size >= remainingQuota) break
+                val next = c.queue.removeFirstOrNull() ?: continue
+                items += next
+                used += c.subject.name
+            }
+        }
 
+        val mixed = used.size > 1
         return MissionUi(
-            subjectName = chosen.subject.name,
-            subjectEmoji = chosen.subject.emoji,
-            chapterTitle = firstChapter.title,
+            subjectName = if (mixed) used.joinToString(" · ") else used.firstOrNull() ?: candidates.first().subject.name,
+            subjectEmoji = if (mixed) "" else candidates.first().subject.emoji,
+            chapterTitle = if (mixed) "Révision mixte" else items.firstOrNull()?.chapterTitle.orEmpty(),
             doneToday = doneToday,
             targetToday = targetToday,
             items = items

@@ -161,7 +161,9 @@ fun DojoSessionScreen(
                 .fillMaxWidth()
         ) {
             val exercise = state.exercise
-            if (state.finished) {
+            if (state.finished && state.lockedOut) {
+                LockedPane(onClose = { close(false) })
+            } else if (state.finished) {
                 FinishedPane(
                     total = state.total,
                     correct = state.correctCount,
@@ -496,4 +498,30 @@ internal fun explanationSteps(explanation: String?): List<String> {
         .map { it.trim() }
         .filter { it.isNotEmpty() }
     return if (sentences.size > 1) sentences else listOf(explanation.trim())
+}
+
+/** Affiché si aucune carte de la session n'appartient à une leçon terminée : on renvoie vers l'Explorer. */
+@Composable
+private fun LockedPane(onClose: () -> Unit) {
+    Column(
+        modifier = Modifier.fillMaxSize().padding(24.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = "Leçon à terminer d'abord",
+            color = KalynoText,
+            fontSize = 22.sp,
+            fontWeight = FontWeight.ExtraBold
+        )
+        Spacer(Modifier.height(8.dp))
+        Text(
+            text = "Les exercices du Dojo se débloquent quand tu appuies sur « Terminer » à la fin d'une leçon.",
+            color = KalynoMuted,
+            fontSize = 14.sp,
+            lineHeight = 20.sp
+        )
+        Spacer(Modifier.height(20.dp))
+        KalynoPrimaryButton(label = "COMPRIS", onClick = onClose)
+    }
 }

@@ -32,7 +32,7 @@ data class SubjectEntity(
             onDelete = ForeignKey.CASCADE
         )
     ],
-    indices = [Index("subjectId")]
+    indices = [Index("subjectId"), Index("lessonId")]
 )
 data class FlashcardEntity(
     @PrimaryKey val id: String,
@@ -46,7 +46,9 @@ data class FlashcardEntity(
     val correctIndices: String? = null,  // indices des bonnes réponses, séparés par des virgules
     val explanation: String? = null,     // explication détaillée (révélée après la réponse)
     // -- Phrase de référence absolue de l'admin, utilisée par le moteur ONNX en saisie libre (null = on retombe sur `reponse`) --
-    val adminReference: String? = null
+    val adminReference: String? = null,
+    // -- Leçon (chapitre publié) dont la carte est issue : le Dojo ne propose la carte que si cette leçon est terminée --
+    val lessonId: String? = null
 )
 
 /**

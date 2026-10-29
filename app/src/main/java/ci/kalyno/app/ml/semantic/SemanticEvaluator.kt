@@ -1,6 +1,10 @@
 package ci.kalyno.app.ml.semantic
 
 import android.content.Context
+import android.util.Log
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * Point d'entrée unique pour le Dojo : combine le moteur ONNX et les seuils pilotés par l'admin.
@@ -10,6 +14,30 @@ class SemanticEvaluator(
     private val appContext: Context,
     private val settings: SemanticSettingsRepository
 ) {
+    /** Faux si le moteur ONNX est coupé sur cet appareil : le Dojo corrige alors par mots-clés. */
+    val isAvailable: Boolean get() = SemanticEvaluationEngine.isUsable(appContext)
+
+    /**
+     * Charge le moteur HORS du thread appelant (le chargement copie 35 Mo et crée la session ONNX) et ne lève
+     * jamais : toute panne devient un résultat ENGINE_ERROR, jamais un plantage.
+     */
+    private suspend fun engineOrNull(): SemanticEvaluationEngine? = withContext(Dispatchers.Default) {
+        try {
+            SemanticEvaluationEngine.getInstance(appContext)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            Log.w("SemanticEvaluator", "Moteur indisponible : ${e.message}")
+            null
+        }
+    }
+
+    private fun unavailable() = EvaluationResult(
+        false, 0f,
+        "L'évaluation automatique est momentanément indisponible. Ta réponse n'a pas été notée.",
+        EvaluationVerdict.ENGINE_ERROR
+    )
+
     /** Met à jour les seuils en arrière-plan (à appeler au lancement de l'appli ou à l'ouverture du Dojo). */
     suspend fun refreshSettings(): Boolean = settings.refresh()
 
@@ -24,20 +52,21 @@ class SemanticEvaluator(
         studentAnswer: String,
         scope: String? = null
     ): EvaluationResult =
-        SemanticEvaluationEngine.getInstance(appContext).evaluateWithLessonAsync(
+        engineOrNull()?.evaluateWithLessonAsync(
             question, expectedShort, passages, studentAnswer,
             settings.thresholdsFor(scope).relaxedForLesson()
-        )
+        ) ?: unavailable()
 
     /** Précalcule les vecteurs des passages d'une leçon (appel en arrière-plan). */
-    suspend fun preloadPassages(passages: List<String>) =
-        SemanticEvaluationEngine.getInstance(appContext).preloadAsync(passages)
+    suspend fun preloadPassages(passages: List<String>) {
+        engineOrNull()?.preloadAsync(passages)
+    }
 
     /**
      * @param adminReference réponse de référence saisie par l'admin
      * @param scope identifiant de la matière (seuil spécifique) ou null pour le seuil global
      */
     suspend fun evaluate(adminReference: String, studentAnswer: String, scope: String? = null): EvaluationResult =
-        SemanticEvaluationEngine.getInstance(appContext)
-            .evaluateAsync(adminReference, studentAnswer, settings.thresholdsFor(scope))
+        engineOrNull()?.evaluateAsync(adminReference, studentAnswer, settings.thresholdsFor(scope))
+            ?: unavailable()
 }

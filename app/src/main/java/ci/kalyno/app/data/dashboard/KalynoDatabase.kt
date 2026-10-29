@@ -13,6 +13,8 @@ import ci.kalyno.app.data.catalog.CatalogSubjectEntity
 import ci.kalyno.app.data.badges.BadgeDao
 import ci.kalyno.app.data.badges.BadgeUnlockEntity
 import ci.kalyno.app.data.catalog.CatalogThemeEntity
+import ci.kalyno.app.data.lessons.LessonProgressDao
+import ci.kalyno.app.data.lessons.LessonProgressEntity
 import ci.kalyno.app.data.srs.CardProgressEntity
 import ci.kalyno.app.data.srs.FlashcardEntity
 import ci.kalyno.app.data.srs.ReviewLogEntity
@@ -30,9 +32,10 @@ import ci.kalyno.app.data.srs.SubjectEntity
         CatalogThemeEntity::class,
         CatalogLessonEntity::class,
         QuoteFavoriteEntity::class,
-        BadgeUnlockEntity::class
+        BadgeUnlockEntity::class,
+        LessonProgressEntity::class
     ],
-    version = 7,
+    version = 8,
     exportSchema = false
 )
 abstract class KalynoDatabase : RoomDatabase() {
@@ -41,6 +44,7 @@ abstract class KalynoDatabase : RoomDatabase() {
     abstract fun catalogDao(): CatalogDao
     abstract fun quoteFavoriteDao(): QuoteFavoriteDao
     abstract fun badgeDao(): BadgeDao
+    abstract fun lessonProgressDao(): LessonProgressDao
 
     companion object {
         @Volatile
@@ -149,13 +153,36 @@ abstract class KalynoDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * Déblocage des leçons : chaque carte retient la leçon dont elle est issue (`lessonId`) et chaque
+         * élève valide ses leçons dans `lesson_progress`. Les cartes déjà stockées retrouvent leur leçon
+         * par (matière, titre du chapitre) quand le catalogue est présent ; sinon la prochaine
+         * synchronisation les renseigne. Aucune leçon n'est marquée terminée automatiquement.
+         */
+        private val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE flashcards ADD COLUMN lessonId TEXT")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_flashcards_lessonId` ON `flashcards` (`lessonId`)")
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `lesson_progress` (`studentId` TEXT NOT NULL, `lessonId` TEXT NOT NULL, " +
+                        "`isCompleted` INTEGER NOT NULL, `completedAt` INTEGER, PRIMARY KEY(`studentId`, `lessonId`))"
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_lesson_progress_studentId` ON `lesson_progress` (`studentId`)")
+                db.execSQL(
+                    "UPDATE flashcards SET lessonId = (SELECT l.id FROM catalog_lessons l " +
+                        "WHERE l.subjectId = flashcards.subjectId AND l.title = flashcards.chapitre LIMIT 1) " +
+                        "WHERE lessonId IS NULL"
+                )
+            }
+        }
+
         fun get(context: Context): KalynoDatabase =
             instance ?: synchronized(this) {
                 instance ?: Room.databaseBuilder(
                     context.applicationContext,
                     KalynoDatabase::class.java,
                     "kalyno.db"
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
                     .build().also { instance = it }
             }
     }

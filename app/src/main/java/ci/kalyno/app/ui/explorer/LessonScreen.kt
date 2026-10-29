@@ -45,6 +45,9 @@ import ci.kalyno.app.ui.icons.iconAssetFor
 import ci.kalyno.app.ui.theme.KalynoBackground
 import ci.kalyno.app.ui.theme.KalynoBlue
 import ci.kalyno.app.ui.theme.KalynoBlueSoft
+import ci.kalyno.app.ui.theme.KalynoCorrectSoft
+import ci.kalyno.app.ui.theme.KalynoCorrectText
+import ci.kalyno.app.ui.theme.KalynoMuted
 import ci.kalyno.app.ui.theme.KalynoOutline
 import ci.kalyno.app.ui.theme.KalynoTealDark
 import ci.kalyno.app.ui.theme.KalynoText
@@ -64,6 +67,9 @@ private data class JumpTarget(val index: Int, val label: String)
 @Composable
 fun LessonScreen(
     chapter: ExplorerChapter,
+    /** Vrai une fois que l'élève a appuyé sur « Terminer » (état lu dans Room). */
+    isCompleted: Boolean,
+    onComplete: () -> Unit,
     onBack: () -> Unit,
     onStartQuestions: () -> Unit
 ) {
@@ -205,9 +211,19 @@ fun LessonScreen(
                 }
             }
 
-            if (chapter.questionCount > 0) {
+            // Validation explicite en fin de lecture : tant que l'élève n'appuie pas, la leçon reste non terminée
+            if (rows.isNotEmpty() || hasComplement) {
+                item(key = "finish") {
+                    RevealOnAppear(id = "finish", index = rows.size + 2, revealed = revealed, bottomSpace = 12.dp) {
+                        LessonFinishBar(isCompleted = isCompleted, onComplete = onComplete)
+                    }
+                }
+            }
+
+            // Les questions ne se débloquent qu'une fois la leçon terminée
+            if (chapter.questionCount > 0 && isCompleted) {
                 item(key = "cta") {
-                    RevealOnAppear(id = "cta", index = rows.size + 2, revealed = revealed, bottomSpace = 0.dp) {
+                    RevealOnAppear(id = "cta", index = rows.size + 3, revealed = revealed, bottomSpace = 0.dp) {
                         KalynoPrimaryButton(
                             label = "DÉMARRER LES ${chapter.questionCount} QUESTIONS",
                             onClick = onStartQuestions
@@ -215,6 +231,45 @@ fun LessonScreen(
                     }
                 }
             }
+        }
+    }
+}
+
+/**
+ * Fin de leçon : bouton « Terminer » tant que la leçon n'est pas validée, puis confirmation.
+ * La validation est volontaire (aucune détection de scroll) et irréversible côté élève.
+ */
+@Composable
+private fun LessonFinishBar(isCompleted: Boolean, onComplete: () -> Unit) {
+    if (isCompleted) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(16.dp))
+                .background(KalynoCorrectSoft)
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            KalynoSvgIcon(name = "check-circle", size = 20.dp, tint = KalynoCorrectText)
+            Spacer(Modifier.width(10.dp))
+            Text(
+                text = "Leçon terminée · ses exercices sont débloqués dans le Dojo",
+                color = KalynoCorrectText,
+                fontSize = 14.sp,
+                lineHeight = 19.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+    } else {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            KalynoPrimaryButton(label = "TERMINER · J'AI LU CETTE LEÇON", onClick = onComplete)
+            Text(
+                text = "Appuie quand tu as fini de lire pour débloquer les exercices dans le Dojo.",
+                color = KalynoMuted,
+                fontSize = 12.sp,
+                lineHeight = 17.sp,
+                modifier = Modifier.padding(horizontal = 4.dp)
+            )
         }
     }
 }

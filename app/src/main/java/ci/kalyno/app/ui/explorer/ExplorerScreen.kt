@@ -128,9 +128,12 @@ fun ExplorerScreen(
     // Retour système : Leçon -> Liste -> Accueil Explorer (puis MainScreen reprend la main)
     BackHandler(enabled = ui.route != ExplorerRoute.Home) { viewModel.onBack() }
 
+    // Les questions d'une leçon ne sont jouables qu'après « Terminer » ; sinon on ouvre la leçon à lire
     val start: (ExplorerChapter) -> Unit = { chapter ->
-        if (chapter.items.isNotEmpty()) {
-            onStartChapter(chapter.title, chapter.items)
+        when {
+            !ui.isCompleted(chapter.id) -> viewModel.onLessonClick(chapter)
+            chapter.items.isNotEmpty() -> onStartChapter(chapter.title, chapter.items)
+            else -> Unit
         }
     }
 
@@ -173,6 +176,8 @@ fun ExplorerScreen(
                 if (lesson != null) {
                     LessonScreen(
                         chapter = lesson,
+                        isCompleted = ui.isCompleted(lesson.id),
+                        onComplete = { viewModel.onLessonCompleted(lesson.id) },
                         onBack = { viewModel.onBack() },
                         onStartQuestions = { start(lesson) }
                     )

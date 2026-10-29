@@ -14,6 +14,7 @@ import ci.kalyno.app.data.catalog.CatalogTree
 import ci.kalyno.app.data.dashboard.KalynoDatabase
 import ci.kalyno.app.data.dashboard.ReviewItem
 import ci.kalyno.app.data.dashboard.StudentId
+import ci.kalyno.app.data.lessons.LessonProgressRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -119,6 +120,8 @@ data class ExplorerUiState(
     val pressedDisciplineId: String? = null,
     val openDisciplineId: String? = null,
     val openLessonId: String? = null,
+    /** Leçons que l'élève a validées avec « Terminer » (Room) : seules leurs questions sont jouables. */
+    val completedLessonIds: Set<String> = emptySet(),
     /** Bannière « à la une » publiée par l'admin (null = rien à afficher). */
     val banner: ExplorerBanner? = null
 ) {
@@ -135,6 +138,8 @@ data class ExplorerUiState(
     /** Leçons (= chapitres publiés) d'une discipline, dans l'ordre de l'admin. */
     fun lessonsOf(disciplineId: String): List<ExplorerChapter> =
         chapters.filter { it.subjectId == disciplineId }
+
+    fun isCompleted(lessonId: String): Boolean = lessonId in completedLessonIds
 
     val visibleChapters: List<ExplorerChapter>
         get() {
@@ -175,6 +180,7 @@ class ExplorerViewModel(app: Application) : AndroidViewModel(app) {
     private val dao = KalynoDatabase.get(app).dashboardDao()
     private val prefs = AppPrefs(app)
     private val studentId = StudentId.get(app)
+    private val lessonProgress = LessonProgressRepository.get(app)
 
     private val _state = MutableStateFlow(ExplorerUiState())
     val state: StateFlow<ExplorerUiState> = _state.asStateFlow()
@@ -182,6 +188,7 @@ class ExplorerViewModel(app: Application) : AndroidViewModel(app) {
     private var levelId: String? = null
     private var job: Job? = null
     private var treeJob: Job? = null
+    private var completionJob: Job? = null
 
     /** Premier appel : charge tout. Appels suivants (retour sur l'onglet) : rafraîchit en douceur. */
     fun load(level: String) {
@@ -192,7 +199,32 @@ class ExplorerViewModel(app: Application) : AndroidViewModel(app) {
         levelId = level
         _state.value = ExplorerUiState()
         observeTree(level)
+        observeCompletion()
         refresh(silent = false)
+    }
+
+    /** Leçons terminées lues dans Room : le bouton « Terminer » et l'accès aux questions se mettent à jour seuls. */
+    private fun observeCompletion() {
+        completionJob?.cancel()
+        completionJob = viewModelScope.launch {
+            lessonProgress.observeCompleted(studentId).collect { ids ->
+                _state.update { it.copy(completedLessonIds = ids) }
+            }
+        }
+    }
+
+    /** Clic sur « Terminer » : la leçon est validée (idempotent), ses exercices rejoignent le Dojo. */
+    fun onLessonCompleted(lessonId: String) {
+        if (_state.value.isCompleted(lessonId)) return
+        viewModelScope.launch {
+            try {
+                lessonProgress.markCompleted(studentId, lessonId)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Écriture perdue : le bouton reste actif, l'élève peut réessayer
+            }
+        }
     }
 
     fun retry() = refresh(silent = false)

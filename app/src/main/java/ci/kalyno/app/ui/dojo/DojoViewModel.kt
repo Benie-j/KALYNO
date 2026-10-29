@@ -19,6 +19,7 @@ import ci.kalyno.app.data.dojo.ExerciseKind
 import ci.kalyno.app.data.dojo.LessonReferenceProvider
 import ci.kalyno.app.data.dojo.Interleaver
 import ci.kalyno.app.data.dojo.mergeCorrectIndices
+import ci.kalyno.app.data.lessons.LessonProgressRepository
 import ci.kalyno.app.data.dojo.Verdict
 import ci.kalyno.app.data.srs.ReviewRating
 import ci.kalyno.app.ml.semantic.EvaluationResult
@@ -36,6 +37,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 
 /** Un exercice prêt à jouer : tout vient de l'admin (Room / Supabase), rien n'est écrit en dur. */
 data class DojoExercise(
@@ -95,7 +97,9 @@ data class DojoUiState(
     /** null tant que l'élève n'a pas validé : la correction reste cachée. */
     val result: DojoResult? = null,
     val correctCount: Int = 0,
-    val finished: Boolean = false
+    val finished: Boolean = false,
+    /** Vrai si la session s'est vidée faute de leçon terminée : aucun bravo, aucune série créditée. */
+    val lockedOut: Boolean = false
 ) {
     val canSubmit: Boolean
         get() = !evaluating && when (exercise?.kind) {
@@ -109,6 +113,7 @@ class DojoViewModel(app: Application) : AndroidViewModel(app) {
 
     private val repository = DashboardRepository(app)
     private val studentId = StudentId.get(app)
+    private val lessonProgress = LessonProgressRepository.get(app)
 
     /** Moteur ONNX + seuils de l'admin : le ViewModel ne manipule ni ONNX ni Supabase directement. */
     private val semanticEvaluator = SemanticEvaluator(
@@ -128,21 +133,46 @@ class DojoViewModel(app: Application) : AndroidViewModel(app) {
     private var exercises: List<DojoExercise> = emptyList()
     private var shownAt = 0L
 
+    /** Moteur ONNX utilisable sur cet appareil (lu une fois par session, hors thread principal). */
+    private var engineOn = false
+
     private val _state = MutableStateFlow(DojoUiState())
     val state: StateFlow<DojoUiState> = _state.asStateFlow()
 
+    /**
+     * Prépare la session. Deux règles s'appliquent ici, quelle que soit la provenance des cartes
+     * (mission, révision urgente, chapitre choisi dans Explorer) :
+     *  1. seules les cartes dont la leçon est terminée ([LessonProgressRepository.unlockedCardIds]) sont jouées ;
+     *  2. elles sont entrelacées globalement, toutes matières confondues ([Interleaver]), avec une graine
+     *     propre à la session : l'ordre change à chaque nouvelle session.
+     */
     fun start(session: ReviewSession, levelId: String?) {
         if (sessionId == session.id) return
         sessionId = session.id
         this.levelId = levelId
         lessons = LessonReferenceProvider(getApplication(), levelId)
-        val mixed = Interleaver.mix(session.items, seed = session.id.hashCode().toLong())
-        _state.value = DojoUiState(title = session.title, total = mixed.size)
-        if (mixed.isEmpty()) {
+        _state.value = DojoUiState(title = session.title, total = session.items.size)
+        if (session.items.isEmpty()) {
             _state.update { it.copy(finished = true) }
             return
         }
         viewModelScope.launch {
+            // Règle stricte : en cas d'échec de lecture, on ne débloque rien plutôt que de contourner la règle
+            val unlocked = try {
+                lessonProgress.unlockedCardIds(studentId)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                emptySet()
+            }
+            val allowed = session.items.filter { it.cardId in unlocked }
+            val mixed = Interleaver.mix(allowed, seed = session.id.hashCode().toLong())
+            if (mixed.isEmpty()) {
+                _state.update { it.copy(total = 0, finished = true, lockedOut = true) }
+                return@launch
+            }
+            _state.update { it.copy(total = mixed.size) }
+
             // Niveau de chaque carte pour CET élève : une seule lecture Room pour toute la session
             val meta = try {
                 repository.dojoMeta(studentId, mixed.map { it.cardId })
@@ -159,6 +189,7 @@ class DojoViewModel(app: Application) : AndroidViewModel(app) {
             } catch (e: Exception) {
                 emptyMap()
             }
+            engineOn = withContext(Dispatchers.Default) { semanticEvaluator.isAvailable }
             exercises = mixed.map { buildExercise(it, meta[it.cardId], passages[it.cardId].orEmpty()) }
             show(0)
             if (exercises.any { it.useSemantic || it.canRescueWithLesson }) warmUpSemanticEngine()
@@ -167,6 +198,7 @@ class DojoViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Chargement du modèle ONNX et des seuils admin en arrière-plan, avant que l'élève n'atteigne une saisie libre. */
     private fun warmUpSemanticEngine() {
+        if (!engineOn) return
         viewModelScope.launch(Dispatchers.Default) {
             runCatching { SemanticEvaluationEngine.getInstance(getApplication()) }
             runCatching { semanticEvaluator.refreshSettings() }
@@ -201,7 +233,7 @@ class DojoViewModel(app: Application) : AndroidViewModel(app) {
         val kind = if (promoted) ExerciseKind.FREE_TEXT else declared
 
         val reference = adminReference ?: item.answer
-        val useSemantic = kind == ExerciseKind.FREE_TEXT && DojoGrading.useSemantic(reference)
+        val useSemantic = engineOn && kind == ExerciseKind.FREE_TEXT && DojoGrading.useSemantic(reference)
         return DojoExercise(
             item = item,
             kind = kind,
@@ -212,7 +244,7 @@ class DojoViewModel(app: Application) : AndroidViewModel(app) {
             reference = reference,
             useSemantic = useSemantic,
             promotedToFreeInput = promoted,
-            lessonPassages = lessonPassages
+            lessonPassages = if (engineOn) lessonPassages else emptyList()
         )
     }
 
