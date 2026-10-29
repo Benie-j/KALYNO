@@ -98,7 +98,7 @@ internal class SemanticEngineGuard(context: Context) {
         const val TIER_DISABLED = 2
 
         /** Passer à true pour retenter ONNX sur les appareils 32 bits (le palier « sans optimisation » puis la coupure s'appliquent). */
-        const val ENABLE_ON_32_BIT = false
+        const val ENABLE_ON_32_BIT = true
 
         /** Vrai tant que CE processus a une création de session en cours (distingue un marqueur périmé). */
         @Volatile var attemptInProgress = false
