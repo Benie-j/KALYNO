@@ -41,7 +41,7 @@ android {
 
     defaultConfig {
         applicationId = "ci.kalyno.app"
-        minSdk = 23
+        minSdk = 24
         targetSdk = 35
         versionCode = gitCommitCount
         versionName = "1.0.$gitCommitCount"
@@ -52,7 +52,7 @@ android {
     }
 
     compileOptions {
-        // java.time sur Android 6 et 7 (minSdk 23)
+        // java.time sur Android 6 et 7 (minSdk 24)
         isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
