@@ -22,6 +22,7 @@ import ci.kalyno.app.data.dojo.mergeCorrectIndices
 import ci.kalyno.app.data.lessons.LessonProgressRepository
 import ci.kalyno.app.data.dojo.Verdict
 import ci.kalyno.app.data.srs.ReviewRating
+import ci.kalyno.app.ml.semantic.E5Prompt
 import ci.kalyno.app.ml.semantic.EvaluationResult
 import ci.kalyno.app.ml.semantic.EvaluationVerdict
 import ci.kalyno.app.ml.semantic.SemanticEvaluationEngine
@@ -56,7 +57,10 @@ data class DojoExercise(
     /** Vrai si la carte était un QCM et vient de basculer en saisie libre grâce à son niveau. */
     val promotedToFreeInput: Boolean = false,
     /** Passages de la leçon de la carte (vide si la leçon n'est pas en cache sur ce téléphone). */
-    val lessonPassages: List<String> = emptyList()
+    val lessonPassages: List<String> = emptyList(),
+    /** Leçon parente de la question (relation Room flashcards.lessonId -> catalog_lessons.id) : contexte du passage E5. */
+    val lessonTitle: String? = null,
+    val lessonSummary: String? = null
 ) {
     /** Saisie libre corrigée par mots-clés, avec la leçon en renfort pour valider les reformulations. */
     val canRescueWithLesson: Boolean
@@ -196,12 +200,20 @@ class DojoViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** Chargement du modèle ONNX et des seuils admin en arrière-plan, avant que l'élève n'atteigne une saisie libre. */
+    /** Chargement du modèle E5 (ONNX) et des seuils admin en arrière-plan, avant que l'élève n'atteigne une saisie libre. */
     private fun warmUpSemanticEngine() {
         if (!engineOn) return
         viewModelScope.launch(Dispatchers.Default) {
             runCatching { SemanticEvaluationEngine.getInstance(getApplication()) }
             runCatching { semanticEvaluator.refreshSettings() }
+            // Passages « leçon + réponse officielle » de la session : vecteurs prêts avant la première saisie
+            runCatching {
+                semanticEvaluator.preloadLessonPassages(
+                    exercises.filter { it.useSemantic }.map {
+                        E5Prompt.lessonPassage(it.lessonTitle, it.lessonSummary, it.reference)
+                    }.distinct()
+                )
+            }
             // Vecteurs des leçons calculés avant la première réponse (une seule fois par leçon)
             val seen = java.util.IdentityHashMap<List<String>, Boolean>()
             exercises.filter { it.canRescueWithLesson }.forEach { ex ->
@@ -244,7 +256,9 @@ class DojoViewModel(app: Application) : AndroidViewModel(app) {
             reference = reference,
             useSemantic = useSemantic,
             promotedToFreeInput = promoted,
-            lessonPassages = if (engineOn) lessonPassages else emptyList()
+            lessonPassages = if (engineOn) lessonPassages else emptyList(),
+            lessonTitle = meta?.lessonTitle,
+            lessonSummary = meta?.lessonSummary
         )
     }
 
@@ -342,7 +356,13 @@ class DojoViewModel(app: Application) : AndroidViewModel(app) {
         val answer = s.typed
         _state.update { it.copy(evaluating = true) }
         evaluation = viewModelScope.launch {
-            val result = semanticEvaluator.evaluate(exercise.reference, answer)
+            // passage: « Leçon : titre - résumé. Réponse officielle : … » contre query: « saisie de l'élève »
+            val result = semanticEvaluator.evaluate(
+                adminReference = exercise.reference,
+                studentAnswer = answer,
+                lessonTitle = exercise.lessonTitle,
+                lessonSummary = exercise.lessonSummary
+            )
             // Moteur en panne : repli sur les mots-clés plutôt que de bloquer ou de sanctionner l'élève
             val verdict = DojoGrading.fromSemantic(result, context)
                 ?: AnswerGrader.gradeText(answer, AnswerGrader.acceptedAnswers(exercise.item.answer), context)

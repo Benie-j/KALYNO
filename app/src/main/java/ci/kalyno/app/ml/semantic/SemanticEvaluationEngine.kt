@@ -12,14 +12,15 @@ import java.nio.LongBuffer
 import kotlin.math.sqrt
 
 /**
- * Moteur d'évaluation sémantique 100 % hors-ligne de KALYNO.
+ * Moteur d'évaluation sémantique 100 % hors-ligne de KALYNO, basé sur intfloat/multilingual-e5-small.
  *
- * Pipeline : tokenisation -> embeddings ONNX (MiniLM int8) -> similarité cosinus -> garde-fous logiques.
+ * Pipeline : préfixes E5 ("query: " / "passage: ") -> tokenisation -> embeddings ONNX (int8)
+ *            -> moyenne des tokens + normalisation L2 -> similarité cosinus -> garde-fous logiques.
  *
  * Utilisation (jamais sur le thread principal) :
  * ```
  * val engine = SemanticEvaluationEngine.getInstance(context)
- * val result = engine.evaluateAsync(reponseAdmin, reponseEleve)
+ * val result = engine.evaluateAsync(reponseAdmin, reponseEleve, lessonTitle, lessonSummary)
  * ```
  */
 class SemanticEvaluationEngine private constructor(
@@ -32,7 +33,7 @@ class SemanticEvaluationEngine private constructor(
     /** Réglages du moteur. Le seuil est volontairement strict (rigueur pédagogique). */
     data class Config(
         val defaultThresholds: SemanticThresholds = SemanticThresholds.DEFAULT,
-        val maxSeqLen: Int = 128,
+        val maxSeqLen: Int = 256,   // E5 accepte 512 tokens ; le passage enrichi par la leçon est plus long qu'une réponse sèche
         val threads: Int = (Runtime.getRuntime().availableProcessors() / 2).coerceIn(1, 4)
     )
 
@@ -47,7 +48,9 @@ class SemanticEvaluationEngine private constructor(
     fun evaluate(
         adminReference: String,
         studentAnswer: String,
-        thresholds: SemanticThresholds = config.defaultThresholds
+        thresholds: SemanticThresholds = config.defaultThresholds,
+        lessonTitle: String? = null,
+        lessonSummary: String? = null
     ): EvaluationResult {
         val reference = adminReference.trim()
         val answer = studentAnswer.trim()
@@ -62,8 +65,11 @@ class SemanticEvaluationEngine private constructor(
         if (reference.isEmpty()) return engineError("Référence admin vide")
 
         return try {
-            val refVec = referenceVector(reference)
-            val score = cosine(refVec, embed(answer)).coerceIn(-1f, 1f)
+            // Passage enrichi par la leçon ; le garde-fou logique, lui, ne regarde que la réponse officielle
+            // (le titre et le résumé de la leçon contiennent d'autres négations et d'autres nombres).
+            val passageText = E5Prompt.lessonPassage(lessonTitle, lessonSummary, reference)
+            val queryText = E5Prompt.query(answer)
+            val score = cosine(referenceVector(passageText), embed(queryText)).coerceIn(-1f, 1f)
             decide(score, LogicGuard.inspect(reference, answer), thresholds)
         } catch (e: Exception) {
             Log.e(TAG, "Échec de l'évaluation sémantique", e)
@@ -105,17 +111,17 @@ class SemanticEvaluationEngine private constructor(
         if (passages.isEmpty()) return engineError("Aucun passage de leçon")
 
         return try {
-            val queryVec = embed("${question.trim()} ${expectedShort.trim()}".trim())
+            val queryVec = embed(E5Prompt.query("${question.trim()} ${expectedShort.trim()}"))
             var bestScore = -1f
             var bestVec: FloatArray? = null
             for (passage in passages) {
-                val vec = referenceVector(passage)
+                val vec = referenceVector(E5Prompt.passage(passage))
                 val score = cosine(queryVec, vec)
                 if (score > bestScore) { bestScore = score; bestVec = vec }
             }
             if (bestVec == null || bestScore < LESSON_RETRIEVAL_MIN) return engineError("Aucun passage de leçon pertinent")
 
-            val score = cosine(bestVec, embed(answer)).coerceIn(-1f, 1f)
+            val score = cosine(bestVec, embed(E5Prompt.query(answer))).coerceIn(-1f, 1f)
             decide(score, LogicGuard.inspect(expectedShort, answer), thresholds)
         } catch (e: Exception) {
             Log.e(TAG, "Échec de l'évaluation par la leçon", e)
@@ -132,9 +138,16 @@ class SemanticEvaluationEngine private constructor(
     ): EvaluationResult =
         withContext(Dispatchers.Default) { evaluateWithLesson(question, expectedShort, passages, studentAnswer, thresholds) }
 
-    /** Calcule à l'avance les vecteurs des passages (en arrière-plan) pour que la première correction soit instantanée. */
+    /** Calcule à l'avance les vecteurs des passages de leçon (en arrière-plan) pour que la première correction soit instantanée. */
     suspend fun preloadAsync(texts: List<String>) = withContext(Dispatchers.Default) {
         for (text in texts) {
+            try { referenceVector(E5Prompt.passage(text)) } catch (e: Exception) { Log.w(TAG, "Préchargement ignoré : ${e.message}") }
+        }
+    }
+
+    /** Précalcule les passages « leçon + réponse officielle » (déjà préfixés) des cartes de la session. */
+    suspend fun preloadLessonPassagesAsync(passages: List<String>) = withContext(Dispatchers.Default) {
+        for (text in passages) {
             try { referenceVector(text) } catch (e: Exception) { Log.w(TAG, "Préchargement ignoré : ${e.message}") }
         }
     }
@@ -142,13 +155,18 @@ class SemanticEvaluationEngine private constructor(
     suspend fun evaluateAsync(
         adminReference: String,
         studentAnswer: String,
-        thresholds: SemanticThresholds = config.defaultThresholds
+        thresholds: SemanticThresholds = config.defaultThresholds,
+        lessonTitle: String? = null,
+        lessonSummary: String? = null
     ): EvaluationResult =
-        withContext(Dispatchers.Default) { evaluate(adminReference, studentAnswer, thresholds) }
+        withContext(Dispatchers.Default) {
+            evaluate(adminReference, studentAnswer, thresholds, lessonTitle, lessonSummary)
+        }
 
     // ---- Décision --------------------------------------------------------------------------
 
     private fun decide(score: Float, violation: LogicGuard.Violation?, t: SemanticThresholds): EvaluationResult {
+        Log.d(TAG, "score=$score valid=${t.valid} partial=${t.partial} garde-fou=$violation") // aide au calibrage des seuils
         // Un garde-fou prime TOUJOURS sur le score : une phrase inversée peut avoir 0.95 de similarité.
         if (violation != null) {
             val msg = when (violation) {
@@ -195,7 +213,12 @@ class SemanticEvaluationEngine private constructor(
 
     // ---- Inférence -------------------------------------------------------------------------
 
-    /** Embedding normalisé L2 (mean pooling sur les tokens, comme à l'entraînement du modèle). */
+    /**
+     * Embedding normalisé L2 : moyenne des tokens pondérée par attention_mask puis normalisation,
+     * exactement le `average_pool` + `F.normalize` de la fiche du modèle E5.
+     * Une seule séquence sans padding : le masque vaut 1 partout, la moyenne simple est donc identique.
+     * Le texte reçu doit déjà porter son préfixe « query: » ou « passage: » ([E5Prompt]).
+     */
     private fun embed(text: String): FloatArray {
         val ids = tokenizer.encode(text, config.maxSeqLen)
         val n = ids.size
@@ -262,12 +285,13 @@ class SemanticEvaluationEngine private constructor(
         private const val CACHE_SIZE = 160
 
         /** Sous ce score, aucun passage de la leçon ne parle de la question : on ne s'en sert pas. */
-        internal const val LESSON_RETRIEVAL_MIN = 0.35f
+        internal const val LESSON_RETRIEVAL_MIN = 0.78f
 
         // Incrémenter MODEL_VERSION quand le fichier .onnx des assets change (force la recopie).
-        private const val MODEL_VERSION = 1
-        private const val MODEL_ASSET = "semantic/model_int8.onnx"
-        private const val VOCAB_ASSET = "semantic/vocab.tsv"
+        // v2 = multilingual-e5-small (v1 = ancien MiniLM, supprimé du stockage interne à la 1re ouverture).
+        private const val MODEL_VERSION = 2
+        private const val MODEL_ASSET = "semantic/e5_model_int8.onnx"
+        private const val VOCAB_ASSET = "semantic/e5_vocab.tsv"
 
         @Volatile private var instance: SemanticEvaluationEngine? = null
 

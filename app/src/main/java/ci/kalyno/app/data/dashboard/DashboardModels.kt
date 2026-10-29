@@ -91,7 +91,13 @@ data class MasteredNotion(
 )
 
 /** Ce que le Dojo doit savoir d'une carte pour choisir son interface : niveau de l'élève et référence admin. */
-data class DojoCardMeta(val stage: Int, val adminReference: String?)
+data class DojoCardMeta(
+    val stage: Int,
+    val adminReference: String?,
+    /** Leçon parente de la carte (relation Room) : contexte injecté dans le passage E5. */
+    val lessonTitle: String? = null,
+    val lessonSummary: String? = null
+)
 
 data class ReviewSession(
     val id: String,

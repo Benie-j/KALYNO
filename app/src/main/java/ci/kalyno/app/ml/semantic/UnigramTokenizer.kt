@@ -7,9 +7,10 @@ import kotlin.math.min
 
 /**
  * Tokenizeur Unigram (SentencePiece, algorithme de Viterbi) compatible avec le vocabulaire élagué
- * du modèle paraphrase-multilingual-MiniLM-L12-v2 (voir tools/export_model.py).
+ * du modèle intfloat/multilingual-e5-small (voir tools/export_e5.py). E5 utilise le tokenizer XLM-R :
+ * mêmes quatre ids spéciaux (<s>=0, <pad>=1, </s>=2, <unk>=3) que l'ancien MiniLM.
  *
- * Format de assets/semantic/vocab.tsv : une ligne par id, "piece<TAB>score".
+ * Format de assets/semantic/e5_vocab.tsv : une ligne par id, "piece<TAB>score".
  * Lignes 0 à 3 réservées : <s>, <pad>, </s>, <unk>.
  */
 class UnigramTokenizer private constructor(
@@ -80,7 +81,7 @@ class UnigramTokenizer private constructor(
         const val UNK_ID = 3
         private const val SPECIAL_COUNT = 4
         private const val SPACE_MARK = '\u2581'
-        private const val MAX_CHARS = 600
+        private const val MAX_CHARS = 1200   // ~256 tokens : le passage « leçon + réponse officielle » ne doit pas être coupé
         private val WHITESPACE = Regex("\\s+")
 
         fun fromAsset(context: Context, assetPath: String): UnigramTokenizer {

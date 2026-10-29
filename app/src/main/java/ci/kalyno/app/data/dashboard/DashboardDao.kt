@@ -4,7 +4,9 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Transaction
 import androidx.room.Upsert
+import ci.kalyno.app.data.dojo.QuestionWithLesson
 import ci.kalyno.app.data.srs.CardProgressEntity
 import ci.kalyno.app.data.srs.FlashcardEntity
 import ci.kalyno.app.data.srs.ReviewLogEntity
@@ -37,6 +39,11 @@ interface DashboardDao {
 
     @Query("SELECT * FROM flashcards WHERE id IN (:ids)")
     suspend fun flashcardsByIds(ids: List<String>): List<FlashcardEntity>
+
+    /** Cartes avec leur leçon parente (relation Room, une seule lecture groupée pour la session du Dojo). */
+    @Transaction
+    @Query("SELECT * FROM flashcards WHERE id IN (:ids)")
+    suspend fun questionsWithLesson(ids: List<String>): List<QuestionWithLesson>
 
     /** Nouvelles cartes découvertes depuis [sinceMillis] (première révision = intervalle avant 0). */
     @Query(

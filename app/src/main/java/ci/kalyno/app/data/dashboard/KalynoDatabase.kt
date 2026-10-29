@@ -35,7 +35,7 @@ import ci.kalyno.app.data.srs.SubjectEntity
         BadgeUnlockEntity::class,
         LessonProgressEntity::class
     ],
-    version = 8,
+    version = 9,
     exportSchema = false
 )
 abstract class KalynoDatabase : RoomDatabase() {
@@ -176,13 +176,25 @@ abstract class KalynoDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * Moteur E5 : chaque leçon du catalogue retient un résumé court. La relation carte -> leçon
+         * (flashcards.lessonId -> catalog_lessons.id) est une relation Room SANS clé étrangère SQL :
+         * le catalogue est vidé puis réinséré à chaque synchronisation, une clé étrangère en cascade
+         * supprimerait les cartes et la progression de l'élève.
+         */
+        private val MIGRATION_8_9 = object : Migration(8, 9) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE catalog_lessons ADD COLUMN summary TEXT")
+            }
+        }
+
         fun get(context: Context): KalynoDatabase =
             instance ?: synchronized(this) {
                 instance ?: Room.databaseBuilder(
                     context.applicationContext,
                     KalynoDatabase::class.java,
                     "kalyno.db"
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
                     .build().also { instance = it }
             }
     }

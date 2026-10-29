@@ -1,7 +1,10 @@
 package ci.kalyno.app.data.dojo
 
+import ci.kalyno.app.data.LearningCapsule
+import ci.kalyno.app.data.LearningChapter
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -36,4 +39,28 @@ class LessonPassagesTest {
     }
 
     @Test fun texteVideDonneListeVide() = assertTrue(LessonPassages.split("   ").isEmpty())
+
+    private fun chapter(vararg capsules: LearningCapsule) =
+        LearningChapter(id = "l1", title = "La photosynthèse", capsules = capsules.toList(), cards = emptyList())
+
+    private fun capsule(kind: String, body: String) =
+        LearningCapsule(id = kind + body.length, title = "", body = body, minutes = 1, cards = emptyList(), kind = kind)
+
+    @Test fun lResumeVientDuBlocIntroEnPriorite() {
+        val c = chapter(capsule("text", "Un texte quelconque assez long pour compter."), capsule("intro", "<p>Les plantes fabriquent leur matière.</p>"))
+        assertEquals("Les plantes fabriquent leur matière.", LessonPassages.summaryOf(c))
+    }
+
+    @Test fun sansIntroLePremierTexteSertDeResume() {
+        val c = chapter(capsule("tip", "Astuce"), capsule("text", "Le texte de la leçon explique le cycle."))
+        assertEquals("Le texte de la leçon explique le cycle.", LessonPassages.summaryOf(c))
+    }
+
+    @Test fun lResumeEstBorneEtCoupeEnFinDePhrase() {
+        val long = "Première phrase complète sur la leçon. " + "Un mot ".repeat(80)
+        val summary = LessonPassages.summaryOf(chapter(capsule("intro", long)))!!
+        assertTrue(summary.length <= LessonPassages.MAX_SUMMARY_CHARS + 1)
+    }
+
+    @Test fun uneLeconSansTexteNAPasDeResume() = assertNull(LessonPassages.summaryOf(chapter()))
 }

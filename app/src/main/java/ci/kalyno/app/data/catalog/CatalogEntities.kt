@@ -89,5 +89,7 @@ data class CatalogLessonEntity(
     val themeId: String?,             // null = leçon pas encore rangée dans un thème
     val title: String,
     val position: Int,
-    val tag: String?
+    val tag: String?,
+    /** Résumé court de la leçon (bloc « intro » de l'admin), injecté dans le passage E5 du Dojo. */
+    val summary: String? = null
 )

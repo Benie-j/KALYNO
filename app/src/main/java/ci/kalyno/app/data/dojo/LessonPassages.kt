@@ -18,6 +18,31 @@ object LessonPassages {
     /** Borne le temps de calcul des vecteurs sur un téléphone d'entrée de gamme. */
     const val MAX_PER_LESSON = 48
 
+    /** Taille maximale du résumé de leçon injecté dans le passage E5 (≈ 60 tokens : la réponse officielle reste lue en entier). */
+    const val MAX_SUMMARY_CHARS = 240
+
+    /**
+     * Résumé court d'une leçon : le bloc « intro » publié par l'admin, sinon le premier bloc de texte.
+     * Null si la leçon n'a aucun texte exploitable : le passage E5 se passe alors de résumé.
+     */
+    fun summaryOf(chapter: LearningChapter): String? {
+        val source = chapter.capsules.firstOrNull { it.kind == "intro" && it.body.isNotBlank() }
+            ?: chapter.capsules.firstOrNull { it.kind == "text" && it.body.isNotBlank() }
+            ?: return null
+        return condense(source.body, MAX_SUMMARY_CHARS).takeIf { it.isNotBlank() }
+    }
+
+    /** Texte brut sur une ligne, coupé à la fin d'une phrase (ou d'un mot) avant [max] caractères. */
+    internal fun condense(raw: String, max: Int): String {
+        val flat = clean(raw).replace(Regex("\\s*\\n\\s*"), " ").trim()
+        if (flat.length <= max) return flat
+        val head = flat.take(max)
+        val sentenceEnd = head.lastIndexOfAny(charArrayOf('.', '!', '?'))
+        if (sentenceEnd >= max / 2) return head.substring(0, sentenceEnd + 1)
+        val wordEnd = head.lastIndexOf(' ')
+        return (if (wordEnd >= max / 2) head.substring(0, wordEnd) else head).trimEnd(',', ';', ':', ' ') + "…"
+    }
+
     fun fromChapter(chapter: LearningChapter): List<String> =
         chapter.capsules
             .flatMap { split(it.body) }

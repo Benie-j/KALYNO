@@ -6,6 +6,7 @@ import ci.kalyno.app.data.LevelInfo
 import ci.kalyno.app.data.Levels
 import ci.kalyno.app.data.SupabaseLearningRepository
 import ci.kalyno.app.data.dashboard.KalynoDatabase
+import ci.kalyno.app.data.dojo.LessonPassages
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
@@ -102,7 +103,8 @@ class CatalogRepository private constructor(context: Context) {
                     themeId = chapter.themeId?.takeIf { it in themeIds },
                     title = chapter.title,
                     position = cIndex,
-                    tag = chapter.tag
+                    tag = chapter.tag,
+                    summary = LessonPassages.summaryOf(chapter)
                 )
             }
         }

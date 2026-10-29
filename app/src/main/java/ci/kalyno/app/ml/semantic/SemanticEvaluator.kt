@@ -62,11 +62,25 @@ class SemanticEvaluator(
         engineOrNull()?.preloadAsync(passages)
     }
 
+    /** Précalcule les passages « leçon + réponse officielle » des cartes de la session (appel en arrière-plan). */
+    suspend fun preloadLessonPassages(passages: List<String>) {
+        engineOrNull()?.preloadLessonPassagesAsync(passages)
+    }
+
     /**
      * @param adminReference réponse de référence saisie par l'admin
+     * @param lessonTitle titre de la leçon parente de la question (relation Room), null si inconnu
+     * @param lessonSummary résumé de cette leçon, null si absent
      * @param scope identifiant de la matière (seuil spécifique) ou null pour le seuil global
      */
-    suspend fun evaluate(adminReference: String, studentAnswer: String, scope: String? = null): EvaluationResult =
-        engineOrNull()?.evaluateAsync(adminReference, studentAnswer, settings.thresholdsFor(scope))
-            ?: unavailable()
+    suspend fun evaluate(
+        adminReference: String,
+        studentAnswer: String,
+        lessonTitle: String? = null,
+        lessonSummary: String? = null,
+        scope: String? = null
+    ): EvaluationResult =
+        engineOrNull()?.evaluateAsync(
+            adminReference, studentAnswer, settings.thresholdsFor(scope), lessonTitle, lessonSummary
+        ) ?: unavailable()
 }

@@ -295,10 +295,18 @@ class DashboardRepository(context: Context) {
             val stages = cardIds.chunked(500)
                 .flatMap { srs.stagesFor(studentId, it) }
                 .associate { it.flashcardId to it.dojoStage }
-            val references = cardIds.chunked(500)
-                .flatMap { dao.flashcardsByIds(it) }
-                .associate { it.id to it.adminReference }
-            cardIds.associateWith { DojoCardMeta(stage = stages[it] ?: 0, adminReference = references[it]) }
+            val questions = cardIds.chunked(500)
+                .flatMap { dao.questionsWithLesson(it) }
+                .associateBy { it.question.id }
+            cardIds.associateWith { id ->
+                val q = questions[id]
+                DojoCardMeta(
+                    stage = stages[id] ?: 0,
+                    adminReference = q?.question?.adminReference,
+                    lessonTitle = q?.lessonTitle,
+                    lessonSummary = q?.lessonSummary
+                )
+            }
         }
 
     private suspend fun sync(
