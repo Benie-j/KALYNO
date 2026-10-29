@@ -1,0 +1,40 @@
+--- app/src/main/java/ci/kalyno/app/ui/dojo/DojoViewModel.kt
++++ app/src/main/java/ci/kalyno/app/ui/dojo/DojoViewModel.kt
+@@ -325,10 +325,33 @@
+             val result = semanticEvaluator.evaluate(
+                 adminReference = exercise.reference,
+                 studentAnswer = answer,
+                 lessonTitle = exercise.lessonTitle,
+                 lessonSummary = exercise.lessonSummary
+             )
+-            // Moteur en panne : repli sur les mots-clés plutôt que de bloquer ou de sanctionner l'élève
+-            val verdict = DojoGrading.fromSemantic(result, context)
+-                ?: AnswerGrader.gradeText(answer, AnswerGrader.acceptedAnswers(exercise.item.answer), context)
+-            finish(exercise, verdict, semantic = result.takeIf { it.verdict != EvaluationVerdict.ENGINE_ERROR })
++
++            // Si E5 rejette une reformulation, vérifier avec le contexte de la leçon.
++            // En cas de panne, tenter aussi ce chemin une fois, puis conserver le repli lexical.
++            val lessonResult = if (
++                exercise.lessonPassages.isNotEmpty() &&
++                DojoGrading.canRescueWithLesson(exercise.reference) &&
++                result.verdict in setOf(
++                    EvaluationVerdict.INCORRECT,
++                    EvaluationVerdict.ENGINE_ERROR
++                )
++            ) {
++                semanticEvaluator.evaluateWithLesson(
++                    question = exercise.item.front,
++                    expectedShort = exercise.item.answer,
++                    passages = exercise.lessonPassages,
++                    studentAnswer = answer
++                )
++            } else {
++                null
++            }
++
++            val rescued = lessonResult?.let { DojoGrading.fromLesson(it) }
++            val semanticVerdict = DojoGrading.fromSemantic(result, context)
++            val verdict = when {
++                rescued != null -> rescued
++                semanticVerdict != null -> semanticVerdict
++                else -> AnswerGrader.gradeText(

@@ -357,16 +357,58 @@ class DojoViewModel(app: Application) : AndroidViewModel(app) {
         _state.update { it.copy(evaluating = true) }
         evaluation = viewModelScope.launch {
             // passage: « Leçon : titre - résumé. Réponse officielle : … » contre query: « saisie de l'élève »
-            val result = semanticEvaluator.evaluate(
-                adminReference = exercise.reference,
-                studentAnswer = answer,
-                lessonTitle = exercise.lessonTitle,
-                lessonSummary = exercise.lessonSummary
-            )
-            // Moteur en panne : repli sur les mots-clés plutôt que de bloquer ou de sanctionner l'élève
-            val verdict = DojoGrading.fromSemantic(result, context)
-                ?: AnswerGrader.gradeText(answer, AnswerGrader.acceptedAnswers(exercise.item.answer), context)
-            finish(exercise, verdict, semantic = result.takeIf { it.verdict != EvaluationVerdict.ENGINE_ERROR })
+
+
+val result = semanticEvaluator.evaluate(
+    adminReference = exercise.reference,
+    studentAnswer = answer,
+    lessonTitle = exercise.lessonTitle,
+    lessonSummary = exercise.lessonSummary
+)
+
+// Si E5 rejette la réponse, vérifier aussi avec le contenu de la leçon.
+val lessonResult = if (
+    exercise.lessonPassages.isNotEmpty() &&
+    DojoGrading.canRescueWithLesson(exercise.reference) &&
+    result.verdict in setOf(
+        EvaluationVerdict.INCORRECT,
+        EvaluationVerdict.ENGINE_ERROR
+    )
+) {
+    semanticEvaluator.evaluateWithLesson(
+        question = exercise.item.front,
+        expectedShort = exercise.item.answer,
+        passages = exercise.lessonPassages,
+        studentAnswer = answer
+    )
+} else {
+    null
+}
+
+val rescued = lessonResult?.let { DojoGrading.fromLesson(it) }
+val semanticVerdict = DojoGrading.fromSemantic(result, context)
+
+val verdict = when {
+    rescued != null -> rescued
+    semanticVerdict != null -> semanticVerdict
+    else -> AnswerGrader.gradeText(
+        answer,
+        AnswerGrader.acceptedAnswers(exercise.item.answer),
+        context
+    )
+}
+
+val feedbackResult = if (rescued != null) lessonResult else result
+
+finish(
+    exercise,
+    verdict,
+    semantic = feedbackResult?.takeIf {
+        it.verdict != EvaluationVerdict.ENGINE_ERROR
+    }
+)
+
+
         }
     }
 
