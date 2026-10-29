@@ -31,4 +31,18 @@ class E5PromptTest {
     @Test fun sansLeconLeCatalogueNEstPasEncoreSynchronise() {
         assertEquals("passage: Réponse officielle : R", E5Prompt.lessonPassage(null, "  ", "R"))
     }
+
+    @Test fun hasPrefixAccepteQueryEtPassageSeulement() {
+        assertTrue(E5Prompt.hasPrefix(E5Prompt.query("x")))
+        assertTrue(E5Prompt.hasPrefix(E5Prompt.passage("x")))
+        assertTrue(!E5Prompt.hasPrefix("x"))
+        assertTrue(!E5Prompt.hasPrefix("query:x")) // l'espace après les deux-points fait partie du préfixe
+    }
+
+    @Test fun laReponseOfficielleSurvitAuxTitresEtResumesTropLongs() {
+        val p = E5Prompt.lessonPassage("T".repeat(500), "S".repeat(500), "R".repeat(2000))
+        assertTrue("passage trop long : ${p.length}", p.length <= 1200) // limite de UnigramTokenizer.MAX_CHARS
+        assertTrue(p.contains("Réponse officielle : " + "R".repeat(E5Prompt.MAX_REFERENCE_CHARS)))
+    }
 }
+

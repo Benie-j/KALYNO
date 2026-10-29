@@ -220,6 +220,12 @@ class SemanticEvaluationEngine private constructor(
      * Le texte reçu doit déjà porter son préfixe « query: » ou « passage: » ([E5Prompt]).
      */
     private fun embed(text: String): FloatArray {
+        // Fiche E5 : chaque texte DOIT porter « query: » ou « passage: ». Un oubli (ou un double appel à
+        // E5Prompt) dégrade silencieusement TOUS les scores : on préfère échouer bruyamment.
+        require(E5Prompt.hasPrefix(text)) { "Préfixe E5 manquant : \"${text.take(30)}\"" }
+        require(!text.startsWith(E5Prompt.QUERY + E5Prompt.QUERY) && !text.startsWith(E5Prompt.PASSAGE + E5Prompt.PASSAGE)) {
+            "Préfixe E5 en double : \"${text.take(30)}\""
+        }
         val ids = tokenizer.encode(text, config.maxSeqLen)
         val n = ids.size
         val shape = longArrayOf(1L, n.toLong())

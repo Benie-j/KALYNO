@@ -9,7 +9,7 @@ import ci.kalyno.app.data.LearningChapter
  */
 object LessonPassages {
 
-    /** Longueur maximale d'un passage : au-delà, le vecteur dilue le sens (le modèle lit 128 tokens). */
+    /** Longueur maximale d'un passage : au-delà, le vecteur dilue le sens (le moteur lit 256 tokens, E5 accepte 512 au maximum). */
     const val MAX_PASSAGE_CHARS = 280
 
     /** Un fragment plus court n'est qu'un titre ou une étiquette : inutilisable comme référence. */
