@@ -14,6 +14,26 @@ class SemanticEvaluator(
     suspend fun refreshSettings(): Boolean = settings.refresh()
 
     /**
+     * Correction à partir du texte de la leçon quand l'admin n'a pas écrit de référence détaillée.
+     * @param expectedShort bonne réponse courte de la carte (mot-clé ou option correcte)
+     */
+    suspend fun evaluateWithLesson(
+        question: String,
+        expectedShort: String,
+        passages: List<String>,
+        studentAnswer: String,
+        scope: String? = null
+    ): EvaluationResult =
+        SemanticEvaluationEngine.getInstance(appContext).evaluateWithLessonAsync(
+            question, expectedShort, passages, studentAnswer,
+            settings.thresholdsFor(scope).relaxedForLesson()
+        )
+
+    /** Précalcule les vecteurs des passages d'une leçon (appel en arrière-plan). */
+    suspend fun preloadPassages(passages: List<String>) =
+        SemanticEvaluationEngine.getInstance(appContext).preloadAsync(passages)
+
+    /**
      * @param adminReference réponse de référence saisie par l'admin
      * @param scope identifiant de la matière (seuil spécifique) ou null pour le seuil global
      */

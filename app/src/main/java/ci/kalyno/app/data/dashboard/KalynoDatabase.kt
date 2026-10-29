@@ -32,7 +32,7 @@ import ci.kalyno.app.data.srs.SubjectEntity
         QuoteFavoriteEntity::class,
         BadgeUnlockEntity::class
     ],
-    version = 6,
+    version = 7,
     exportSchema = false
 )
 abstract class KalynoDatabase : RoomDatabase() {
@@ -133,13 +133,29 @@ abstract class KalynoDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * Dojo : niveau de répétition par élève et par carte (QCM -> saisie libre) et phrase de
+         * référence de l'admin. Les cartes déjà bien révisées reprennent un niveau cohérent
+         * avec leur historique (nombre de révisions réussies d'affilée).
+         */
+        private val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE flashcards ADD COLUMN adminReference TEXT")
+                db.execSQL("ALTER TABLE card_progress ADD COLUMN dojoStage INTEGER NOT NULL DEFAULT 0")
+                db.execSQL(
+                    "UPDATE card_progress SET dojoStage = MIN(repetitions, " +
+                        "${ci.kalyno.app.data.dashboard.SrsConfig.DOJO_MAX_STAGE})"
+                )
+            }
+        }
+
         fun get(context: Context): KalynoDatabase =
             instance ?: synchronized(this) {
                 instance ?: Room.databaseBuilder(
                     context.applicationContext,
                     KalynoDatabase::class.java,
                     "kalyno.db"
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
                     .build().also { instance = it }
             }
     }

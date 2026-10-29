@@ -44,7 +44,9 @@ data class FlashcardEntity(
     val kind: String? = null,            // SINGLE_CHOICE, MULTIPLE_CHOICE ou FREE_TEXT
     val choicesJson: String? = null,     // choix proposés, au format JSON
     val correctIndices: String? = null,  // indices des bonnes réponses, séparés par des virgules
-    val explanation: String? = null      // explication détaillée (révélée après la réponse)
+    val explanation: String? = null,     // explication détaillée (révélée après la réponse)
+    // -- Phrase de référence absolue de l'admin, utilisée par le moteur ONNX en saisie libre (null = on retombe sur `reponse`) --
+    val adminReference: String? = null
 )
 
 /**
@@ -92,8 +94,15 @@ data class CardProgressEntity(
     // -- Mémoire FSRS (0 = carte créée avant FSRS : reprise automatique depuis l'intervalle et l'ease) --
     @ColumnInfo(defaultValue = "0") val stability: Double = 0.0,   // jours pour tomber à 90 % de rétention
     @ColumnInfo(defaultValue = "0") val difficulty: Double = 0.0,  // 1 (facile) à 10 (difficile)
-    @ColumnInfo(defaultValue = "0") val lapses: Int = 0            // nombre d'oublis après apprentissage
-)
+    @ColumnInfo(defaultValue = "0") val lapses: Int = 0,           // nombre d'oublis après apprentissage
+
+    // -- Dojo : niveau de répétition espacée de CET élève sur cette carte (0 = QCM ; >= seuil = saisie libre) --
+    @ColumnInfo(defaultValue = "0") val dojoStage: Int = 0
+) {
+    /** Règle dérivée (aucune colonne) : au-delà du seuil, la carte passe du QCM à la saisie libre. */
+    val requiresFreeInput: Boolean
+        get() = ci.kalyno.app.data.dojo.DojoStagePolicy.requiresFreeInput(dojoStage)
+}
 
 /**
  * Historique immuable de chaque révision (pour analytics / audit).

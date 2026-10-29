@@ -41,7 +41,7 @@ object AnswerGrader {
     fun fastThresholdMs(questionLength: Int): Long =
         FAST_BASE_MS + questionLength.toLong() * FAST_PER_CHAR_MS
 
-    private fun goodRating(ctx: AnswerContext): ReviewRating = when {
+    internal fun goodRating(ctx: AnswerContext): ReviewRating = when {
         ctx.hintUsed -> ReviewRating.HESITE
         ctx.calculatorUsed -> ReviewRating.SU
         ctx.elapsedMs <= fastThresholdMs(ctx.questionLength) -> ReviewRating.TROP_FACILE

@@ -8,6 +8,7 @@ import ci.kalyno.app.data.LearningSubject
 import ci.kalyno.app.data.AppPrefs
 import ci.kalyno.app.data.SupabaseLearningRepository
 import ci.kalyno.app.data.cloud.CloudSync
+import ci.kalyno.app.data.dojo.DojoStagePolicy
 import ci.kalyno.app.data.srs.CardProgressEntity
 import ci.kalyno.app.data.srs.FlashcardEntity
 import ci.kalyno.app.data.srs.ReviewLogEntity
@@ -262,7 +263,9 @@ class DashboardRepository(context: Context) {
                     ?: CardProgressEntity(studentId = studentId, flashcardId = cardId, dueDate = now)
                         .also { srs.initProgress(it) }
 
+                // FSRS replanifie la carte ; la politique Dojo fait évoluer son niveau (QCM -> saisie libre)
                 val next = SrsEngine.computeNextProgress(current, rating, now, maxIntervalDays = cap)
+                    .let { it.copy(dojoStage = DojoStagePolicy.next(current.dojoStage, rating)) }
                 srs.updateProgress(next)
                 srs.logReview(
                     ReviewLogEntity(
@@ -278,6 +281,19 @@ class DashboardRepository(context: Context) {
                 // Intervalle planifié par FSRS (affiché à l'élève dans la correction)
                 next.intervalDays
             }
+        }
+
+    /** Niveau Dojo d'un élève et référence admin pour chaque carte d'une session (une lecture Room groupée). */
+    suspend fun dojoMeta(studentId: String, cardIds: List<String>): Map<String, DojoCardMeta> =
+        withContext(Dispatchers.IO) {
+            if (cardIds.isEmpty()) return@withContext emptyMap()
+            val stages = cardIds.chunked(500)
+                .flatMap { srs.stagesFor(studentId, it) }
+                .associate { it.flashcardId to it.dojoStage }
+            val references = cardIds.chunked(500)
+                .flatMap { dao.flashcardsByIds(it) }
+                .associate { it.id to it.adminReference }
+            cardIds.associateWith { DojoCardMeta(stage = stages[it] ?: 0, adminReference = references[it]) }
         }
 
     private suspend fun sync(
@@ -307,7 +323,8 @@ class DashboardRepository(context: Context) {
                         correctIndices = ci.kalyno.app.data.dojo
                             .mergeCorrectIndices(c.correctIndices, c.correctIndex)
                             .joinToString(","),
-                        explanation = c.explanation
+                        explanation = c.explanation,
+                        adminReference = c.adminReference
                     )
                 }
             }

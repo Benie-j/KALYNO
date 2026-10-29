@@ -95,6 +95,10 @@ interface SrsDao {
     )
     suspend fun getDueCards(studentId: String, nowMillis: Long): List<CardWithContext>
 
+    /** Niveau Dojo de plusieurs cartes d'un coup (cartes jamais révisées : absentes du résultat = niveau 0). */
+    @Query("SELECT flashcardId, dojoStage FROM card_progress WHERE studentId = :studentId AND flashcardId IN (:ids)")
+    suspend fun stagesFor(studentId: String, ids: List<String>): List<CardStageRow>
+
     @Query("SELECT * FROM card_progress WHERE studentId = :studentId AND flashcardId = :flashcardId")
     suspend fun getProgress(studentId: String, flashcardId: String): CardProgressEntity?
 
@@ -142,6 +146,7 @@ interface SrsDao {
     suspend fun masteredDetails(studentId: String, minRepetitions: Int): List<MasteredCardRow>
 }
 
+data class CardStageRow(val flashcardId: String, val dojoStage: Int)
 data class ReviewLogRow(val flashcardId: String, val rating: ReviewRating, val reviewedAt: Long)
 data class FlashcardSubjectRow(val id: String, val subjectId: String)
 

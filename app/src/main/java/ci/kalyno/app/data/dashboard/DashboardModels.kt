@@ -90,6 +90,9 @@ data class MasteredNotion(
     val score: Float?
 )
 
+/** Ce que le Dojo doit savoir d'une carte pour choisir son interface : niveau de l'élève et référence admin. */
+data class DojoCardMeta(val stage: Int, val adminReference: String?)
+
 data class ReviewSession(
     val id: String,
     val title: String?,

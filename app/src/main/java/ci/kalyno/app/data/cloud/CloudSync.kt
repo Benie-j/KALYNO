@@ -112,6 +112,7 @@ class CloudSync(context: Context) {
                     easeFactor = r.getDouble("ease_factor").toFloat(),
                     intervalDays = r.getInt("interval_days"),
                     repetitions = r.getInt("repetitions"),
+                    dojoStage = ci.kalyno.app.data.dojo.DojoStagePolicy.fromRepetitions(r.getInt("repetitions")),
                     dueDate = r.getLong("due_date"),
                     lastReviewedAt = reviewedAt,
                     stability = r.optDouble("stability", 0.0),

@@ -309,6 +309,7 @@ private fun ExercisePane(state: DojoUiState, exercise: DojoExercise, vm: DojoVie
         QuizStickyFooter(
             validated = result != null,
             actionLabel = when {
+                state.evaluating -> "ANALYSE EN COURS..."
                 result == null -> "VALIDER MA RÉPONSE"
                 isLast -> "VOIR MON BILAN"
                 else -> "CONTINUER"
@@ -337,70 +338,25 @@ private fun QuestionCard(state: DojoUiState, exercise: DojoExercise, vm: DojoVie
     KalynoQuestionCard(
         question = item.front,
         lessonLabel = lessonLabel,
-        typeLabel = when (exercise.kind) {
-            ExerciseKind.SINGLE_CHOICE -> "Une bonne réponse"
-            ExerciseKind.MULTIPLE_CHOICE -> "Plusieurs réponses"
-            ExerciseKind.FREE_TEXT -> "Saisie libre"
+        typeLabel = when {
+            exercise.promotedToFreeInput -> "Saisie libre · niveau débloqué"
+            exercise.kind == ExerciseKind.SINGLE_CHOICE -> "Une bonne réponse"
+            exercise.kind == ExerciseKind.MULTIPLE_CHOICE -> "Plusieurs réponses"
+            else -> "Saisie libre"
         },
         // Indice : seulement à la demande (la carte reviendra alors plus tôt)
         hint = item.hint,
         hintVisible = state.hintShown,
         onRequestHint = if (!locked) ({ vm.showHint() }) else null
     ) {
-        when (exercise.kind) {
-            ExerciseKind.FREE_TEXT -> OutlinedTextField(
-                value = state.typed,
-                onValueChange = vm::onTyped,
-                modifier = Modifier.fillMaxWidth(),
-                enabled = !locked,
-                singleLine = true,
-                shape = RoundedCornerShape(14.dp),
-                textStyle = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.Bold),
-                placeholder = { Text("Écris ta réponse ici...", color = QuizColors.Muted) },
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                keyboardActions = KeyboardActions(onDone = { vm.submit() }),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedContainerColor = QuizColors.Surface,
-                    unfocusedContainerColor = QuizColors.Surface,
-                    disabledContainerColor = if (result?.correct == true) QuizColors.CorrectBg else QuizColors.WrongBg,
-                    focusedBorderColor = QuizColors.Primary,
-                    unfocusedBorderColor = QuizColors.Border,
-                    disabledBorderColor = if (result?.correct == true) QuizColors.CorrectBorder else QuizColors.WrongBorder,
-                    cursorColor = QuizColors.Primary,
-                    focusedTextColor = QuizColors.Ink,
-                    unfocusedTextColor = QuizColors.Ink,
-                    disabledTextColor = QuizColors.Ink
-                )
-            )
-
-            else -> {
-                val multiple = exercise.kind == ExerciseKind.MULTIPLE_CHOICE
-                if (multiple && !locked) {
-                    Text(
-                        text = "Coche toutes les bonnes réponses.",
-                        color = QuizColors.Muted,
-                        fontSize = 12.sp
-                    )
-                    Spacer(Modifier.height(8.dp))
-                }
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    item.choices.forEachIndexed { i, choice ->
-                        KalynoChoiceCard(
-                            letter = ('A'.code + i).toChar().toString(),
-                            text = choice,
-                            selected = i in state.selected,
-                            locked = locked,
-                            // La bonne réponse n'est révélée qu'après la validation
-                            isCorrect = locked && i in exercise.correctIndices,
-                            onClick = {
-                                haptic()
-                                vm.toggleChoice(i)
-                            }
-                        )
-                    }
-                }
-            }
-        }
+        DojoAnswerArea(
+            state = state,
+            exercise = exercise,
+            onToggleChoice = vm::toggleChoice,
+            onTyped = vm::onTyped,
+            onSubmit = vm::submit,
+            onHaptic = haptic
+        )
     }
 }
 
@@ -443,6 +399,7 @@ private fun DojoFeedback(exercise: DojoExercise, result: DojoResult) {
         },
         message = result.message,
         detail = when {
+            result.feedback != null -> result.feedback
             result.partial -> "Tu n'as pas coché toutes les bonnes réponses."
             !result.correct && exercise.kind == ExerciseKind.FREE_TEXT -> "Retiens le mot-clé : il résume l'idée en un mot."
             else -> null

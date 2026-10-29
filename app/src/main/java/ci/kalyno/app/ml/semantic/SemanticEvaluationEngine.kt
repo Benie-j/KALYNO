@@ -62,13 +62,80 @@ class SemanticEvaluationEngine private constructor(
         if (reference.isEmpty()) return engineError("Référence admin vide")
 
         return try {
-            val refVec = synchronized(referenceCache) { referenceCache[reference] }
-                ?: embed(reference).also { synchronized(referenceCache) { referenceCache[reference] = it } }
+            val refVec = referenceVector(reference)
             val score = cosine(refVec, embed(answer)).coerceIn(-1f, 1f)
             decide(score, LogicGuard.inspect(reference, answer), thresholds)
         } catch (e: Exception) {
             Log.e(TAG, "Échec de l'évaluation sémantique", e)
             engineError(e.message ?: "erreur inconnue")
+        }
+    }
+
+    /** Embedding d'un texte de référence, mémorisé (références admin et passages de leçon). */
+    private fun referenceVector(text: String): FloatArray =
+        synchronized(referenceCache) { referenceCache[text] }
+            ?: embed(text).also { synchronized(referenceCache) { referenceCache[text] = it } }
+
+    /**
+     * Corrige une réponse SANS référence admin, à partir du texte de la leçon.
+     *
+     * 1) le passage de leçon le plus proche de « question + bonne réponse courte » est retenu
+     *    (il reste donc sur la question posée : une phrase vraie mais hors sujet ne peut pas le devenir) ;
+     * 2) la réponse de l'élève est comparée à CE passage ;
+     * 3) les garde-fous (négation, antonymes, chiffres) s'appliquent à la bonne réponse courte, jamais au passage,
+     *    qui contient d'autres négations et d'autres nombres sans rapport avec la réponse.
+     *
+     * Retourne ENGINE_ERROR si aucun passage n'est pertinent : l'appelant garde alors sa correction par mots-clés.
+     */
+    fun evaluateWithLesson(
+        question: String,
+        expectedShort: String,
+        passages: List<String>,
+        studentAnswer: String,
+        thresholds: SemanticThresholds = config.defaultThresholds
+    ): EvaluationResult {
+        val answer = studentAnswer.trim()
+        if (answer.isEmpty()) {
+            return EvaluationResult(
+                false, 0f,
+                "Ta réponse est vide. Écris ce que tu as retenu de la leçon, même en quelques mots.",
+                EvaluationVerdict.EMPTY_INPUT
+            )
+        }
+        if (passages.isEmpty()) return engineError("Aucun passage de leçon")
+
+        return try {
+            val queryVec = embed("${question.trim()} ${expectedShort.trim()}".trim())
+            var bestScore = -1f
+            var bestVec: FloatArray? = null
+            for (passage in passages) {
+                val vec = referenceVector(passage)
+                val score = cosine(queryVec, vec)
+                if (score > bestScore) { bestScore = score; bestVec = vec }
+            }
+            if (bestVec == null || bestScore < LESSON_RETRIEVAL_MIN) return engineError("Aucun passage de leçon pertinent")
+
+            val score = cosine(bestVec, embed(answer)).coerceIn(-1f, 1f)
+            decide(score, LogicGuard.inspect(expectedShort, answer), thresholds)
+        } catch (e: Exception) {
+            Log.e(TAG, "Échec de l'évaluation par la leçon", e)
+            engineError(e.message ?: "erreur inconnue")
+        }
+    }
+
+    suspend fun evaluateWithLessonAsync(
+        question: String,
+        expectedShort: String,
+        passages: List<String>,
+        studentAnswer: String,
+        thresholds: SemanticThresholds = config.defaultThresholds
+    ): EvaluationResult =
+        withContext(Dispatchers.Default) { evaluateWithLesson(question, expectedShort, passages, studentAnswer, thresholds) }
+
+    /** Calcule à l'avance les vecteurs des passages (en arrière-plan) pour que la première correction soit instantanée. */
+    suspend fun preloadAsync(texts: List<String>) = withContext(Dispatchers.Default) {
+        for (text in texts) {
+            try { referenceVector(text) } catch (e: Exception) { Log.w(TAG, "Préchargement ignoré : ${e.message}") }
         }
     }
 
@@ -191,7 +258,11 @@ class SemanticEvaluationEngine private constructor(
 
     companion object {
         private const val TAG = "SemanticEngine"
-        private const val CACHE_SIZE = 64
+        // Références admin + passages de leçon d'une session (≈ 1,5 Ko par vecteur de 384 dimensions)
+        private const val CACHE_SIZE = 160
+
+        /** Sous ce score, aucun passage de la leçon ne parle de la question : on ne s'en sert pas. */
+        internal const val LESSON_RETRIEVAL_MIN = 0.35f
 
         // Incrémenter MODEL_VERSION quand le fichier .onnx des assets change (force la recopie).
         private const val MODEL_VERSION = 1

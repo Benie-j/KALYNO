@@ -20,7 +20,9 @@ data class LearningCard(
     val correctIndex: Int?,
     val explanation: String?,
     /** Bonnes réponses d'un QCM à choix multiples (colonne `correct_indices`, optionnelle). */
-    val correctIndices: List<Int> = emptyList()
+    val correctIndices: List<Int> = emptyList(),
+    /** Phrase de référence pour la correction sémantique (colonne `admin_reference`, optionnelle). */
+    val adminReference: String? = null
 )
 
 data class LearningCapsule(
@@ -359,13 +361,28 @@ class SupabaseLearningRepository {
     @Volatile
     private var cardMultiAnswerSupported = true
 
+    /** Faux dès qu'on sait que la table `cards` n'a pas (encore) la colonne `admin_reference`. */
+    @Volatile
+    private var cardReferenceSupported = true
+
     private fun readIndices(array: JSONArray?): List<Int> =
         if (array == null) emptyList() else List(array.length()) { array.optInt(it, -1) }.filter { it >= 0 }
 
-    /** Cartes d'un chapitre ; repli sans `correct_indices` si le back-end ne la connaît pas (HTTP 400). */
+    /**
+     * Cartes d'un chapitre. Une colonne optionnelle absente côté serveur donne HTTP 400 : on retente
+     * alors avec moins de colonnes (du plus complet au plus simple) et on s'en souvient jusqu'au
+     * prochain lancement, pour ne payer l'échec qu'une fois.
+     */
     private fun loadCardRows(chapterId: String): JSONArray {
         val base = "cards?select=id,capsule_id,kind,front,back,choices,correct_index,explanation,position"
         val filter = "&chapter_id=eq.${enc(chapterId)}&order=position.asc"
+        if (cardMultiAnswerSupported && cardReferenceSupported) {
+            try {
+                return getArray("$base,correct_indices,admin_reference$filter")
+            } catch (e: IOException) {
+                if (e.message?.startsWith("Supabase HTTP 400") == true) cardReferenceSupported = false else throw e
+            }
+        }
         if (cardMultiAnswerSupported) {
             try {
                 return getArray("$base,correct_indices$filter")
@@ -421,7 +438,12 @@ class SupabaseLearningRepository {
                         } else {
                             row.optString("explanation")
                         },
-                        correctIndices = readIndices(row.optJSONArray("correct_indices"))
+                        correctIndices = readIndices(row.optJSONArray("correct_indices")),
+                        adminReference = if (row.isNull("admin_reference")) {
+                            null
+                        } else {
+                            row.optString("admin_reference").trim().takeIf { it.isNotEmpty() }
+                        }
                     )
                 )
             }
