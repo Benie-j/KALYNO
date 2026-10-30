@@ -1,0 +1,186 @@
+package ci.kalyno.app.data.notifications
+
+import android.Manifest
+import android.annotation.SuppressLint
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
+import androidx.work.BackoffPolicy
+import androidx.work.Constraints
+import androidx.work.CoroutineWorker
+import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkManager
+import androidx.work.WorkerParameters
+import ci.kalyno.app.R
+import ci.kalyno.app.data.AppPrefs
+import ci.kalyno.app.data.dashboard.DashboardRepository
+import ci.kalyno.app.data.dashboard.MissionStatus
+import ci.kalyno.app.data.dashboard.StudentId
+import kotlinx.coroutines.CancellationException
+import java.time.LocalDate
+import java.time.LocalTime
+import java.util.concurrent.TimeUnit
+
+/**
+ * Rappels système (l'appli peut être fermée) : cartes à découvrir dans le Dojo et révisions urgentes FSRS.
+ *
+ * Une tâche WorkManager périodique (survit au redémarrage du téléphone) relance le calcul du tableau de bord
+ * ([DashboardRepository.load]) : les chiffres notifiés sont donc exactement ceux que l'élève verra dans le Dojo.
+ * Anti-spam : une notification de chaque type par jour au maximum, et aucune la nuit.
+ */
+object StudyReminders {
+
+    private const val WORK_NAME = "kalyno-study-reminders"
+    private const val PERIOD_HOURS = 3L
+
+    internal const val CHANNEL_URGENT = "kalyno_urgent_reviews"
+    internal const val CHANNEL_DOJO = "kalyno_dojo_new_cards"
+    internal const val ID_URGENT = 4101
+    internal const val ID_DOJO = 4102
+
+    /** Heures de silence : de 21 h à 7 h (heure du téléphone), rien n'est envoyé. */
+    internal const val QUIET_FROM_HOUR = 21
+    internal const val QUIET_UNTIL_HOUR = 7
+
+    /** À appeler au lancement de l'appli : sans effet si la tâche est déjà programmée. */
+    fun schedule(context: Context) {
+        val app = context.applicationContext
+        createChannels(app)
+        val request = PeriodicWorkRequestBuilder<StudyReminderWorker>(PERIOD_HOURS, TimeUnit.HOURS)
+            .setConstraints(Constraints.Builder().setRequiresBatteryNotLow(true).build())
+            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 10, TimeUnit.MINUTES)
+            .build()
+        WorkManager.getInstance(app)
+            .enqueueUniquePeriodicWork(WORK_NAME, ExistingPeriodicWorkPolicy.KEEP, request)
+    }
+
+    internal fun createChannels(context: Context) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        val manager = context.getSystemService(NotificationManager::class.java) ?: return
+        manager.createNotificationChannel(
+            NotificationChannel(CHANNEL_URGENT, "Révisions urgentes", NotificationManager.IMPORTANCE_DEFAULT).apply {
+                description = "Alerte quand des notions risquent d'être oubliées."
+            }
+        )
+        manager.createNotificationChannel(
+            NotificationChannel(CHANNEL_DOJO, "Nouvelles cartes du Dojo", NotificationManager.IMPORTANCE_DEFAULT).apply {
+                description = "Alerte quand de nouvelles cartes t'attendent dans le Dojo."
+            }
+        )
+    }
+
+    internal fun canNotify(context: Context): Boolean {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
+            PackageManager.PERMISSION_GRANTED
+        ) return false
+        return NotificationManagerCompat.from(context).areNotificationsEnabled()
+    }
+
+    internal fun isQuietHour(now: LocalTime = LocalTime.now()): Boolean =
+        now.hour >= QUIET_FROM_HOUR || now.hour < QUIET_UNTIL_HOUR
+
+    @SuppressLint("MissingPermission") // vérifié par canNotify() avant tout appel
+    internal fun post(context: Context, id: Int, channel: String, title: String, text: String) {
+        if (!canNotify(context)) return
+        val launch = context.packageManager.getLaunchIntentForPackage(context.packageName)
+            ?.apply { flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP }
+        val tap = launch?.let {
+            PendingIntent.getActivity(context, id, it, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        }
+        val notification = NotificationCompat.Builder(context, channel)
+            .setSmallIcon(R.drawable.ic_launcher_monochrome)
+            .setColor(ContextCompat.getColor(context, R.color.kalyno_blue))
+            .setContentTitle(title)
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .setContentIntent(tap)
+            .setAutoCancel(true)
+            .build()
+        NotificationManagerCompat.from(context).notify(id, notification)
+    }
+}
+
+class StudyReminderWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
+
+    private val state = context.applicationContext.getSharedPreferences("kalyno_reminders", Context.MODE_PRIVATE)
+
+    override suspend fun doWork(): Result {
+        val context = applicationContext
+        val levelId = AppPrefs(context).level ?: return Result.success() // classe pas encore choisie
+        if (StudyReminders.isQuietHour()) return Result.success() // rien n'est marqué : le prochain passage notifiera
+
+        val snapshot = try {
+            DashboardRepository(context).load(levelId, StudentId.get(context))
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            return if (runAttemptCount < MAX_ATTEMPTS) Result.retry() else Result.success()
+        }
+
+        StudyReminders.createChannels(context)
+        val today = LocalDate.now().toEpochDay()
+        val manager = NotificationManagerCompat.from(context)
+
+        // ----- Révisions urgentes (cartes dues selon FSRS) -----
+        val urgent = snapshot.urgentTotal
+        if (urgent <= 0) {
+            manager.cancel(StudyReminders.ID_URGENT) // plus rien d'urgent : on retire l'alerte périmée
+        } else if (state.getLong(KEY_URGENT_DAY, -1L) != today) {
+            val topic = snapshot.urgentTopics.firstOrNull()?.label
+            StudyReminders.post(
+                context = context,
+                id = StudyReminders.ID_URGENT,
+                channel = StudyReminders.CHANNEL_URGENT,
+                title = "Révisions urgentes",
+                text = buildString {
+                    append(if (urgent == 1) "1 notion à sauver" else "$urgent notions à sauver")
+                    append(" dans le Dojo")
+                    if (topic != null) append(" · $topic")
+                    append(". Quelques minutes suffisent pour la garder en tête !")
+                }
+            )
+            state.edit().putLong(KEY_URGENT_DAY, today).apply()
+        }
+
+        // ----- Nouvelles cartes disponibles (mission du jour) -----
+        val mission = snapshot.mission
+        if (snapshot.missionStatus == MissionStatus.READY && mission != null && mission.items.isNotEmpty()) {
+            val signature = mission.items.map { it.cardId }.hashCode()
+            val alreadyKnown = state.getInt(KEY_NEW_SIGNATURE, 0) == signature
+            if (!alreadyKnown && state.getLong(KEY_NEW_DAY, -1L) != today) {
+                val count = mission.items.size
+                StudyReminders.post(
+                    context = context,
+                    id = StudyReminders.ID_DOJO,
+                    channel = StudyReminders.CHANNEL_DOJO,
+                    title = "Nouvelles cartes dans le Dojo",
+                    text = (if (count == 1) "1 nouvelle carte t'attend" else "$count nouvelles cartes t'attendent") +
+                        ". Lance ta mission du jour !"
+                )
+                state.edit().putLong(KEY_NEW_DAY, today).putInt(KEY_NEW_SIGNATURE, signature).apply()
+            }
+        } else {
+            manager.cancel(StudyReminders.ID_DOJO)
+        }
+
+        return Result.success()
+    }
+
+    private companion object {
+        const val MAX_ATTEMPTS = 2
+        const val KEY_URGENT_DAY = "urgent_day"
+        const val KEY_NEW_DAY = "new_cards_day"
+        const val KEY_NEW_SIGNATURE = "new_cards_signature"
+    }
+}

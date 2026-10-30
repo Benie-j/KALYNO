@@ -1,8 +1,14 @@
 package ci.kalyno.app
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
+import ci.kalyno.app.data.notifications.StudyReminders
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -55,6 +61,20 @@ private var splashDrawn = false
 private var splashStart = 0L
 
 class MainActivity : ComponentActivity() {
+
+    /** Android 13+ : l'autorisation d'envoyer des notifications se demande à l'exécution. */
+    private val notificationPermission =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
+
+    private fun requestNotificationPermissionIfNeeded() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         splashStart = SystemClock.uptimeMillis()
         installSplashScreen().apply {
@@ -64,6 +84,9 @@ class MainActivity : ComponentActivity() {
 
         super.onCreate(savedInstanceState)
 
+        // Rappels système (Dojo + révisions urgentes) : sans effet si déjà programmés
+        StudyReminders.schedule(this)
+
         setContent {
             KalynoTheme {
                 var showHome by remember { mutableStateOf(false) }
@@ -71,6 +94,7 @@ class MainActivity : ComponentActivity() {
                 LaunchedEffect(Unit) {
                     delay(1_000L)
                     showHome = true
+                    requestNotificationPermissionIfNeeded()
                 }
 
                 Surface(
