@@ -23,7 +23,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -575,18 +574,7 @@ private fun NewPathsSection(chapters: List<ExplorerChapter>, onOpen: (ExplorerCh
             subtitle = "Publiés en direct",
             modifier = Modifier.padding(horizontal = 16.dp)
         )
-        LazyRow(
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 2.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            items(latest, key = { it.id }) { chapter ->
-                PathCard(
-                    chapter = chapter,
-                    onClick = { onOpen(chapter) },
-                    modifier = Modifier.width(176.dp).heightIn(min = 150.dp)
-                )
-            }
-        }
+        PathGrid(chapters = latest, onOpen = onOpen, modifier = Modifier.padding(horizontal = 16.dp))
     }
 }
 

@@ -400,9 +400,9 @@ private fun QuoteHistorySheet(
             ) {
                 if (tab == 0) {
                     if (week.isEmpty()) {
-                        item { EmptyHint("Aucune citation publiée cette semaine.") }
+                        item { EmptyHint("Les citations de la semaine apparaîtront dès qu'elles seront téléchargées.") }
                     }
-                    items(week, key = { "${it.date.toEpochDay()}:${it.quote.favoriteKey()}" }) { day ->
+                    items(week, key = { it.date.toEpochDay() }) { day ->
                         QuoteRow(
                             label = dayLabel(day.date),
                             quote = day.quote,

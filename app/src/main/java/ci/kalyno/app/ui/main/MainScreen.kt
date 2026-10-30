@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ci.kalyno.app.data.Levels
 import ci.kalyno.app.data.StreakStore
+import ci.kalyno.app.data.notifications.StudyReminders
 import ci.kalyno.app.ui.theme.*
 import ci.kalyno.app.ui.icons.KalynoSvgIcon
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -64,6 +65,15 @@ fun MainScreen(
     LaunchedEffect(levelId, nickname) { viewModel.load(levelId, nickname) }
 
     var tab by rememberSaveable { mutableStateOf(0) }
+
+    // Tap sur une notification (Dojo / révisions urgentes) : on ouvre l'onglet Dojo
+    val openDojo by StudyReminders.openDojoRequested
+    LaunchedEffect(openDojo) {
+        if (openDojo) {
+            tab = 1
+            StudyReminders.openDojoRequested.value = false
+        }
+    }
     val session = state.session
 
     if (session != null) {
