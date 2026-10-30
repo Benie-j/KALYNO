@@ -35,7 +35,7 @@ import ci.kalyno.app.data.srs.SubjectEntity
         BadgeUnlockEntity::class,
         LessonProgressEntity::class
     ],
-    version = 9,
+    version = 10,
     exportSchema = false
 )
 abstract class KalynoDatabase : RoomDatabase() {
@@ -188,13 +188,25 @@ abstract class KalynoDatabase : RoomDatabase() {
             }
         }
 
+        /** FSRS comportemental : compteurs, réapprentissage, latence moyenne et latence par révision. */
+        private val MIGRATION_9_10 = object : Migration(9, 10) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE card_progress ADD COLUMN successCount INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE card_progress ADD COLUMN failCount INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE card_progress ADD COLUMN relearnLeft INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE card_progress ADD COLUMN avgLatencyMs INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE review_log ADD COLUMN latencyMs INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE review_log ADD COLUMN retrievabilityBefore REAL NOT NULL DEFAULT 0")
+            }
+        }
+
         fun get(context: Context): KalynoDatabase =
             instance ?: synchronized(this) {
                 instance ?: Room.databaseBuilder(
                     context.applicationContext,
                     KalynoDatabase::class.java,
                     "kalyno.db"
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10)
                     .build().also { instance = it }
             }
     }

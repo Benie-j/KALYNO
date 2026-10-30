@@ -22,7 +22,9 @@ data class CardWithContext(
     val intervalDays: Int,
     val repetitions: Int,
     val stability: Double = 0.0,
-    val lastReviewedAt: Long? = null
+    val lastReviewedAt: Long? = null,
+    val lapses: Int = 0,
+    val relearnLeft: Int = 0
 )
 
 @Dao
@@ -60,6 +62,8 @@ interface SrsDao {
             p.dueDate AS dueDate,
             p.easeFactor AS easeFactor,
             p.intervalDays AS intervalDays,
+            p.lapses AS lapses,
+            p.relearnLeft AS relearnLeft,
             p.repetitions AS repetitions,
             p.stability AS stability,
             p.lastReviewedAt AS lastReviewedAt
@@ -84,6 +88,8 @@ interface SrsDao {
             p.dueDate AS dueDate,
             p.easeFactor AS easeFactor,
             p.intervalDays AS intervalDays,
+            p.lapses AS lapses,
+            p.relearnLeft AS relearnLeft,
             p.repetitions AS repetitions,
             p.stability AS stability,
             p.lastReviewedAt AS lastReviewedAt
@@ -101,6 +107,18 @@ interface SrsDao {
 
     @Query("SELECT * FROM card_progress WHERE studentId = :studentId AND flashcardId = :flashcardId")
     suspend fun getProgress(studentId: String, flashcardId: String): CardProgressEntity?
+
+    /** Interleaving : dernier passage et volume de révisions par matière (depuis l'historique). */
+    @Query(
+        """
+        SELECT f.subjectId AS subjectId, MAX(l.reviewedAt) AS lastStudiedAt, COUNT(*) AS reviewCount
+        FROM review_log l
+        INNER JOIN flashcards f ON f.id = l.flashcardId
+        WHERE l.studentId = :studentId
+        GROUP BY f.subjectId
+        """
+    )
+    suspend fun subjectExposure(studentId: String): List<SubjectExposureRow>
 
     /** Cartes deja revisees au moins une fois, pour calculer maitrise et retention. */
     @Query(
@@ -168,3 +186,6 @@ data class MasteryRow(
     val stability: Double,
     val lastReviewedAt: Long?
 )
+
+/** Exposition de l'élève à une matière : sert à espacer les disciplines dans le Dojo. */
+data class SubjectExposureRow(val subjectId: String, val lastStudiedAt: Long, val reviewCount: Int)

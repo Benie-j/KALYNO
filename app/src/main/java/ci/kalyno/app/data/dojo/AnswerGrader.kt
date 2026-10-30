@@ -1,5 +1,6 @@
 package ci.kalyno.app.data.dojo
 
+import ci.kalyno.app.data.srs.LearningBehavior
 import ci.kalyno.app.data.srs.ReviewRating
 import java.text.Normalizer
 import kotlin.math.abs
@@ -45,6 +46,8 @@ object AnswerGrader {
         ctx.hintUsed -> ReviewRating.HESITE
         ctx.calculatorUsed -> ReviewRating.SU
         ctx.elapsedMs <= fastThresholdMs(ctx.questionLength) -> ReviewRating.TROP_FACILE
+        // Réponse juste mais très lente : souvenir laborieux, donc plus fragile
+        LearningBehavior.isSlow(ctx.elapsedMs, ctx.questionLength) -> ReviewRating.HESITE
         else -> ReviewRating.SU
     }
 

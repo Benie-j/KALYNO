@@ -320,10 +320,14 @@ object SrsEngine {
      * Trie les cartes dues par score d'urgence décroissant (à égalité : la plus ancienne échéance d'abord).
      * Les cartes pas encore dues sont exclues.
      */
-    fun prioritize(cards: List<CardWithContext>, now: Long = System.currentTimeMillis()): List<CardWithContext> {
+    fun prioritize(
+        cards: List<CardWithContext>,
+        now: Long = System.currentTimeMillis(),
+        subjectLastStudied: Map<String, Long> = emptyMap()
+    ): List<CardWithContext> {
         return cards
             .filter { it.dueDate <= now }
-            .map { it to urgencyScore(it, now) }
+            .map { it to urgencyScore(it, now) * LearningBehavior.priorityBoost(it, now, subjectLastStudied) }
             .sortedWith(
                 compareByDescending<Pair<CardWithContext, Float>> { it.second }
                     .thenBy { it.first.dueDate }

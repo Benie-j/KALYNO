@@ -14,6 +14,7 @@ import ci.kalyno.app.data.srs.CardProgressEntity
 import ci.kalyno.app.data.srs.FlashcardEntity
 import ci.kalyno.app.data.srs.ReviewLogEntity
 import ci.kalyno.app.data.srs.ReviewRating
+import ci.kalyno.app.data.srs.LearningBehavior
 import ci.kalyno.app.data.srs.SrsEngine
 import ci.kalyno.app.data.srs.SubjectEntity
 import kotlinx.coroutines.CancellationException
@@ -99,7 +100,11 @@ class DashboardRepository(context: Context) {
         // Règle stricte : le Dojo ne propose que les cartes des leçons que l'élève a marquées « terminées »
         val unlockedCardIds = lessonProgress.unlockedCardIds(studentId)
 
-        var due = SrsEngine.prioritize(srs.getDueCards(studentId, now), now)
+        var due = SrsEngine.prioritize(
+            srs.getDueCards(studentId, now),
+            now,
+            srs.subjectExposure(studentId).associate { it.subjectId to it.lastStudiedAt }
+        )
             .filter { it.subjectId in levelSubjectIds && it.flashcardId in unlockedCardIds }
         if (content != null) due = due.filter { it.flashcardId in cardIndex }
 
@@ -257,7 +262,13 @@ class DashboardRepository(context: Context) {
      * La date d'examen de la classe ([levelId]) plafonne l'intervalle : aucune carte ne
      * sera programmée après le jour J.
      */
-    suspend fun rate(studentId: String, cardId: String, rating: ReviewRating, levelId: String?) =
+    suspend fun rate(
+        studentId: String,
+        cardId: String,
+        rating: ReviewRating,
+        levelId: String?,
+        latencyMs: Long = 0L
+    ) =
         withContext(Dispatchers.IO) {
             val now = System.currentTimeMillis()
             val cap = SrsEngine.examIntervalCap(now, levelId?.let { exams.cached(it) })
@@ -271,6 +282,8 @@ class DashboardRepository(context: Context) {
                 // FSRS replanifie la carte ; la politique Dojo fait évoluer son niveau (QCM -> saisie libre)
                 val next = SrsEngine.computeNextProgress(current, rating, now, maxIntervalDays = cap)
                     .let { it.copy(dojoStage = DojoStagePolicy.next(current.dojoStage, rating)) }
+                    // Latence, compteurs, réapprentissage ciblé des notions ratées
+                    .let { LearningBehavior.afterReview(current, it, rating, latencyMs, now) }
                 srs.updateProgress(next)
                 srs.logReview(
                     ReviewLogEntity(
@@ -279,7 +292,9 @@ class DashboardRepository(context: Context) {
                         rating = rating,
                         intervalBefore = current.intervalDays,
                         intervalAfter = next.intervalDays,
-                        reviewedAt = now
+                        reviewedAt = now,
+                        latencyMs = latencyMs.coerceAtLeast(0L),
+                        retrievabilityBefore = LearningBehavior.retrievabilityNow(current, now)
                     )
                 )
 

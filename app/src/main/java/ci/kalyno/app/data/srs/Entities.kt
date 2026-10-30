@@ -99,7 +99,13 @@ data class CardProgressEntity(
     @ColumnInfo(defaultValue = "0") val lapses: Int = 0,           // nombre d'oublis après apprentissage
 
     // -- Dojo : niveau de répétition espacée de CET élève sur cette carte (0 = QCM ; >= seuil = saisie libre) --
-    @ColumnInfo(defaultValue = "0") val dojoStage: Int = 0
+    @ColumnInfo(defaultValue = "0") val dojoStage: Int = 0,
+
+    // -- Comportement de l'élève sur CETTE carte --
+    @ColumnInfo(defaultValue = "0") val successCount: Int = 0,    // révisions réussies (Hésité, Su, Trop facile)
+    @ColumnInfo(defaultValue = "0") val failCount: Int = 0,       // révisions ratées (Oublié)
+    @ColumnInfo(defaultValue = "0") val relearnLeft: Int = 0,     // succès encore exigés avant de sortir du réapprentissage
+    @ColumnInfo(defaultValue = "0") val avgLatencyMs: Long = 0    // temps de réponse moyen lissé (0 = inconnu)
 ) {
     /** Règle dérivée (aucune colonne) : au-delà du seuil, la carte passe du QCM à la saisie libre. */
     val requiresFreeInput: Boolean
@@ -127,5 +133,7 @@ data class ReviewLogEntity(
     val rating: ReviewRating,
     val intervalBefore: Int,
     val intervalAfter: Int,
-    val reviewedAt: Long            // timestamp epoch (ms)
+    val reviewedAt: Long,                          // timestamp epoch (ms)
+    @ColumnInfo(defaultValue = "0") val latencyMs: Long = 0,                // temps de réponse (0 = inconnu)
+    @ColumnInfo(defaultValue = "0") val retrievabilityBefore: Double = 0.0  // R prédite juste avant la révision
 )

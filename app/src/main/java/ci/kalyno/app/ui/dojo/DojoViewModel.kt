@@ -138,6 +138,7 @@ class DojoViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Moteur ONNX utilisable sur cet appareil (lu une fois par session, hors thread principal). */
     private var engineOn = false
+    private var lastLatencyMs = 0L
 
     private val _state = MutableStateFlow(DojoUiState())
     val state: StateFlow<DojoUiState> = _state.asStateFlow()
@@ -317,6 +318,8 @@ class DojoViewModel(app: Application) : AndroidViewModel(app) {
             calculatorUsed = s.calculatorUsed
         )
 
+        lastLatencyMs = context.elapsedMs
+
         if (!exercise.requiresFreeInput) {
             finish(exercise, AnswerGrader.gradeChoice(s.selected, exercise.correctIndices, context), semantic = null)
             return
@@ -427,7 +430,7 @@ class DojoViewModel(app: Application) : AndroidViewModel(app) {
         lastWrite = viewModelScope.launch {
             writeLock.withLock {
                 try {
-                    val days = repository.rate(studentId, cardId, rating, levelId)
+                    val days = repository.rate(studentId, cardId, rating, levelId, latencyMs = lastLatencyMs)
                     _state.update { st ->
                         val current = st.result
                         if (current != null && st.exercise?.item?.cardId == cardId) {
