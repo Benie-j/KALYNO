@@ -8,6 +8,7 @@ import ci.kalyno.app.data.LearningSubject
 import ci.kalyno.app.data.AppPrefs
 import ci.kalyno.app.data.SupabaseLearningRepository
 import ci.kalyno.app.data.cloud.CloudSync
+import ci.kalyno.app.data.cloud.CloudSyncScheduler
 import ci.kalyno.app.data.dojo.DojoStagePolicy
 import ci.kalyno.app.data.lessons.LessonProgressRepository
 import ci.kalyno.app.data.srs.CardProgressEntity
@@ -300,7 +301,7 @@ class DashboardRepository(context: Context) {
 
                 // Intervalle planifié par FSRS (affiché à l'élève dans la correction)
                 next.intervalDays
-            }
+            }.also { CloudSyncScheduler.request(cloud, studentId) }
         }
 
     /** Niveau Dojo d'un élève et référence admin pour chaque carte d'une session (une lecture Room groupée). */

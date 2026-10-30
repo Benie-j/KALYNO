@@ -8,6 +8,7 @@ import ci.kalyno.app.data.dashboard.KalynoDatabase
 import ci.kalyno.app.data.srs.CardProgressEntity
 import ci.kalyno.app.data.srs.ReviewLogEntity
 import ci.kalyno.app.data.srs.ReviewRating
+import ci.kalyno.app.data.lessons.LessonProgressEntity
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
@@ -33,6 +34,7 @@ class CloudSync(context: Context) {
     private val authApi = SupabaseAuthApi()
     private val prefs = AppPrefs(appContext)
     private val dao = KalynoDatabase.get(appContext).dashboardDao()
+    private val lessonDao = KalynoDatabase.get(appContext).lessonProgressDao()
 
     /** Profil du compte, ou null s'il n'existe pas encore. */
     suspend fun fetchProfile(): RemoteProfile? = withContext(Dispatchers.IO) {
@@ -64,9 +66,14 @@ class CloudSync(context: Context) {
     }
 
     /** Récupère d'abord le cloud (autre téléphone), puis envoie les révisions locales plus récentes. */
-    suspend fun syncProgress(studentId: String) = withContext(Dispatchers.IO) {
+    suspend fun syncProgress(studentId: String) = syncLock.withLock { syncProgressLocked(studentId) }
+
+    private suspend fun syncProgressLocked(studentId: String) = withContext(Dispatchers.IO) {
         val token = accessToken() ?: return@withContext
         val userId = store.userId() ?: return@withContext
+        // Leçons d'abord : elles débloquent les cartes du Dojo
+        pullLessons(studentId, userId, token)
+        pushLessons(studentId, userId, token)
         pull(studentId, userId, token)
         push(studentId, userId, token)
         // L'historique sert aux quotas du jour et à la série : on le restaure puis on envoie le local
@@ -85,7 +92,7 @@ class CloudSync(context: Context) {
                     "GET",
                     "student_card_progress?user_id=eq.$userId&last_reviewed_at=gt.$since" +
                         "&select=flashcard_id,ease_factor,interval_days,repetitions,due_date,last_reviewed_at," +
-                        "stability,difficulty,lapses" +
+                        "stability,difficulty,lapses,success_count,fail_count,relearn_left,avg_latency_ms,dojo_stage" +
                         "&order=last_reviewed_at.asc&limit=$PAGE_SIZE",
                     token
                 )
@@ -112,12 +119,17 @@ class CloudSync(context: Context) {
                     easeFactor = r.getDouble("ease_factor").toFloat(),
                     intervalDays = r.getInt("interval_days"),
                     repetitions = r.getInt("repetitions"),
-                    dojoStage = ci.kalyno.app.data.dojo.DojoStagePolicy.fromRepetitions(r.getInt("repetitions")),
+                    dojoStage = r.optInt("dojo_stage", -1).takeIf { it >= 0 }
+                        ?: ci.kalyno.app.data.dojo.DojoStagePolicy.fromRepetitions(r.getInt("repetitions")),
                     dueDate = r.getLong("due_date"),
                     lastReviewedAt = reviewedAt,
                     stability = r.optDouble("stability", 0.0),
                     difficulty = r.optDouble("difficulty", 0.0),
-                    lapses = r.optInt("lapses", 0)
+                    lapses = r.optInt("lapses", 0),
+                    successCount = r.optInt("success_count", 0),
+                    failCount = r.optInt("fail_count", 0),
+                    relearnLeft = r.optInt("relearn_left", 0),
+                    avgLatencyMs = r.optLong("avg_latency_ms", 0L)
                 )
             }
             if (toSave.isNotEmpty()) dao.upsertProgress(toSave)
@@ -152,6 +164,11 @@ class CloudSync(context: Context) {
                         .put("stability", p.stability)
                         .put("difficulty", p.difficulty)
                         .put("lapses", p.lapses)
+                        .put("success_count", p.successCount)
+                        .put("fail_count", p.failCount)
+                        .put("relearn_left", p.relearnLeft)
+                        .put("avg_latency_ms", p.avgLatencyMs)
+                        .put("dojo_stage", p.dojoStage)
                 )
             }
             SupabaseRest.request(
@@ -173,7 +190,7 @@ class CloudSync(context: Context) {
                 SupabaseRest.request(
                     "GET",
                     "student_review_log?user_id=eq.$userId&reviewed_at=gt.$since" +
-                        "&select=flashcard_id,rating,interval_before,interval_after,reviewed_at" +
+                        "&select=flashcard_id,rating,interval_before,interval_after,reviewed_at,latency_ms,retrievability_before" +
                         "&order=reviewed_at.asc&limit=$PAGE_SIZE",
                     token
                 )
@@ -190,7 +207,9 @@ class CloudSync(context: Context) {
                     rating = rating,
                     intervalBefore = r.getInt("interval_before"),
                     intervalAfter = r.getInt("interval_after"),
-                    reviewedAt = r.getLong("reviewed_at")
+                    reviewedAt = r.getLong("reviewed_at"),
+                    latencyMs = r.optLong("latency_ms", 0L),
+                    retrievabilityBefore = r.optDouble("retrievability_before", 0.0)
                 )
             }
             if (items.isNotEmpty()) dao.insertLogs(items)
@@ -220,6 +239,8 @@ class CloudSync(context: Context) {
                         .put("interval_before", l.intervalBefore)
                         .put("interval_after", l.intervalAfter)
                         .put("reviewed_at", l.reviewedAt)
+                        .put("latency_ms", l.latencyMs)
+                        .put("retrievability_before", l.retrievabilityBefore)
                 )
             }
             SupabaseRest.request(
@@ -230,6 +251,57 @@ class CloudSync(context: Context) {
             store.setLastLogPushId(afterId)
             if (rows.size < LOG_PUSH_BATCH) break
         }
+    }
+
+    /**
+     * Restaure les leçons terminées sur ce téléphone. La validation ne se défait jamais :
+     * on ajoute seulement celles qui manquent (l'union des appareils gagne).
+     */
+    private suspend fun pullLessons(studentId: String, userId: String, token: String) {
+        val rows = JSONArray(
+            SupabaseRest.request(
+                "GET",
+                "student_lesson_progress?user_id=eq.$userId&is_completed=eq.true" +
+                    "&select=lesson_id,completed_at&limit=$LESSON_LIMIT",
+                token
+            )
+        )
+        for (i in 0 until rows.length()) {
+            val r = rows.getJSONObject(i)
+            lessonDao.insertIfAbsent(
+                LessonProgressEntity(
+                    studentId = studentId,
+                    lessonId = r.getString("lesson_id"),
+                    isCompleted = true,
+                    completedAt = r.optLong("completed_at", System.currentTimeMillis())
+                )
+            )
+        }
+    }
+
+    /** Envoie les leçons terminées ; ignoré tant que la liste n'a pas changé depuis le dernier envoi. */
+    private suspend fun pushLessons(studentId: String, userId: String, token: String) {
+        val done = lessonDao.completedRows(studentId)
+        if (done.isEmpty()) return
+        val signature = done.map { it.lessonId }.sorted().hashCode()
+        if (signature == pushedLessonsSignature) return
+
+        done.chunked(200).forEach { chunk ->
+            val body = JSONArray()
+            chunk.forEach { l ->
+                body.put(
+                    JSONObject()
+                        .put("user_id", userId)
+                        .put("lesson_id", l.lessonId)
+                        .put("is_completed", true)
+                        .put("completed_at", l.completedAt ?: System.currentTimeMillis())
+                )
+            }
+            SupabaseRest.request(
+                "POST", "student_lesson_progress", token, body.toString(), "resolution=merge-duplicates,return=minimal"
+            )
+        }
+        pushedLessonsSignature = signature
     }
 
     /** Jeton d'accès valide : renouvelé automatiquement s'il expire dans moins d'une minute. */
@@ -254,6 +326,11 @@ class CloudSync(context: Context) {
         const val PUSH_BATCH = 200
         const val LOG_PUSH_BATCH = 500
         const val EXPIRY_MARGIN_MS = 60_000L
+        const val LESSON_LIMIT = 1000
         val tokenLock = Mutex()
+        val syncLock = Mutex()
+
+        @Volatile
+        var pushedLessonsSignature = 0
     }
 }

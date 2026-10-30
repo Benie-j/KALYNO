@@ -1,6 +1,9 @@
 package ci.kalyno.app.data.lessons
 
 import android.content.Context
+import android.util.Log
+import ci.kalyno.app.data.cloud.CloudSync
+import ci.kalyno.app.data.cloud.CloudSyncScheduler
 import androidx.room.Dao
 import androidx.room.Entity
 import androidx.room.Index
@@ -56,9 +59,32 @@ abstract class LessonProgressDao {
         SELECT f.id FROM flashcards f
         INNER JOIN lesson_progress lp ON lp.lessonId = f.lessonId
         WHERE lp.studentId = :studentId AND lp.isCompleted = 1
+        UNION
+        SELECT f.id FROM flashcards f
+        INNER JOIN catalog_lessons l ON l.subjectId = f.subjectId AND l.title = f.chapitre
+        INNER JOIN lesson_progress lp ON lp.lessonId = l.id
+        WHERE f.lessonId IS NULL AND lp.studentId = :studentId AND lp.isCompleted = 1
         """
     )
     abstract suspend fun unlockedCardIds(studentId: String): List<String>
+
+    /** Lignes complètes des leçons terminées (avec la date) : sert à la synchronisation cloud. */
+    @Query("SELECT * FROM lesson_progress WHERE studentId = :studentId AND isCompleted = 1")
+    abstract suspend fun completedRows(studentId: String): List<LessonProgressEntity>
+
+    /** Répare les cartes sans leçon (lessonId NULL) en les rattachant à la leçon de même matière et de même titre. */
+    @Query(
+        "UPDATE flashcards SET lessonId = (SELECT l.id FROM catalog_lessons l " +
+            "WHERE l.subjectId = flashcards.subjectId AND l.title = flashcards.chapitre LIMIT 1) " +
+            "WHERE lessonId IS NULL"
+    )
+    abstract suspend fun relinkCards()
+
+    @Query("SELECT COUNT(*) FROM flashcards")
+    abstract suspend fun cardCount(): Int
+
+    @Query("SELECT COUNT(*) FROM flashcards WHERE lessonId IS NOT NULL")
+    abstract suspend fun linkedCardCount(): Int
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     abstract suspend fun insertIfAbsent(row: LessonProgressEntity)
@@ -81,20 +107,35 @@ abstract class LessonProgressDao {
 class LessonProgressRepository private constructor(context: Context) {
 
     private val dao = KalynoDatabase.get(context).lessonProgressDao()
+    private val cloud = CloudSync(context)
 
     fun observeCompleted(studentId: String): Flow<Set<String>> =
         dao.observeCompletedLessonIds(studentId).map { it.toSet() }.distinctUntilChanged()
 
     suspend fun markCompleted(studentId: String, lessonId: String) = withContext(Dispatchers.IO) {
         dao.markCompleted(studentId, lessonId, System.currentTimeMillis())
+        // Sauvegarde cloud en arrière-plan : la validation est déjà dans Room, rien ne bloque l'élève
+        CloudSyncScheduler.request(cloud, studentId)
     }
 
     /** Ids des cartes que le Dojo a le droit de proposer à cet élève. */
     suspend fun unlockedCardIds(studentId: String): Set<String> = withContext(Dispatchers.IO) {
-        dao.unlockedCardIds(studentId).toHashSet()
+        dao.relinkCards() // répare d'abord les liens carte -> leçon manquants
+        val ids = dao.unlockedCardIds(studentId).toHashSet()
+        if (ids.isEmpty()) {
+            // Log clair : distingue « aucune leçon terminée » de « cartes non rattachées »
+            Log.w(
+                TAG,
+                "Dojo vide : ${dao.completedLessonIds(studentId).size} leçon(s) terminée(s), " +
+                    "${dao.linkedCardCount()}/${dao.cardCount()} carte(s) rattachée(s) à une leçon"
+            )
+        }
+        ids
     }
 
     companion object {
+        private const val TAG = "KalynoDojo"
+
         @Volatile
         private var instance: LessonProgressRepository? = null
 
