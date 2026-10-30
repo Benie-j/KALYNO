@@ -136,7 +136,7 @@ data class DashboardUiState(
     val quoteReady: Boolean = false,
     /** Citation piochée par l'élève (shuffle) ; remplace celle du jour tant que l'écran reste ouvert. */
     val shuffledQuote: DailyQuote? = null,
-    /** Citations publiées cette semaine (lundi à aujourd'hui, la plus récente d'abord), pour la bottom sheet. */
+    /** Les 7 derniers jours de citations (aujourd'hui en premier), pour la bottom sheet. */
     val quoteWeek: List<QuoteDay> = emptyList(),
     /** Citations épinglées par l'élève (Room), de la plus récente à la plus ancienne. */
     val favoriteQuotes: List<FavoriteQuote> = emptyList()

@@ -91,6 +91,10 @@ class MainActivity : ComponentActivity() {
         StudyReminders.schedule(this)
         consumeNotificationIntent(intent)
 
+        // Rappels système (Dojo + révisions urgentes) : sans effet si déjà programmés
+        StudyReminders.schedule(this)
+        consumeNotificationIntent(intent)
+
         setContent {
             KalynoTheme {
                 var showHome by remember { mutableStateOf(false) }
