@@ -1,41 +1,35 @@
 package ci.kalyno.app.data.cloud
 
-import android.util.Log
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import java.util.concurrent.atomic.AtomicBoolean
+import androidx.work.BackoffPolicy
+import androidx.work.Constraints
+import androidx.work.ExistingWorkPolicy
+import androidx.work.NetworkType
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
+import androidx.work.workDataOf
+import java.util.concurrent.TimeUnit
 
 /**
- * Pousse la progression vers Supabase en arrière-plan, sans jamais bloquer l'élève.
+ * Programme la sauvegarde de la progression vers Supabase via WorkManager.
  *
- * Les demandes rapprochées (une réponse du Dojo après l'autre) sont regroupées : une seule synchro
- * part [DEBOUNCE_MS] après la première. Hors ligne ou sans compte, rien n'est perdu : la progression
- * reste dans Room et part à la prochaine synchro (ouverture du dashboard, ou prochaine réponse).
+ * - Réseau requis : hors ligne, la tâche attend la connexion (même après redémarrage du téléphone).
+ * - Anti-rebond : chaque demande remplace la précédente et part [DELAY_SECONDS] s plus tard, donc une
+ *   série de réponses du Dojo donne une seule synchro. Une synchro interrompue reprend sans perte
+ *   (les repères avancent lot par lot).
  */
 object CloudSyncScheduler {
 
-    private const val TAG = "KalynoCloud"
-    private const val DEBOUNCE_MS = 3_000L
-
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val pending = AtomicBoolean(false)
+    private const val WORK_NAME = "kalyno-cloud-sync"
+    private const val DELAY_SECONDS = 3L
+    private const val BACKOFF_SECONDS = 30L
 
     fun request(cloud: CloudSync, studentId: String) {
-        if (!pending.compareAndSet(false, true)) return
-        scope.launch {
-            delay(DEBOUNCE_MS)
-            pending.set(false)
-            try {
-                cloud.syncProgress(studentId)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Log.w(TAG, "Synchro reportée : ${e.message}")
-            }
-        }
+        val work = OneTimeWorkRequestBuilder<CloudSyncWorker>()
+            .setInitialDelay(DELAY_SECONDS, TimeUnit.SECONDS)
+            .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, BACKOFF_SECONDS, TimeUnit.SECONDS)
+            .setInputData(workDataOf(CloudSyncWorker.KEY_STUDENT_ID to studentId))
+            .build()
+        WorkManager.getInstance(cloud.appContext).enqueueUniqueWork(WORK_NAME, ExistingWorkPolicy.REPLACE, work)
     }
 }

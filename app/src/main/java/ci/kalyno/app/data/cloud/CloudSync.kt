@@ -29,7 +29,7 @@ data class RemoteProfile(val nickname: String, val levelId: String)
  */
 class CloudSync(context: Context) {
 
-    private val appContext = context.applicationContext
+    internal val appContext = context.applicationContext
     private val store = AuthStore(appContext)
     private val authApi = SupabaseAuthApi()
     private val prefs = AppPrefs(appContext)
