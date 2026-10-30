@@ -228,14 +228,7 @@ private fun ExplorerHome(
             .padding(top = 12.dp, bottom = 20.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        ui.banner?.let { banner ->
-            val target = ui.chapters.firstOrNull { it.id == banner.chapterId }
-            ExplorerHeroBanner(
-                banner = banner,
-                onClick = target?.let { chapter -> { onOpenLesson(chapter) } },
-                modifier = Modifier.padding(horizontal = 16.dp)
-            )
-        }
+        HeroBannerCarousel(banners = ui.banners, chapters = ui.chapters, onOpenLesson = onOpenLesson)
 
         DisciplinesSection(
             disciplines = ui.disciplines,
@@ -304,7 +297,12 @@ private fun ExplorerHome(
 
             else -> when (ui.filter) {
                 ExplorerFilter.FOR_YOU -> {
-                    ForYouSection(chapters = visible, onStart = onStart, onOpen = onOpenLesson)
+                    val visibleIds = visible.map { it.id }.toSet()
+                    ForYouSection(
+                        picks = ui.forYou?.filter { it.chapter.id in visibleIds },
+                        onStart = onStart,
+                        onOpen = onOpenLesson
+                    )
                     NewPathsSection(chapters = visible, onOpen = onOpenLesson)
                 }
 
@@ -512,33 +510,23 @@ private fun FilterChips(selected: ExplorerFilter, onSelect: (ExplorerFilter) -> 
 
 @Composable
 private fun ForYouSection(
-    chapters: List<ExplorerChapter>,
+    picks: List<ForYouPick>?,
     onStart: (ExplorerChapter) -> Unit,
     onOpen: (ExplorerChapter) -> Unit
 ) {
-    // En cours d'abord, puis nouveaux, puis terminés
-    val picks = remember(chapters) {
-        chapters
-            .filter { it.questionCount > 0 }
-            .sortedBy {
-                when {
-                    it.discovered in 1 until it.questionCount -> 0
-                    it.discovered == 0 -> 1
-                    else -> 2
-                }
-            }
-            .take(10)
-    }
+    // Pas encore calculé : on n'affiche rien plutôt qu'un faux « rien à réviser »
+    if (picks == null) return
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         SectionHeader(
-            title = "Sélection pour toi",
-            subtitle = "Choisie pour ta classe",
+            title = "Pour toi",
+            subtitle = "À réviser maintenant, choisi selon ta mémoire",
             modifier = Modifier.padding(horizontal = 16.dp)
         )
         if (picks.isEmpty()) {
             Text(
-                text = "Les cartes de tes chapitres arrivent bientôt.",
+                text = "Rien à réviser pour l'instant. Termine une leçon puis fais son exercice : " +
+                    "tes premières révisions apparaîtront ici.",
                 color = KalynoMuted,
                 fontSize = 14.sp,
                 modifier = Modifier.padding(horizontal = 16.dp)
@@ -548,13 +536,27 @@ private fun ForYouSection(
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 2.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                items(picks, key = { it.id }) { chapter ->
-                    CourseCard(
-                        chapter = chapter,
-                        onStart = { onStart(chapter) },
-                        onOpen = { onOpen(chapter) },
-                        modifier = Modifier.width(248.dp)
-                    )
+                items(picks, key = { it.chapter.id }) { pick ->
+                    Column(modifier = Modifier.width(248.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            KalynoPill(
+                                text = if (pick.dueCount == 1) "1 à réviser" else "${pick.dueCount} à réviser",
+                                container = KalynoAmberSoft,
+                                content = KalynoAmberDeep,
+                                fontSize = 11
+                            )
+                            if (pick.relearnCount > 0) {
+                                KalynoPill(text = "À consolider", fontSize = 11)
+                            }
+                        }
+                        CourseCard(
+                            chapter = pick.chapter,
+                            // La révision ne contient que les cartes dues, pas toute la leçon
+                            onStart = { onStart(pick.reviewChapter) },
+                            onOpen = { onOpen(pick.chapter) },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
                 }
             }
         }
@@ -582,23 +584,57 @@ private fun ChallengesSection(
     onStart: (ExplorerChapter) -> Unit,
     onOpen: (ExplorerChapter) -> Unit
 ) {
-    val challenges = remember(chapters) { chapters.filter { it.questionCount > 0 } }
+    // Une rangée par discipline (ordre de l'admin), avec ses leçons dans l'ordre de l'admin
+    val groups = remember(chapters) {
+        chapters.filter { it.questionCount > 0 }.groupBy { it.subjectId }.values.toList()
+    }
 
-    Column(
-        modifier = Modifier.padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        SectionHeader(title = "Défis", subtitle = "Teste-toi chapitre par chapitre")
-        if (challenges.isEmpty()) {
-            Text("Aucun défi disponible pour le moment.", color = KalynoMuted, fontSize = 14.sp)
-        }
-        challenges.forEach { chapter ->
-            CourseCard(
-                chapter = chapter,
-                onStart = { onStart(chapter) },
-                onOpen = { onOpen(chapter) },
-                modifier = Modifier.fillMaxWidth()
+    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        SectionHeader(
+            title = "Défis",
+            subtitle = "Teste-toi discipline par discipline",
+            modifier = Modifier.padding(horizontal = 16.dp)
+        )
+        if (groups.isEmpty()) {
+            Text(
+                text = "Aucun défi disponible pour le moment.",
+                color = KalynoMuted,
+                fontSize = 14.sp,
+                modifier = Modifier.padding(horizontal = 16.dp)
             )
+        }
+        groups.forEach { lessons ->
+            val first = lessons.first()
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                ) {
+                    KalynoSvgIcon(name = first.subjectIconKey ?: "book-open", size = 18.dp)
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = first.subjectName,
+                        color = KalynoText,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        modifier = Modifier.weight(1f)
+                    )
+                    KalynoPill(text = if (lessons.size == 1) "1 défi" else "${lessons.size} défis", fontSize = 11)
+                }
+                LazyRow(
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 2.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    items(lessons, key = { it.id }) { chapter ->
+                        CourseCard(
+                            chapter = chapter,
+                            onStart = { onStart(chapter) },
+                            onOpen = { onOpen(chapter) },
+                            modifier = Modifier.width(248.dp)
+                        )
+                    }
+                }
+            }
         }
     }
 }

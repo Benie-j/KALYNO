@@ -160,6 +160,32 @@ class SupabaseLearningRepository {
             }
         }
 
+    /** Toutes les annonces « à la une » actives pour cette classe, dans l'ordre de l'admin (10 au maximum). */
+    suspend fun loadBanners(levelId: String): List<ExplorerBanner> = withContext(Dispatchers.IO) {
+        try {
+            val rows = getArray(
+                "explorer_banners?select=id,title,subtitle,button_label,chapter_id,level_id" +
+                    "&is_active=eq.true&or=(level_id.is.null,level_id.eq.${enc(levelId)})" +
+                    "&order=position.asc&limit=10"
+            )
+            (0 until rows.length()).mapNotNull { i ->
+                val row = rows.getJSONObject(i)
+                val title = row.textOrNull("title") ?: return@mapNotNull null
+                ExplorerBanner(
+                    id = row.optString("id"),
+                    title = title,
+                    subtitle = row.textOrNull("subtitle"),
+                    buttonLabel = row.textOrNull("button_label"),
+                    chapterId = row.textOrNull("chapter_id")
+                )
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
     /** Bannière « à la une » de l'admin pour cette classe. Table facultative : jamais d'erreur visible. */
     suspend fun loadBanner(levelId: String): ExplorerBanner? = withContext(Dispatchers.IO) {
         try {

@@ -23,6 +23,11 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.collectLatest
+import ci.kalyno.app.data.srs.ForYouPlanner
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
@@ -123,7 +128,11 @@ data class ExplorerUiState(
     /** Leçons que l'élève a validées avec « Terminer » (Room) : seules leurs questions sont jouables. */
     val completedLessonIds: Set<String> = emptySet(),
     /** Bannière « à la une » publiée par l'admin (null = rien à afficher). */
-    val banner: ExplorerBanner? = null
+    val banner: ExplorerBanner? = null,
+    /** Toutes les annonces « à la une » actives, dans l'ordre de l'admin. */
+    val banners: List<ExplorerBanner> = emptyList(),
+    /** Leçons à réviser selon FSRS (null = pas encore calculé). */
+    val forYou: List<ForYouPick>? = null
 ) {
     val route: ExplorerRoute
         get() = when {
@@ -178,6 +187,7 @@ class ExplorerViewModel(app: Application) : AndroidViewModel(app) {
     private val cache = LearningContentCache(app)
     private val catalog = CatalogRepository.get(app)
     private val dao = KalynoDatabase.get(app).dashboardDao()
+    private val srs = KalynoDatabase.get(app).srsDao()
     private val prefs = AppPrefs(app)
     private val studentId = StudentId.get(app)
     private val lessonProgress = LessonProgressRepository.get(app)
@@ -189,6 +199,28 @@ class ExplorerViewModel(app: Application) : AndroidViewModel(app) {
     private var job: Job? = null
     private var treeJob: Job? = null
     private var completionJob: Job? = null
+
+    /** Incrémenté à chaque rafraîchissement : « Pour toi » est recalculé après chaque session de révision. */
+    private val forYouTick = MutableStateFlow(0)
+
+    init {
+        viewModelScope.launch {
+            combine(
+                _state.map { it.chapters to it.completedLessonIds }.distinctUntilChanged(),
+                forYouTick
+            ) { content, _ -> content }
+                .collectLatest { (chapters, completed) ->
+                    val picks = try {
+                        withContext(Dispatchers.IO) { computeForYou(chapters, completed) }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        emptyList()
+                    }
+                    _state.update { it.copy(forYou = picks) }
+                }
+        }
+    }
 
     /** Premier appel : charge tout. Appels suivants (retour sur l'onglet) : rafraîchit en douceur. */
     fun load(level: String) {
@@ -224,6 +256,26 @@ class ExplorerViewModel(app: Application) : AndroidViewModel(app) {
             } catch (e: Exception) {
                 // Écriture perdue : le bouton reste actif, l'élève peut réessayer
             }
+        }
+    }
+
+    /**
+     * Leçons à réviser, classées par urgence FSRS (voir [ForYouPlanner]).
+     * Seules comptent les leçons terminées (règle du Dojo) dont au moins une carte est due.
+     */
+    private suspend fun computeForYou(chapters: List<ExplorerChapter>, completed: Set<String>): List<ForYouPick> {
+        val playable = chapters.filter { it.id in completed && it.questionCount > 0 }
+        if (playable.isEmpty()) return emptyList()
+
+        val now = System.currentTimeMillis()
+        val chapterOfCard = playable.flatMap { chapter -> chapter.items.map { it.cardId to chapter.id } }.toMap()
+        val due = srs.getDueCards(studentId, now).filter { it.flashcardId in chapterOfCard }
+        if (due.isEmpty()) return emptyList()
+
+        val exposure = srs.subjectExposure(studentId).associate { it.subjectId to it.lastStudiedAt }
+        val byId = playable.associateBy { it.id }
+        return ForYouPlanner.rank(due, chapterOfCard, now, exposure).mapNotNull { rank ->
+            byId[rank.chapterId]?.let { ForYouPick(it, rank.dueCardIds.toSet(), rank.relearnCount) }
         }
     }
 
@@ -294,6 +346,7 @@ class ExplorerViewModel(app: Application) : AndroidViewModel(app) {
 
     fun refresh(silent: Boolean) {
         val level = levelId ?: return
+        forYouTick.update { it + 1 }
         job?.cancel()
         job = viewModelScope.launch {
             if (!silent && _state.value.chapters.isEmpty()) {
@@ -314,7 +367,7 @@ class ExplorerViewModel(app: Application) : AndroidViewModel(app) {
             // 2) Réseau : source de vérité (synchronisée avec l'admin)
             try {
                 val subjects = remote.loadPublishedContent(level)
-                val banner = remote.loadBanner(level)
+                val banners = remote.loadBanners(level)
                 withContext(Dispatchers.IO) {
                     cache.write(level, subjects)
                     runCatching { catalog.storeTree(level, subjects) }
@@ -327,7 +380,8 @@ class ExplorerViewModel(app: Application) : AndroidViewModel(app) {
                             error = null,
                             offline = false,
                             chapters = chapters,
-                            banner = banner
+                            banner = banners.firstOrNull(),
+                            banners = banners
                         )
                     )
                 }
