@@ -9,6 +9,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
+import androidx.compose.runtime.mutableStateOf
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
@@ -40,6 +41,11 @@ object StudyReminders {
 
     private const val WORK_NAME = "kalyno-study-reminders"
     private const val PERIOD_HOURS = 3L
+
+    internal const val EXTRA_OPEN_DOJO = "ci.kalyno.app.OPEN_DOJO"
+
+    /** Passe à vrai quand l'élève touche une notification ; MainScreen ouvre alors l'onglet Dojo puis le remet à faux. */
+    val openDojoRequested = mutableStateOf(false)
 
     internal const val CHANNEL_URGENT = "kalyno_urgent_reviews"
     internal const val CHANNEL_DOJO = "kalyno_dojo_new_cards"
@@ -92,7 +98,10 @@ object StudyReminders {
     internal fun post(context: Context, id: Int, channel: String, title: String, text: String) {
         if (!canNotify(context)) return
         val launch = context.packageManager.getLaunchIntentForPackage(context.packageName)
-            ?.apply { flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP }
+            ?.apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                putExtra(EXTRA_OPEN_DOJO, true)
+            }
         val tap = launch?.let {
             PendingIntent.getActivity(context, id, it, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         }

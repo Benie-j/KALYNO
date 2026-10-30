@@ -75,6 +75,19 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        consumeNotificationIntent(intent)
+    }
+
+    private fun consumeNotificationIntent(intent: android.content.Intent?) {
+        if (intent?.getBooleanExtra(StudyReminders.EXTRA_OPEN_DOJO, false) == true) {
+            StudyReminders.openDojoRequested.value = true
+            intent.removeExtra(StudyReminders.EXTRA_OPEN_DOJO)
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         splashStart = SystemClock.uptimeMillis()
         installSplashScreen().apply {
@@ -83,13 +96,6 @@ class MainActivity : ComponentActivity() {
         }
 
         super.onCreate(savedInstanceState)
-
-        // Rappels système (Dojo + révisions urgentes) : sans effet si déjà programmés
-        StudyReminders.schedule(this)
-
-        // Rappels système (Dojo + révisions urgentes) : sans effet si déjà programmés
-        StudyReminders.schedule(this)
-        consumeNotificationIntent(intent)
 
         // Rappels système (Dojo + révisions urgentes) : sans effet si déjà programmés
         StudyReminders.schedule(this)
