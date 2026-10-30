@@ -1,0 +1,204 @@
+--- a/app/src/main/java/ci/kalyno/app/data/dashboard/KalynoDatabase.kt	2026-10-30 21:20:39.756020649 +0000
++++ b/app/src/main/java/ci/kalyno/app/data/dashboard/KalynoDatabase.kt	2026-10-30 21:21:03.617707759 +0000
+@@ -17,2 +17,4 @@
+ import ci.kalyno.app.data.lessons.LessonProgressEntity
++import ci.kalyno.app.data.progress.AttemptDao
++import ci.kalyno.app.data.progress.DojoAttemptEntity
+ import ci.kalyno.app.data.srs.CardProgressEntity
+@@ -35,5 +37,6 @@
+         BadgeUnlockEntity::class,
+-        LessonProgressEntity::class
++        LessonProgressEntity::class,
++        DojoAttemptEntity::class
+     ],
+-    version = 9,
++    version = 10,
+     exportSchema = false
+@@ -47,2 +50,3 @@
+     abstract fun lessonProgressDao(): LessonProgressDao
++    abstract fun attemptDao(): AttemptDao
+ 
+@@ -190,2 +194,38 @@
+ 
++        /**
++         * Historique des tentatives du Dojo (page « Ma progression »). Les anciennes révisions du journal
++         * `review_log` sont reprises : date, note, question, réponse attendue, leçon et discipline. Leur réponse
++         * saisie et leur rang de tentative n'ont jamais été conservés (NULL et 0, `isLegacy` = 1).
++         * Une ligne OUBLIE est un échec ; les trois autres notes sont des succès.
++         */
++        private val MIGRATION_9_10 = object : Migration(9, 10) {
++            override fun migrate(db: SupportSQLiteDatabase) {
++                db.execSQL(
++                    "CREATE TABLE IF NOT EXISTS `dojo_attempts` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
++                        "`studentId` TEXT NOT NULL, `flashcardId` TEXT NOT NULL, `attemptedAt` INTEGER NOT NULL, " +
++                        "`isSuccess` INTEGER NOT NULL, `attemptNumber` INTEGER NOT NULL, `rating` TEXT NOT NULL, " +
++                        "`kind` TEXT NOT NULL, `question` TEXT NOT NULL, `studentAnswer` TEXT, " +
++                        "`referenceAnswer` TEXT NOT NULL, `lessonTitle` TEXT NOT NULL, `subjectName` TEXT NOT NULL, " +
++                        "`isLegacy` INTEGER NOT NULL)"
++                )
++                db.execSQL("CREATE INDEX IF NOT EXISTS `index_dojo_attempts_studentId_attemptedAt` ON `dojo_attempts` (`studentId`, `attemptedAt`)")
++                db.execSQL("CREATE INDEX IF NOT EXISTS `index_dojo_attempts_studentId_flashcardId` ON `dojo_attempts` (`studentId`, `flashcardId`)")
++                db.execSQL(
++                    "CREATE UNIQUE INDEX IF NOT EXISTS `index_dojo_attempts_studentId_flashcardId_attemptedAt` " +
++                        "ON `dojo_attempts` (`studentId`, `flashcardId`, `attemptedAt`)"
++                )
++                db.execSQL(
++                    "INSERT OR IGNORE INTO dojo_attempts (studentId, flashcardId, attemptedAt, isSuccess, attemptNumber, " +
++                        "rating, kind, question, studentAnswer, referenceAnswer, lessonTitle, subjectName, isLegacy) " +
++                        "SELECT r.studentId, r.flashcardId, r.reviewedAt, CASE WHEN r.rating = 'OUBLIE' THEN 0 ELSE 1 END, " +
++                        "0, r.rating, COALESCE(f.kind, 'FREE_TEXT'), f.question, NULL, " +
++                        "COALESCE(NULLIF(f.adminReference, ''), f.reponse), " +
++                        "COALESCE((SELECT l.title FROM catalog_lessons l WHERE l.id = f.lessonId), f.chapitre), " +
++                        "COALESCE(s.name, ''), 1 " +
++                        "FROM review_log r INNER JOIN flashcards f ON f.id = r.flashcardId " +
++                        "LEFT JOIN subjects s ON s.id = f.subjectId"
++                )
++            }
++        }
++
+         fun get(context: Context): KalynoDatabase =
+@@ -196,3 +236,3 @@
+                     "kalyno.db"
+-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
++                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10)
+                     .build().also { instance = it }
+--- a/app/src/main/java/ci/kalyno/app/ui/dojo/DojoViewModel.kt	2026-10-30 21:20:39.763003890 +0000
++++ b/app/src/main/java/ci/kalyno/app/ui/dojo/DojoViewModel.kt	2026-10-30 21:21:03.618188965 +0000
+@@ -41,2 +41,4 @@
+ import kotlinx.coroutines.withContext
++import ci.kalyno.app.data.dashboard.KalynoDatabase
++import ci.kalyno.app.data.progress.DojoAttemptEntity
+ 
+@@ -120,2 +122,3 @@
+     private val lessonProgress = LessonProgressRepository.get(app)
++    private val attempts = KalynoDatabase.get(app).attemptDao()
+ 
+@@ -413,2 +416,3 @@
+     private fun finish(exercise: DojoExercise, verdict: Verdict, semantic: EvaluationResult?) {
++        val answered = _state.value // ce que l'élève a saisi ou coché, avant que l'état ne change
+         val message = if (verdict.correct) DojoMessages.congrats() else DojoMessages.encourage()
+@@ -428,3 +432,33 @@
+         }
+-        persist(exercise.item.cardId, verdict.rating)
++        persist(exercise.item.cardId, verdict.rating, attemptFor(exercise, answered, verdict))
++    }
++
++    /** Copie ce que l'élève a vu et répondu (question, réponse saisie, réponse attendue, leçon, discipline) pour l'historique. */
++    private fun attemptFor(exercise: DojoExercise, answered: DojoUiState, verdict: Verdict): DojoAttemptEntity {
++        val item = exercise.item
++        val free = exercise.kind == ExerciseKind.FREE_TEXT
++        val given = if (free) {
++            answered.typed.trim()
++        } else {
++            answered.selected.sorted().mapNotNull { item.choices.getOrNull(it) }.joinToString(" ; ")
++        }
++        val expected = if (free) {
++            exercise.reference.split('|').map { it.trim() }.filter { it.isNotEmpty() }.joinToString(" / ")
++        } else {
++            exercise.correctIndices.sorted().mapNotNull { item.choices.getOrNull(it) }.joinToString(" ; ")
++        }
++        return DojoAttemptEntity(
++            studentId = studentId,
++            flashcardId = item.cardId,
++            attemptedAt = System.currentTimeMillis(),
++            isSuccess = verdict.correct,
++            attemptNumber = 1, // recalculé par AttemptDao.record selon les échecs précédents
++            rating = verdict.rating,
++            kind = exercise.kind.name,
++            question = item.front,
++            studentAnswer = given.ifBlank { null },
++            referenceAnswer = expected.ifBlank { item.answer },
++            lessonTitle = exercise.lessonTitle ?: item.chapterTitle,
++            subjectName = item.subjectName
++        )
+     }
+@@ -432,5 +466,13 @@
+     /** SrsEngine (FSRS) recalcule stabilité, difficulté et échéance ; le résultat est écrit dans Room. */
+-    private fun persist(cardId: String, rating: ReviewRating) {
++    private fun persist(cardId: String, rating: ReviewRating, attempt: DojoAttemptEntity? = null) {
+         lastWrite = viewModelScope.launch {
+             writeLock.withLock {
++                // Historique de « Ma progression » : une panne ici ne doit jamais empêcher la note FSRS
++                try {
++                    attempt?.let { attempts.record(it) }
++                } catch (e: CancellationException) {
++                    throw e
++                } catch (e: Exception) {
++                    // tentative non enregistrée : la session continue
++                }
+                 try {
+--- a/app/src/main/java/ci/kalyno/app/ui/main/MainScreen.kt	2026-10-30 21:20:39.770263800 +0000
++++ b/app/src/main/java/ci/kalyno/app/ui/main/MainScreen.kt	2026-10-30 21:21:03.618536933 +0000
+@@ -40,2 +40,3 @@
+ import ci.kalyno.app.ui.dojo.DojoSessionScreen
++import ci.kalyno.app.ui.progress.ProgressHistoryScreen
+ 
+@@ -66,2 +67,3 @@
+     var tab by rememberSaveable { mutableStateOf(0) }
++    var progressOpen by rememberSaveable { mutableStateOf(false) }
+     val session = state.session
+@@ -75,2 +77,8 @@
+         )
++    } else if (progressOpen) {
++        BackHandler { progressOpen = false }
++        ProgressHistoryScreen(
++            retentionScore = state.retentionScore,
++            onBack = { progressOpen = false }
++        )
+     } else {
+@@ -117,3 +125,4 @@
+                         onShuffleQuote = viewModel::shuffleQuote,
+-                        onToggleFavoriteQuote = viewModel::toggleFavorite
++                        onToggleFavoriteQuote = viewModel::toggleFavorite,
++                        onOpenProgress = { progressOpen = true }
+                     )
+--- a/app/src/main/java/ci/kalyno/app/ui/main/AccueilScreen.kt	2026-10-30 21:20:39.776877174 +0000
++++ b/app/src/main/java/ci/kalyno/app/ui/main/AccueilScreen.kt	2026-10-30 21:21:03.618916698 +0000
+@@ -72,3 +72,4 @@
+     onShuffleQuote: () -> Unit = {},
+-    onToggleFavoriteQuote: (DailyQuote) -> Unit = {}
++    onToggleFavoriteQuote: (DailyQuote) -> Unit = {},
++    onOpenProgress: () -> Unit = {}
+ ) {
+@@ -164,2 +165,3 @@
+                                     loading = state.loading,
++                                    onOpenDetail = onOpenProgress,
+                                     modifier = slot
+--- a/app/src/main/java/ci/kalyno/app/ui/main/AccueilModules.kt	2026-10-30 21:20:39.783347152 +0000
++++ b/app/src/main/java/ci/kalyno/app/ui/main/AccueilModules.kt	2026-10-30 21:21:03.619317939 +0000
+@@ -252,6 +252,6 @@
+     loading: Boolean,
+-    modifier: Modifier = Modifier
++    modifier: Modifier = Modifier,
++    onOpenDetail: () -> Unit = {}
+ ) {
+     val haptic = LocalHapticFeedback.current
+-    var detailOpen by rememberSaveable { mutableStateOf(false) }
+     val hasData = masteredCount != null || retentionScore != null
+@@ -260,8 +260,7 @@
+         modifier = modifier,
+-        onClick = if (hasData) {
+-            {
+-                haptic.performHapticFeedback(HapticFeedbackType.ContextClick)
+-                detailOpen = true
+-            }
+-        } else null
++        // La carte ouvre toujours la page « Ma progression » (historique complet), même sans statistiques
++        onClick = {
++            haptic.performHapticFeedback(HapticFeedbackType.ContextClick)
++            onOpenDetail()
++        }
+     ) {
+@@ -310,12 +309,2 @@
+     }
+-
+-    if (detailOpen) {
+-        ProgressDetailSheet(
+-            masteredCount = masteredCount,
+-            retentionScore = retentionScore,
+-            masteredNotions = masteredNotions,
+-            urgentTopics = urgentTopics,
+-            onDismiss = { detailOpen = false }
+-        )
+-    }
+ }
