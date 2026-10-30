@@ -1,0 +1,35 @@
+name: Générer les ids de référence du tokenizer
+
+# À lancer UNE fois à la main (Actions > Générer les ids de référence du tokenizer > Run workflow).
+# Compare UnigramTokenizer au tokenizer officiel de multilingual-e5-small et publie le fichier de référence du test.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  golden:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Installer les dépendances
+        run: pip install transformers sentencepiece numpy onnxruntime
+
+      - name: Générer les ids de référence (échoue si le tokenizer de l'app diverge)
+        run: python tools/make_tokenizer_golden.py
+
+      - name: Publier
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          git add app/src/test/resources/semantic/tokenizer_golden.tsv
+          git commit -m "Tokenizer : ids de référence E5 pour UnigramTokenizerTest" || echo "Rien à publier"
+          git push

@@ -32,20 +32,13 @@ class DojoGradingTest {
 
     @Test fun referenceVideNEstPasSemantique() = assertFalse(DojoGrading.useSemantic("   "))
 
-    @Test fun valideLentDonneSu() {
-        val v = DojoGrading.fromSemantic(result(EvaluationVerdict.CORRECT), slow)!!
-        assertTrue(v.correct)
-        assertEquals(ReviewRating.SU, v.rating)
-    }
-
-    @Test fun valideRapideNeDonnePasTropFacile() {
-        val v = DojoGrading.fromSemantic(result(EvaluationVerdict.CORRECT), fast)!!
-        assertEquals(ReviewRating.SU, v.rating)
-    }
-
-    @Test fun valideAvecIndiceDonneHesite() {
-        val v = DojoGrading.fromSemantic(result(EvaluationVerdict.CORRECT), slow.copy(hintUsed = true))!!
-        assertEquals(ReviewRating.HESITE, v.rating)
+    @Test fun valideParSimilariteDonneAuMieuxHesite() {
+        // Une similarité ne certifie pas un fait : jamais « Su » ni « Trop facile », quelle que soit la vitesse
+        for (ctx in listOf(slow, fast, slow.copy(hintUsed = true))) {
+            val v = DojoGrading.fromSemantic(result(EvaluationVerdict.CORRECT), ctx)!!
+            assertTrue(v.correct)
+            assertEquals(ReviewRating.HESITE, v.rating)
+        }
     }
 
     @Test fun presqueDonneHesiteEtPartiel() {

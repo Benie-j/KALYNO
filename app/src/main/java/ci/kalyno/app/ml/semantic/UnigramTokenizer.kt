@@ -74,28 +74,45 @@ class UnigramTokenizer private constructor(
         return rev.toIntArray()
     }
 
+    /** Nombre de pièces du vocabulaire (ids 0 à size-1) : doit égaler la taille de la matrice d'embeddings du modèle. */
+    val vocabSize: Int get() = scores.size
+
     companion object {
         const val BOS_ID = 0
         const val PAD_ID = 1
         const val EOS_ID = 2
         const val UNK_ID = 3
         private const val SPECIAL_COUNT = 4
+        private val SPECIAL_PIECES = arrayOf("<s>", "<pad>", "</s>", "<unk>")
         private const val SPACE_MARK = '\u2581'
-        private const val MAX_CHARS = 1200   // ~256 tokens : le passage « leçon + réponse officielle » ne doit pas être coupé
+        // Garde-fou de coût avant tokenisation (~300 tokens). La fiche E5 plafonne à 512 tokens ; la coupe fine se fait
+        // ensuite sur les tokens, en conservant toujours </s>.
+        private const val MAX_CHARS = 1200
         private val WHITESPACE = Regex("\\s+")
 
-        fun fromAsset(context: Context, assetPath: String): UnigramTokenizer {
-            val map = HashMap<String, Int>(50_000)
-            val scoreList = ArrayList<Float>(50_000)
-            context.assets.open(assetPath).bufferedReader(Charsets.UTF_8).useLines { lines ->
-                lines.forEachIndexed { idx, line ->
-                    val tab = line.lastIndexOf('\t')
-                    check(tab > 0) { "vocab.tsv : ligne ${idx + 1} mal formée" }
-                    scoreList.add(line.substring(tab + 1).toFloat())
-                    if (idx >= SPECIAL_COUNT) map[line.substring(0, tab)] = idx
+        fun fromAsset(context: Context, assetPath: String): UnigramTokenizer =
+            context.assets.open(assetPath).bufferedReader(Charsets.UTF_8).useLines { fromLines(it) }
+
+        /**
+         * Construit le tokenizeur depuis les lignes « pièce<TAB>score » (id = numéro de ligne, comme à l'export).
+         * Pur Kotlin : testable sans Android. Un vocabulaire décalé ou tronqué donnerait des embeddings faux SANS
+         * erreur visible : on le refuse dès le chargement.
+         */
+        fun fromLines(lines: Sequence<String>): UnigramTokenizer {
+            val map = HashMap<String, Int>(80_000)
+            val scoreList = ArrayList<Float>(80_000)
+            lines.forEachIndexed { idx, line ->
+                val tab = line.lastIndexOf('\t')
+                check(tab > 0) { "vocabulaire : ligne ${idx + 1} mal formée" }
+                val piece = line.substring(0, tab)
+                if (idx < SPECIAL_COUNT) {
+                    check(piece == SPECIAL_PIECES[idx]) { "vocabulaire : la ligne ${idx + 1} doit être ${SPECIAL_PIECES[idx]}, pas $piece" }
+                } else {
+                    map[piece] = idx
                 }
+                scoreList.add(line.substring(tab + 1).toFloat())
             }
-            check(scoreList.size > SPECIAL_COUNT) { "vocab.tsv vide" }
+            check(scoreList.size > SPECIAL_COUNT) { "vocabulaire vide ou incomplet" }
             val scores = scoreList.toFloatArray()
             val maxLen = map.keys.maxOf { it.length }
             val minScore = (SPECIAL_COUNT until scores.size).minOf { scores[it] }

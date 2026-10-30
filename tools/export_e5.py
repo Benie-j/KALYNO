@@ -80,13 +80,18 @@ def main() -> None:
     if mb > 95:
         sys.exit("Modèle trop lourd pour GitHub (limite 100 Mo par fichier)")
 
-    # 5) Contrôle : l'ordre des similarités doit être cohérent (valeurs attendues entre ~0,7 et 1,0)
+    # 5) Contrôle E5 : tâche symétrique (« query: » des deux côtés). Valeurs attendues entre ~0,7 et 1,0 ;
+    #    seul l'ORDRE compte (fiche du modèle), et un score élevé ne prouve pas qu'un fait est exact.
     import onnxruntime as ort
     new_id = {old: new for new, old in enumerate(keep)}
     session = ort.InferenceSession(str(target))
 
+    def hf_ids(text: str) -> list[int]:
+        # Même normalisation que l'app : minuscules, espaces simples (l'app applique aussi NFKC)
+        return [new_id.get(i, 3) for i in tok(" ".join(text.lower().split()))["input_ids"]]
+
     def embed(text: str) -> np.ndarray:
-        ids = [new_id.get(i, 3) for i in tok(text.lower())["input_ids"]]
+        ids = hf_ids(text)
         feeds = {"input_ids": np.array([ids], dtype=np.int64),
                  "attention_mask": np.ones((1, len(ids)), dtype=np.int64)}
         if "token_type_ids" in [i.name for i in session.get_inputs()]:
@@ -95,14 +100,18 @@ def main() -> None:
         v = hidden.mean(axis=0)
         return v / np.linalg.norm(v)
 
-    passage = embed("passage: Leçon : La photosynthèse - Les plantes fabriquent leur matière. "
-                    "Réponse officielle : Elle a lieu dans les chloroplastes")
+    ref = embed("query: elle a lieu dans les chloroplastes des cellules végétales")
     for label, text in [
         ("reformulation", "query: ça se passe dans les chloroplastes des cellules végétales"),
         ("hors sujet   ", "query: la capitale de la Côte d'Ivoire est Yamoussoukro"),
     ]:
-        print(f"{label} : {float(passage @ embed(text)):.3f}")
+        print(f"{label} : {float(ref @ embed(text)):.3f}")
 
+    # 6) Conformité du tokenizer de l'app : ids de référence (sentencepiece via HuggingFace) pour UnigramTokenizerTest
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from make_tokenizer_golden import write_golden
+
+    write_golden(hf_ids)
 
 if __name__ == "__main__":
     main()

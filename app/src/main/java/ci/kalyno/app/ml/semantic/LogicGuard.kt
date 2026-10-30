@@ -34,7 +34,9 @@ internal object LogicGuard {
         "exothermique" to "endothermique", "conducteur" to "isolant", "oxydation" to "reduction",
         "minimum" to "maximum", "fini" to "infini", "convexe" to "concave",
         "monte" to "descend", "gagne" to "perd", "interieur" to "exterieur",
-        "solide" to "liquide", "legal" to "illegal", "democratie" to "dictature"
+        "solide" to "liquide", "legal" to "illegal", "democratie" to "dictature",
+        "somme" to "difference", "addition" to "soustraction", "multiplication" to "division",
+        "avant" to "apres", "nord" to "sud"
     )
 
     fun inspect(reference: String, answer: String): Violation? {

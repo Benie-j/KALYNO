@@ -45,13 +45,13 @@ object DojoGrading {
      * Retourne null si le moteur est en panne : l'appelant se replie alors sur les mots-clés,
      * l'élève n'est jamais bloqué ni noté injustement.
      */
+    @Suppress("UNUSED_PARAMETER") // le contexte (vitesse, indice) ne sert plus : la note d'une validation sémantique est fixe
     fun fromSemantic(result: EvaluationResult, ctx: AnswerContext): Verdict? = when (result.verdict) {
         EvaluationVerdict.ENGINE_ERROR -> null
-        EvaluationVerdict.CORRECT -> {
-            // Un rappel libre validé par similarité reste au mieux « Su » : « Trop facile » est réservé au QCM/mot-clé exact
-            val rating = AnswerGrader.goodRating(ctx).let { if (it == ReviewRating.TROP_FACILE) ReviewRating.SU else it }
-            Verdict(correct = true, rating = rating)
-        }
+        // Une similarité E5 ne certifie pas un fait (réponses fausses mais sur le sujet : 0,82-0,98) : validée par le
+        // moteur, la réponse vaut au mieux « Hésité » (la carte revient plus tôt, le niveau Dojo ne monte pas).
+        // « Su » et « Trop facile » restent réservés au QCM et aux mots-clés exacts.
+        EvaluationVerdict.CORRECT -> Verdict(correct = true, rating = ReviewRating.HESITE)
         EvaluationVerdict.PARTIAL -> Verdict(correct = false, rating = ReviewRating.HESITE, partial = true)
         EvaluationVerdict.INCORRECT,
         EvaluationVerdict.CONTRADICTION,

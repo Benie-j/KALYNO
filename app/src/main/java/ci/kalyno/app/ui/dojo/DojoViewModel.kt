@@ -22,7 +22,6 @@ import ci.kalyno.app.data.dojo.mergeCorrectIndices
 import ci.kalyno.app.data.lessons.LessonProgressRepository
 import ci.kalyno.app.data.dojo.Verdict
 import ci.kalyno.app.data.srs.ReviewRating
-import ci.kalyno.app.ml.semantic.E5Prompt
 import ci.kalyno.app.ml.semantic.EvaluationResult
 import ci.kalyno.app.ml.semantic.EvaluationVerdict
 import ci.kalyno.app.ml.semantic.SemanticEvaluationEngine
@@ -206,13 +205,9 @@ class DojoViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch(Dispatchers.Default) {
             runCatching { SemanticEvaluationEngine.getInstance(getApplication()) }
             runCatching { semanticEvaluator.refreshSettings() }
-            // Passages « leçon + réponse officielle » de la session : vecteurs prêts avant la première saisie
+            // Réponses officielles de la session : vecteurs prêts avant la première saisie
             runCatching {
-                semanticEvaluator.preloadLessonPassages(
-                    exercises.filter { it.useSemantic }.map {
-                        E5Prompt.lessonPassage(it.lessonTitle, it.lessonSummary, it.reference)
-                    }.distinct()
-                )
+                semanticEvaluator.preloadReferences(exercises.filter { it.useSemantic }.map { it.reference }.distinct())
             }
             // Vecteurs des leçons calculés avant la première réponse (une seule fois par leçon)
             val seen = java.util.IdentityHashMap<List<String>, Boolean>()
@@ -356,13 +351,11 @@ class DojoViewModel(app: Application) : AndroidViewModel(app) {
         val answer = s.typed
         _state.update { it.copy(evaluating = true) }
         evaluation = viewModelScope.launch {
-            // passage: « Leçon : titre - résumé. Réponse officielle : … » contre query: « saisie de l'élève »
-
+            // query: « réponse officielle » contre query: « saisie de l'élève » (tâche symétrique de la fiche E5)
             val result = semanticEvaluator.evaluate(
                 adminReference = exercise.reference,
                 studentAnswer = answer,
-                lessonTitle = exercise.lessonTitle,
-                lessonSummary = exercise.lessonSummary
+                question = exercise.item.front
             )
 
             // Si E5 rejette la réponse, vérifier aussi avec le contenu de la leçon.

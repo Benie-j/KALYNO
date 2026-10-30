@@ -49,38 +49,30 @@ class SemanticEvaluator(
         question: String,
         expectedShort: String,
         passages: List<String>,
-        studentAnswer: String,
-        scope: String? = null
+        studentAnswer: String
     ): EvaluationResult =
-        engineOrNull()?.evaluateWithLessonAsync(
-            question, expectedShort, passages, studentAnswer,
-            settings.thresholdsFor(scope).relaxedForLesson()
-        ) ?: unavailable()
+        engineOrNull()?.evaluateWithLessonAsync(question, expectedShort, passages, studentAnswer) ?: unavailable()
 
     /** Précalcule les vecteurs des passages d'une leçon (appel en arrière-plan). */
     suspend fun preloadPassages(passages: List<String>) {
         engineOrNull()?.preloadAsync(passages)
     }
 
-    /** Précalcule les passages « leçon + réponse officielle » des cartes de la session (appel en arrière-plan). */
-    suspend fun preloadLessonPassages(passages: List<String>) {
-        engineOrNull()?.preloadLessonPassagesAsync(passages)
+    /** Précalcule les vecteurs des réponses officielles des cartes de la session (appel en arrière-plan). */
+    suspend fun preloadReferences(references: List<String>) {
+        engineOrNull()?.preloadReferencesAsync(references)
     }
 
     /**
      * @param adminReference réponse de référence saisie par l'admin
-     * @param lessonTitle titre de la leçon parente de la question (relation Room), null si inconnu
-     * @param lessonSummary résumé de cette leçon, null si absent
+     * @param question énoncé de la carte (ses mots ne comptent pas comme termes propres de la réponse)
      * @param scope identifiant de la matière (seuil spécifique) ou null pour le seuil global
      */
     suspend fun evaluate(
         adminReference: String,
         studentAnswer: String,
-        lessonTitle: String? = null,
-        lessonSummary: String? = null,
+        question: String = "",
         scope: String? = null
     ): EvaluationResult =
-        engineOrNull()?.evaluateAsync(
-            adminReference, studentAnswer, settings.thresholdsFor(scope), lessonTitle, lessonSummary
-        ) ?: unavailable()
+        engineOrNull()?.evaluateAsync(adminReference, studentAnswer, settings.thresholdsFor(scope), question) ?: unavailable()
 }

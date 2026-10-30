@@ -20,7 +20,7 @@ import kotlin.math.sqrt
  * Utilisation (jamais sur le thread principal) :
  * ```
  * val engine = SemanticEvaluationEngine.getInstance(context)
- * val result = engine.evaluateAsync(reponseAdmin, reponseEleve, lessonTitle, lessonSummary)
+ * val result = engine.evaluateAsync(reponseAdmin, reponseEleve, thresholds, question = enonce)
  * ```
  */
 class SemanticEvaluationEngine private constructor(
@@ -44,13 +44,18 @@ class SemanticEvaluationEngine private constructor(
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, FloatArray>?) = size > CACHE_SIZE
     }
 
-    /** Version bloquante (calcul CPU, quelques dizaines de ms). À appeler hors thread UI. */
+    /**
+     * Version bloquante (calcul CPU, quelques dizaines de ms). À appeler hors thread UI.
+     *
+     * Réponse de l'élève et réponse officielle sont deux textes de même nature : tâche SYMÉTRIQUE de la fiche E5,
+     * donc « query: » des deux côtés (« passage: » est réservé à la recherche d'un texte de cours).
+     * [question] sert uniquement à repérer les termes propres à la réponse ([ContentGuard]).
+     */
     fun evaluate(
         adminReference: String,
         studentAnswer: String,
         thresholds: SemanticThresholds = config.defaultThresholds,
-        lessonTitle: String? = null,
-        lessonSummary: String? = null
+        question: String = ""
     ): EvaluationResult {
         val reference = adminReference.trim()
         val answer = studentAnswer.trim()
@@ -65,12 +70,11 @@ class SemanticEvaluationEngine private constructor(
         if (reference.isEmpty()) return engineError("Référence admin vide")
 
         return try {
-            // Passage enrichi par la leçon ; le garde-fou logique, lui, ne regarde que la réponse officielle
-            // (le titre et le résumé de la leçon contiennent d'autres négations et d'autres nombres).
-            val passageText = E5Prompt.lessonPassage(lessonTitle, lessonSummary, reference)
-            val queryText = E5Prompt.query(answer)
-            val score = cosine(referenceVector(passageText), embed(queryText)).coerceIn(-1f, 1f)
-            decide(score, LogicGuard.inspect(reference, answer), thresholds)
+            val score = cosine(referenceVector(E5Prompt.query(reference)), embed(E5Prompt.query(answer))).coerceIn(-1f, 1f)
+            decide(
+                score, LogicGuard.inspect(reference, answer), thresholds,
+                coverage = ContentGuard.coverage(reference, answer, question)
+            )
         } catch (e: Exception) {
             Log.e(TAG, "Échec de l'évaluation sémantique", e)
             engineError(e.message ?: "erreur inconnue")
@@ -83,13 +87,16 @@ class SemanticEvaluationEngine private constructor(
             ?: embed(text).also { synchronized(referenceCache) { referenceCache[text] = it } }
 
     /**
-     * Corrige une réponse SANS référence admin, à partir du texte de la leçon.
+     * Rattrapage par la leçon, quand les mots-clés ont refusé la réponse. Recherche de texte au sens de la fiche E5
+     * (« query: » contre « passage: »).
      *
-     * 1) le passage de leçon le plus proche de « question + bonne réponse courte » est retenu
-     *    (il reste donc sur la question posée : une phrase vraie mais hors sujet ne peut pas le devenir) ;
+     * 1) le passage de leçon le plus proche de « question + bonne réponse courte » est retenu, à condition de
+     *    s'imposer nettement sur le deuxième (l'ORDRE relatif compte, pas la valeur absolue : en E5 un passage hors
+     *    sujet dépasse déjà 0,75) ;
      * 2) la réponse de l'élève est comparée à CE passage ;
-     * 3) les garde-fous (négation, antonymes, chiffres) s'appliquent à la bonne réponse courte, jamais au passage,
-     *    qui contient d'autres négations et d'autres nombres sans rapport avec la réponse.
+     * 3) les garde-fous (négation, antonymes, chiffres) s'appliquent à la bonne réponse courte, jamais au passage ;
+     * 4) un passage de cours ressemble à toute réponse sur le même thème, vraie ou fausse : le résultat ne peut donc
+     *    JAMAIS être « validé ». Au mieux « presque », avec renvoi vers la leçon.
      *
      * Retourne ENGINE_ERROR si aucun passage n'est pertinent : l'appelant garde alors sa correction par mots-clés.
      */
@@ -97,8 +104,7 @@ class SemanticEvaluationEngine private constructor(
         question: String,
         expectedShort: String,
         passages: List<String>,
-        studentAnswer: String,
-        thresholds: SemanticThresholds = config.defaultThresholds
+        studentAnswer: String
     ): EvaluationResult {
         val answer = studentAnswer.trim()
         if (answer.isEmpty()) {
@@ -112,17 +118,17 @@ class SemanticEvaluationEngine private constructor(
 
         return try {
             val queryVec = embed(E5Prompt.query("${question.trim()} ${expectedShort.trim()}"))
-            var bestScore = -1f
-            var bestVec: FloatArray? = null
-            for (passage in passages) {
-                val vec = referenceVector(E5Prompt.passage(passage))
-                val score = cosine(queryVec, vec)
-                if (score > bestScore) { bestScore = score; bestVec = vec }
+            val ranked = passages
+                .map { referenceVector(E5Prompt.passage(it)).let { vec -> cosine(queryVec, vec) to vec } }
+                .sortedByDescending { it.first }
+            val (top, topVec) = ranked.first()
+            val margin = if (ranked.size > 1) top - ranked[1].first else Float.MAX_VALUE
+            if (top < LESSON_RETRIEVAL_MIN || margin < LESSON_RETRIEVAL_MARGIN) {
+                return engineError("Aucun passage de leçon nettement pertinent (score=$top marge=$margin)")
             }
-            if (bestVec == null || bestScore < LESSON_RETRIEVAL_MIN) return engineError("Aucun passage de leçon pertinent")
 
-            val score = cosine(bestVec, embed(E5Prompt.query(answer))).coerceIn(-1f, 1f)
-            decide(score, LogicGuard.inspect(expectedShort, answer), thresholds)
+            val score = cosine(topVec, embed(E5Prompt.query(answer))).coerceIn(-1f, 1f)
+            decideFromLesson(score, LogicGuard.inspect(expectedShort, answer))
         } catch (e: Exception) {
             Log.e(TAG, "Échec de l'évaluation par la leçon", e)
             engineError(e.message ?: "erreur inconnue")
@@ -134,9 +140,8 @@ class SemanticEvaluationEngine private constructor(
         expectedShort: String,
         passages: List<String>,
         studentAnswer: String,
-        thresholds: SemanticThresholds = config.defaultThresholds
     ): EvaluationResult =
-        withContext(Dispatchers.Default) { evaluateWithLesson(question, expectedShort, passages, studentAnswer, thresholds) }
+        withContext(Dispatchers.Default) { evaluateWithLesson(question, expectedShort, passages, studentAnswer) }
 
     /** Calcule à l'avance les vecteurs des passages de leçon (en arrière-plan) pour que la première correction soit instantanée. */
     suspend fun preloadAsync(texts: List<String>) = withContext(Dispatchers.Default) {
@@ -145,10 +150,10 @@ class SemanticEvaluationEngine private constructor(
         }
     }
 
-    /** Précalcule les passages « leçon + réponse officielle » (déjà préfixés) des cartes de la session. */
-    suspend fun preloadLessonPassagesAsync(passages: List<String>) = withContext(Dispatchers.Default) {
-        for (text in passages) {
-            try { referenceVector(text) } catch (e: Exception) { Log.w(TAG, "Préchargement ignoré : ${e.message}") }
+    /** Précalcule les vecteurs des réponses officielles des cartes de la session (premier calcul hors saisie). */
+    suspend fun preloadReferencesAsync(references: List<String>) = withContext(Dispatchers.Default) {
+        for (text in references) {
+            try { referenceVector(E5Prompt.query(text)) } catch (e: Exception) { Log.w(TAG, "Préchargement ignoré : ${e.message}") }
         }
     }
 
@@ -156,34 +161,56 @@ class SemanticEvaluationEngine private constructor(
         adminReference: String,
         studentAnswer: String,
         thresholds: SemanticThresholds = config.defaultThresholds,
-        lessonTitle: String? = null,
-        lessonSummary: String? = null
+        question: String = ""
     ): EvaluationResult =
         withContext(Dispatchers.Default) {
-            evaluate(adminReference, studentAnswer, thresholds, lessonTitle, lessonSummary)
+            evaluate(adminReference, studentAnswer, thresholds, question)
         }
 
     // ---- Décision --------------------------------------------------------------------------
 
-    private fun decide(score: Float, violation: LogicGuard.Violation?, t: SemanticThresholds): EvaluationResult {
-        Log.d(TAG, "score=$score valid=${t.valid} partial=${t.partial} garde-fou=$violation") // aide au calibrage des seuils
-        // Un garde-fou prime TOUJOURS sur le score : une phrase inversée peut avoir 0.95 de similarité.
-        if (violation != null) {
-            val msg = when (violation) {
-                LogicGuard.Violation.NEGATION_MISMATCH ->
-                    "Attention au sens de ta phrase : la tienne et la réponse attendue n'ont pas la même polarité " +
-                    "(affirmation ou négation). Relis la leçon et vérifie ce qui est affirmé et ce qui est nié."
-                LogicGuard.Violation.ANTONYM_CONFLICT ->
-                    "Un terme clé de ta réponse exprime l'inverse de la notion attendue. " +
-                    "Vérifie le sens exact du vocabulaire de la leçon."
-                LogicGuard.Violation.NUMBER_MISMATCH ->
-                    "Les valeurs numériques de ta réponse ne correspondent pas à celles attendues. " +
-                    "Vérifie tes chiffres et leurs unités."
-            }
-            return EvaluationResult(false, score, msg, EvaluationVerdict.CONTRADICTION)
+    /** Message pédagogique d'un garde-fou déclenché. */
+    private fun contradiction(score: Float, violation: LogicGuard.Violation): EvaluationResult {
+        val msg = when (violation) {
+            LogicGuard.Violation.NEGATION_MISMATCH ->
+                "Attention au sens de ta phrase : la tienne et la réponse attendue n'ont pas la même polarité " +
+                "(affirmation ou négation). Relis la leçon et vérifie ce qui est affirmé et ce qui est nié."
+            LogicGuard.Violation.ANTONYM_CONFLICT ->
+                "Un terme clé de ta réponse exprime l'inverse de la notion attendue. " +
+                "Vérifie le sens exact du vocabulaire de la leçon."
+            LogicGuard.Violation.NUMBER_MISMATCH ->
+                "Les valeurs numériques de ta réponse ne correspondent pas à celles attendues. " +
+                "Vérifie tes chiffres et leurs unités."
         }
+        return EvaluationResult(false, score, msg, EvaluationVerdict.CONTRADICTION)
+    }
+
+    /** Rattrapage par la leçon : jamais « validé » (voir [evaluateWithLesson]). */
+    private fun decideFromLesson(score: Float, violation: LogicGuard.Violation?): EvaluationResult {
+        Log.d(TAG, "leçon score=$score partiel>=$LESSON_PARTIAL garde-fou=$violation")
+        if (violation != null) return contradiction(score, violation)
+        return if (score >= LESSON_PARTIAL) EvaluationResult(
+            false, score,
+            "Ta réponse est proche du cours, mais elle n'est pas assez précise pour être validée. " +
+            "Relis le passage de la leçon et reprends ses termes exacts.",
+            EvaluationVerdict.PARTIAL
+        ) else EvaluationResult(
+            false, score,
+            "Ta réponse s'éloigne de la notion attendue. Relis la leçon, puis reformule avec tes propres mots.",
+            EvaluationVerdict.INCORRECT
+        )
+    }
+
+    /**
+     * Décision à partir de la réponse officielle. « Validé » exige TROIS conditions : score >= seuil, aucun
+     * garde-fou logique, et les termes propres de la réponse officielle repris ([coverage]).
+     */
+    private fun decide(score: Float, violation: LogicGuard.Violation?, t: SemanticThresholds, coverage: Float): EvaluationResult {
+        Log.d(TAG, "score=$score valid=${t.valid} partial=${t.partial} couverture=$coverage garde-fou=$violation") // aide au calibrage
+        // Un garde-fou prime TOUJOURS sur le score : une phrase inversée peut avoir 0.95 de similarité.
+        if (violation != null) return contradiction(score, violation)
         return when {
-            score >= t.valid -> EvaluationResult(
+            score >= t.valid && coverage >= ContentGuard.MIN_COVERAGE -> EvaluationResult(
                 true, score,
                 "Réponse validée. Ta formulation correspond à la notion attendue.",
                 EvaluationVerdict.CORRECT
@@ -290,8 +317,13 @@ class SemanticEvaluationEngine private constructor(
         // Références admin + passages de leçon d'une session (≈ 1,5 Ko par vecteur de 384 dimensions)
         private const val CACHE_SIZE = 160
 
-        /** Sous ce score, aucun passage de la leçon ne parle de la question : on ne s'en sert pas. */
-        internal const val LESSON_RETRIEVAL_MIN = 0.78f
+        // Mesures sur le modèle embarqué : passage pertinent >= 0,86 avec 0,05 d'avance en moyenne sur le suivant ;
+        // question hors programme <= 0,79 avec moins de 0,01 d'avance. L'ancien plancher 0,78 laissait tout passer.
+        internal const val LESSON_RETRIEVAL_MIN = 0.84f
+        internal const val LESSON_RETRIEVAL_MARGIN = 0.02f
+
+        /** Réponse -> passage de cours : en dessous, la réponse est jugée hors sujet (provisoire, à calibrer). */
+        internal const val LESSON_PARTIAL = 0.86f
 
         // Incrémenter MODEL_VERSION quand le fichier .onnx des assets change (force la recopie).
         // v2 = multilingual-e5-small (v1 = ancien MiniLM, supprimé du stockage interne à la 1re ouverture).
