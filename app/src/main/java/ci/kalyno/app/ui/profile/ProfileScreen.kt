@@ -72,6 +72,8 @@ import ci.kalyno.app.ui.theme.KalynoMuted
 import ci.kalyno.app.ui.theme.KalynoOutline
 import ci.kalyno.app.ui.theme.KalynoText
 import ci.kalyno.app.ui.theme.KalynoYellow
+import androidx.compose.material.icons.filled.Flag
+import ci.kalyno.app.ui.report.ReportUnreadBadge
 
 private val SkyBubble = Color(0xFFE0F2FE)
 private val SlateBubble = Color(0xFFF1F5F9)
@@ -101,6 +103,8 @@ fun ProfileScreen(
     onOpenHelp: () -> Unit,
     onContactSupport: () -> Unit,
     onReportIssue: () -> Unit,
+    onOpenMyReports: () -> Unit,
+    unreadReplies: Int,
     onOpenTerms: () -> Unit,
     onOpenPrivacy: () -> Unit
 ) {
@@ -163,7 +167,20 @@ fun ProfileScreen(
                     subtitle = "Une erreur dans un cours ? Dis-le-nous",
                     iconBackground = KalynoAmberSoft,
                     iconTint = KalynoAmberDeep,
-                    onClick = onReportIssue,
+                    onClick = onReportIssue
+                )
+                SettingsItem(
+                    icon = Icons.Default.Flag,
+                    title = "Mes signalements",
+                    subtitle = if (unreadReplies > 0) {
+                        if (unreadReplies == 1) "1 nouvelle réponse de l'équipe" else "$unreadReplies nouvelles réponses de l'équipe"
+                    } else {
+                        "Suis ce que tu as signalé"
+                    },
+                    iconBackground = KalynoAmberSoft,
+                    iconTint = KalynoAmberDeep,
+                    onClick = onOpenMyReports,
+                    trailing = if (unreadReplies > 0) ({ ReportUnreadBadge(unreadReplies) }) else null,
                     showDivider = false
                 )
             }

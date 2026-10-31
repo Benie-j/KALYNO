@@ -81,7 +81,12 @@ data class ReportEntity(
     val contextLabel: String?,
     val status: String,
     val createdAt: Long,          // timestamp epoch (ms)
-    val syncedAt: Long? = null    // null = encore en attente d'envoi
+    val syncedAt: Long? = null,   // null = encore en attente d'envoi
+    /** Réponse écrite par l'équipe (visible de l'élève), copiée depuis Supabase à l'ouverture de « Mes signalements ». */
+    val teamReply: String? = null,
+    val teamRepliedAt: Long? = null,
+    /** null = l'élève n'a pas encore vu la réponse (affiche « Nouveau »). */
+    val replySeenAt: Long? = null
 )
 
 /** Volontairement sans suppression : aucune requête `DELETE`, aucun `@Delete`. */
@@ -100,6 +105,22 @@ abstract class ReportDao {
 
     @Query("SELECT COUNT(*) FROM reports WHERE syncedAt IS NULL")
     abstract fun observePendingCount(): Flow<Int>
+
+    @Query("SELECT * FROM reports ORDER BY createdAt DESC")
+    abstract fun observeAll(): Flow<List<ReportEntity>>
+
+    @Query("SELECT * FROM reports WHERE id = :id")
+    abstract suspend fun byId(id: String): ReportEntity?
+
+    @Query("SELECT COUNT(*) FROM reports WHERE teamReply IS NOT NULL AND teamReply != '' AND replySeenAt IS NULL")
+    abstract fun observeUnreadReplies(): Flow<Int>
+
+    @Query("UPDATE reports SET replySeenAt = :at WHERE teamReply IS NOT NULL AND teamReply != '' AND replySeenAt IS NULL")
+    abstract suspend fun markRepliesSeen(at: Long)
+
+    /** Copie l'état décidé côté équipe (statut + réponse). Ne supprime et n'écrase rien d'autre. */
+    @Query("UPDATE reports SET status = :status, teamReply = :reply, teamRepliedAt = :repliedAt, replySeenAt = :seenAt WHERE id = :id")
+    abstract suspend fun applyServerState(id: String, status: String, reply: String?, repliedAt: Long?, seenAt: Long?)
 
     @Query("SELECT COUNT(*) > 0 FROM reports WHERE id = :id AND syncedAt IS NOT NULL")
     abstract suspend fun isSynced(id: String): Boolean

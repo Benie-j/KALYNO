@@ -12,11 +12,13 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
 import java.time.Instant
+import java.time.OffsetDateTime
 import java.util.UUID
 
 /** Ce que l'élève a rempli dans le formulaire. */
@@ -86,6 +88,54 @@ class ReportRepository private constructor(context: Context) {
         } else {
             ReportSyncScheduler.request(appContext)
             ReportOutcome.QUEUED
+        }
+    }
+
+    fun observeAll(): Flow<List<ReportEntity>> = dao.observeAll()
+
+    fun observeUnreadReplies(): Flow<Int> = dao.observeUnreadReplies()
+
+    suspend fun markRepliesSeen() = withContext(Dispatchers.IO) { dao.markRepliesSeen(System.currentTimeMillis()) }
+
+    /**
+     * Récupère le statut et la réponse de l'équipe pour les signalements de l'élève connecté.
+     * Sans compte (ou hors ligne) il n'y a rien à lire : renvoie false sans rien changer.
+     * Un signalement fait en tant qu'invité n'a pas de réponse possible (aucun compte pour le relier).
+     */
+    suspend fun refreshFromServer(): Boolean = withContext(Dispatchers.IO) {
+        val token = cloud.validAccessToken() ?: return@withContext false
+        val userId = store.userId() ?: return@withContext false
+        try {
+            val base = "reports?user_id=eq.$userId&order=created_at.desc&limit=200&select="
+            val json = try {
+                SupabaseRest.request("GET", base + "id,status,team_reply,team_replied_at", token)
+            } catch (e: IOException) {
+                // Colonnes de réponse pas encore créées côté Supabase : on lit au moins le statut
+                if (httpCode(e) == 400) SupabaseRest.request("GET", base + "id,status", token) else throw e
+            }
+            val rows = JSONArray(json)
+            for (i in 0 until rows.length()) {
+                val o = rows.getJSONObject(i)
+                val local = dao.byId(o.getString("id")) ?: continue
+                val status = o.optString("status", local.status)
+                val hasReplyColumns = o.has("team_reply")
+                val reply = if (hasReplyColumns) o.optString("team_reply").takeIf { !o.isNull("team_reply") && it.isNotBlank() } else local.teamReply
+                val repliedAt = when {
+                    !hasReplyColumns -> local.teamRepliedAt
+                    o.isNull("team_replied_at") -> null
+                    else -> runCatching { OffsetDateTime.parse(o.getString("team_replied_at")).toInstant().toEpochMilli() }.getOrNull()
+                }
+                if (status == local.status && reply == local.teamReply && repliedAt == local.teamRepliedAt) continue
+                // Réponse modifiée par l'équipe : elle redevient « Nouveau »
+                val seenAt = if (reply == local.teamReply) local.replySeenAt else null
+                dao.applyServerState(local.id, status, reply, repliedAt, seenAt)
+            }
+            true
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "Réponses non récupérées : ${e.message}")
+            false
         }
     }
 
@@ -164,8 +214,10 @@ class ReportRepository private constructor(context: Context) {
     }
 
     /** Erreur 4xx qui ne dépend pas du réseau (401 jeton expiré, 408 et 429 sont réessayables). */
+    private fun httpCode(e: IOException): Int? = HTTP_CODE.find(e.message.orEmpty())?.groupValues?.get(1)?.toIntOrNull()
+
     private fun isPermanentRejection(e: IOException): Boolean {
-        val code = HTTP_CODE.find(e.message.orEmpty())?.groupValues?.get(1)?.toIntOrNull() ?: return false
+        val code = httpCode(e) ?: return false
         return code in 400..499 && code != 401 && code != 408 && code != 429
     }
 

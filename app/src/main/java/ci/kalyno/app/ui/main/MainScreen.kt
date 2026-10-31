@@ -44,6 +44,8 @@ import ci.kalyno.app.ui.report.ReportSheetHost
 import ci.kalyno.app.ui.report.ReportSnackbarHost
 import ci.kalyno.app.ui.report.ReportTarget
 import ci.kalyno.app.ui.report.rememberReportLayerState
+import ci.kalyno.app.data.reports.ReportRepository
+import ci.kalyno.app.ui.report.MyReportsScreen
 
 private data class TabItem(val icon: String, val label: String)
 
@@ -71,6 +73,12 @@ fun MainScreen(
 
     var tab by rememberSaveable { mutableStateOf(0) }
     var progressOpen by rememberSaveable { mutableStateOf(false) }
+    var myReportsOpen by rememberSaveable { mutableStateOf(false) }
+    val appContext = LocalContext.current
+    val reportRepository = remember { ReportRepository.get(appContext) }
+    val unreadReplies by reportRepository.observeUnreadReplies().collectAsStateWithLifecycle(initialValue = 0)
+    // Réponses de l'équipe aux signalements : lues à l'ouverture (silencieux hors ligne ou sans compte)
+    LaunchedEffect(signedIn) { if (signedIn) runCatching { reportRepository.refreshFromServer() } }
     val reportLayer = rememberReportLayerState()
 
     // Tap sur une notification (Dojo / révisions urgentes) : on ouvre l'onglet Dojo
@@ -90,6 +98,9 @@ fun MainScreen(
             levelId = levelId,
             onClose = { completed -> viewModel.closeSession(completed) }
         )
+    } else if (myReportsOpen) {
+        BackHandler { myReportsOpen = false }
+        MyReportsScreen(onBack = { myReportsOpen = false })
     } else if (progressOpen) {
         BackHandler { progressOpen = false }
         ProgressHistoryScreen(
@@ -179,6 +190,8 @@ fun MainScreen(
                                     ReportTarget.settings(levelLabel = levelLabel, versionLabel = version)
                                 )
                             },
+                            onOpenMyReports = { myReportsOpen = true },
+                            unreadReplies = unreadReplies,
                             onOpenTerms = { context.openLinkOrSoon(ProfileLinks.TERMS_URL) },
                             onOpenPrivacy = { context.openLinkOrSoon(ProfileLinks.PRIVACY_URL) }
                         )

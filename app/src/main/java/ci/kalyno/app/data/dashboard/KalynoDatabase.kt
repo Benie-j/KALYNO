@@ -41,7 +41,7 @@ import ci.kalyno.app.data.srs.SubjectEntity
         DojoAttemptEntity::class,
         ReportEntity::class
     ],
-    version = 12,
+    version = 13,
     exportSchema = false
 )
 abstract class KalynoDatabase : RoomDatabase() {
@@ -261,13 +261,22 @@ abstract class KalynoDatabase : RoomDatabase() {
             }
         }
 
+        /** Réponse de l'équipe aux signalements : trois colonnes ajoutées, aucune donnée touchée. */
+        private val MIGRATION_12_13 = object : Migration(12, 13) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `reports` ADD COLUMN `teamReply` TEXT")
+                db.execSQL("ALTER TABLE `reports` ADD COLUMN `teamRepliedAt` INTEGER")
+                db.execSQL("ALTER TABLE `reports` ADD COLUMN `replySeenAt` INTEGER")
+            }
+        }
+
         fun get(context: Context): KalynoDatabase =
             instance ?: synchronized(this) {
                 instance ?: Room.databaseBuilder(
                     context.applicationContext,
                     KalynoDatabase::class.java,
                     "kalyno.db"
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12)
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13)
                     .build().also { instance = it }
             }
     }
