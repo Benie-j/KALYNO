@@ -69,6 +69,7 @@ object StudyReminders {
     fun schedule(context: Context) {
         val app = context.applicationContext
         createChannels(app)
+        ContentWatcher.schedule(app)
         val manager = WorkManager.getInstance(app)
         // L'ancienne cadence (toutes les 3 h, heure aléatoire) est remplacée par des créneaux fixes
         manager.cancelUniqueWork(OLD_WORK_NAME)
@@ -119,12 +120,12 @@ object StudyReminders {
         now.hour >= QUIET_FROM_HOUR || now.hour < QUIET_UNTIL_HOUR
 
     @SuppressLint("MissingPermission") // vérifié par canNotify() avant tout appel
-    internal fun post(context: Context, id: Int, channel: String, title: String, text: String): Boolean {
+    internal fun post(context: Context, id: Int, channel: String, title: String, text: String, openDojo: Boolean = true): Boolean {
         if (!canNotify(context)) return false
         val launch = context.packageManager.getLaunchIntentForPackage(context.packageName)
             ?.apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
-                putExtra(EXTRA_OPEN_DOJO, true)
+                if (openDojo) putExtra(EXTRA_OPEN_DOJO, true)
             }
         val tap = launch?.let {
             PendingIntent.getActivity(context, id, it, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
