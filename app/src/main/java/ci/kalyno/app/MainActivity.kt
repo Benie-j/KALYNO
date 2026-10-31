@@ -102,7 +102,8 @@ class MainActivity : ComponentActivity() {
         consumeNotificationIntent(intent)
 
         setContent {
-            KalynoTheme {
+            KalynoTheme { ci.kalyno.app.ui.motion.KalynoMotionDemo() }
+            if (false) KalynoTheme {
                 var showHome by remember { mutableStateOf(false) }
 
                 LaunchedEffect(Unit) {
