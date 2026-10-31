@@ -52,6 +52,10 @@ import ci.kalyno.app.ui.theme.KalynoOutline
 import ci.kalyno.app.ui.theme.KalynoTealDark
 import ci.kalyno.app.ui.theme.KalynoText
 import kotlinx.coroutines.launch
+import ci.kalyno.app.ui.report.ReportFlagButton
+import ci.kalyno.app.ui.report.ReportLayer
+import ci.kalyno.app.ui.report.ReportTarget
+import ci.kalyno.app.ui.report.rememberReportLayerState
 
 /** Une cible de la barre de navigation rapide : un libellé et l'index de l'item visé dans le LazyColumn. */
 private data class JumpTarget(val index: Int, val label: String)
@@ -74,6 +78,7 @@ fun LessonScreen(
     onStartQuestions: () -> Unit
 ) {
     val listState = rememberLazyListState()
+    val report = rememberReportLayerState()
     val scope = rememberCoroutineScope()
     // Séances chronologiques (Séance 1, 2…) puis leurs blocs ; les anciennes leçons restent une simple pile de blocs.
     val rows = remember(chapter) { buildLessonRows(chapter) }
@@ -144,6 +149,17 @@ fun LessonScreen(
                 maxLines = 1,
                 modifier = Modifier.weight(1f)
             )
+            ReportFlagButton(
+                onClick = {
+                    report.open(
+                        ReportTarget.lesson(
+                            lessonId = chapter.id,
+                            lessonTitle = chapter.title,
+                            subjectName = chapter.subjectName
+                        )
+                    )
+                }
+            )
         }
         Box(modifier = Modifier.fillMaxWidth().height(3.dp).background(KalynoBlueSoft)) {
             Box(
@@ -165,72 +181,73 @@ fun LessonScreen(
         }
 
         // ----- Blocs empilés -----
-        LazyColumn(
-            state = listState,
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth(),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                start = 20.dp, end = 20.dp, top = 20.dp, bottom = 32.dp
-            )
-        ) {
-            item(key = "hero") {
-                RevealOnAppear(id = "hero", index = 0, revealed = revealed, bottomSpace = 20.dp) {
-                    LessonHero(chapter)
+        Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+            LazyColumn(
+                state = listState,
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                    start = 20.dp, end = 20.dp, top = 20.dp, bottom = 32.dp
+                )
+            ) {
+                item(key = "hero") {
+                    RevealOnAppear(id = "hero", index = 0, revealed = revealed, bottomSpace = 20.dp) {
+                        LessonHero(chapter)
+                    }
                 }
-            }
 
-            itemsIndexed(rows, key = { _, row -> row.key }) { i, row ->
-                when (row) {
-                    is LessonRow.Header -> RevealOnAppear(id = row.key, index = i + 1, revealed = revealed, bottomSpace = 10.dp) {
-                        SessionHeader(row.group)
-                    }
-                    is LessonRow.Block -> RevealOnAppear(id = row.key, index = i + 1, revealed = revealed) {
-                        LessonBlockView(row.block)
+                itemsIndexed(rows, key = { _, row -> row.key }) { i, row ->
+                    when (row) {
+                        is LessonRow.Header -> RevealOnAppear(id = row.key, index = i + 1, revealed = revealed, bottomSpace = 10.dp) {
+                            SessionHeader(row.group)
+                        }
+                        is LessonRow.Block -> RevealOnAppear(id = row.key, index = i + 1, revealed = revealed) {
+                            LessonBlockView(row.block)
+                        }
                     }
                 }
-            }
 
-            if (rows.isEmpty()) {
-                item(key = "empty") {
-                    RevealOnAppear(id = "empty", index = 1, revealed = revealed) {
-                        KalynoIconEmptyState(
-                            icon = "pen-line",
-                            title = "Leçon en préparation",
-                            text = "Le contenu de cette leçon apparaîtra ici dès sa publication."
-                        )
+                if (rows.isEmpty()) {
+                    item(key = "empty") {
+                        RevealOnAppear(id = "empty", index = 1, revealed = revealed) {
+                            KalynoIconEmptyState(
+                                icon = "pen-line",
+                                title = "Leçon en préparation",
+                                text = "Le contenu de cette leçon apparaîtra ici dès sa publication."
+                            )
+                        }
                     }
                 }
-            }
 
-            if (hasComplement) {
-                item(key = "complement") {
-                    RevealOnAppear(id = "complement", index = rows.size + 1, revealed = revealed) {
-                        LessonComplementCard(complement = chapter.complement.orEmpty())
+                if (hasComplement) {
+                    item(key = "complement") {
+                        RevealOnAppear(id = "complement", index = rows.size + 1, revealed = revealed) {
+                            LessonComplementCard(complement = chapter.complement.orEmpty())
+                        }
                     }
                 }
-            }
 
-            // Validation explicite en fin de lecture : tant que l'élève n'appuie pas, la leçon reste non terminée
-            if (rows.isNotEmpty() || hasComplement) {
-                item(key = "finish") {
-                    RevealOnAppear(id = "finish", index = rows.size + 2, revealed = revealed, bottomSpace = 12.dp) {
-                        LessonFinishBar(isCompleted = isCompleted, onComplete = onComplete)
+                // Validation explicite en fin de lecture : tant que l'élève n'appuie pas, la leçon reste non terminée
+                if (rows.isNotEmpty() || hasComplement) {
+                    item(key = "finish") {
+                        RevealOnAppear(id = "finish", index = rows.size + 2, revealed = revealed, bottomSpace = 12.dp) {
+                            LessonFinishBar(isCompleted = isCompleted, onComplete = onComplete)
+                        }
                     }
                 }
-            }
 
-            // Les questions ne se débloquent qu'une fois la leçon terminée
-            if (chapter.questionCount > 0 && isCompleted) {
-                item(key = "cta") {
-                    RevealOnAppear(id = "cta", index = rows.size + 3, revealed = revealed, bottomSpace = 0.dp) {
-                        KalynoPrimaryButton(
-                            label = "DÉMARRER LES ${chapter.questionCount} QUESTIONS",
-                            onClick = onStartQuestions
-                        )
+                // Les questions ne se débloquent qu'une fois la leçon terminée
+                if (chapter.questionCount > 0 && isCompleted) {
+                    item(key = "cta") {
+                        RevealOnAppear(id = "cta", index = rows.size + 3, revealed = revealed, bottomSpace = 0.dp) {
+                            KalynoPrimaryButton(
+                                label = "DÉMARRER LES ${chapter.questionCount} QUESTIONS",
+                                onClick = onStartQuestions
+                            )
+                        }
                     }
                 }
             }
+            ReportLayer(report)
         }
     }
 }

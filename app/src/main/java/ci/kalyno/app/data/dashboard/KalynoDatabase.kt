@@ -17,6 +17,8 @@ import ci.kalyno.app.data.lessons.LessonProgressDao
 import ci.kalyno.app.data.lessons.LessonProgressEntity
 import ci.kalyno.app.data.progress.AttemptDao
 import ci.kalyno.app.data.progress.DojoAttemptEntity
+import ci.kalyno.app.data.reports.ReportDao
+import ci.kalyno.app.data.reports.ReportEntity
 import ci.kalyno.app.data.srs.CardProgressEntity
 import ci.kalyno.app.data.srs.FlashcardEntity
 import ci.kalyno.app.data.srs.ReviewLogEntity
@@ -36,9 +38,10 @@ import ci.kalyno.app.data.srs.SubjectEntity
         QuoteFavoriteEntity::class,
         BadgeUnlockEntity::class,
         LessonProgressEntity::class,
-        DojoAttemptEntity::class
+        DojoAttemptEntity::class,
+        ReportEntity::class
     ],
-    version = 11,
+    version = 12,
     exportSchema = false
 )
 abstract class KalynoDatabase : RoomDatabase() {
@@ -49,6 +52,7 @@ abstract class KalynoDatabase : RoomDatabase() {
     abstract fun badgeDao(): BadgeDao
     abstract fun lessonProgressDao(): LessonProgressDao
     abstract fun attemptDao(): AttemptDao
+    abstract fun reportDao(): ReportDao
 
     companion object {
         @Volatile
@@ -240,13 +244,30 @@ abstract class KalynoDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * Signalements d'erreurs (leçon, exercice, paramètres) : file d'envoi hors ligne vers Supabase.
+         * Table neuve : aucune donnée existante n'est touchée. `syncedAt` NULL = pas encore envoyé ;
+         * les lignes ne sont jamais supprimées.
+         */
+        private val MIGRATION_11_12 = object : Migration(11, 12) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `reports` (`id` TEXT NOT NULL, `userId` TEXT NOT NULL, " +
+                        "`sourceType` TEXT NOT NULL, `sourceId` TEXT, `category` TEXT NOT NULL, " +
+                        "`description` TEXT NOT NULL, `contextLabel` TEXT, `status` TEXT NOT NULL, " +
+                        "`createdAt` INTEGER NOT NULL, `syncedAt` INTEGER, PRIMARY KEY(`id`))"
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_reports_syncedAt` ON `reports` (`syncedAt`)")
+            }
+        }
+
         fun get(context: Context): KalynoDatabase =
             instance ?: synchronized(this) {
                 instance ?: Room.databaseBuilder(
                     context.applicationContext,
                     KalynoDatabase::class.java,
                     "kalyno.db"
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11)
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12)
                     .build().also { instance = it }
             }
     }

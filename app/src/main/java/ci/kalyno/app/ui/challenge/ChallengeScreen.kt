@@ -70,6 +70,10 @@ import ci.kalyno.app.ui.quiz.QuizFeedbackPanel
 import ci.kalyno.app.ui.quiz.QuizStickyFooter
 import ci.kalyno.app.ui.theme.*
 import kotlinx.coroutines.CancellationException
+import ci.kalyno.app.ui.report.ReportFlagButton
+import ci.kalyno.app.ui.report.ReportLayer
+import ci.kalyno.app.ui.report.ReportTarget
+import ci.kalyno.app.ui.report.rememberReportLayerState
 
 @Composable
 fun ChallengeScreen(
@@ -78,6 +82,7 @@ fun ChallengeScreen(
     onExit: () -> Unit,
     onUnavailable: (() -> Unit)? = null
 ) {
+    val report = rememberReportLayerState()
     var attempt by remember { mutableStateOf(0) }
     var result by remember(levelId, attempt) { mutableStateOf<ChallengeResult?>(null) }
 
@@ -100,7 +105,7 @@ fun ChallengeScreen(
             is ChallengeResult.Loaded -> {
                 // Garde-fou : on n'affiche jamais le contenu d'un autre niveau
                 if (r.challenge.levelId == levelId && r.challenge.questions.isNotEmpty()) {
-                    ChallengeContent(r.challenge, onExit)
+                    ChallengeContent(r.challenge, onExit, onReport = report::open)
                 } else {
                     ComingSoon(levelId, onExit)
                 }
@@ -123,6 +128,7 @@ fun ChallengeScreen(
                 onSecondary = onUnavailable ?: onExit
             )
         }
+        ReportLayer(report)
     }
 }
 
@@ -189,7 +195,7 @@ private fun MessageState(
 }
 
 @Composable
-private fun ChallengeContent(challenge: Challenge, onExit: () -> Unit) {
+private fun ChallengeContent(challenge: Challenge, onExit: () -> Unit, onReport: (ReportTarget) -> Unit) {
     val total = challenge.questions.size
     var index by rememberSaveable { mutableStateOf(0) }
     // Calculatrice du Dojo, conservée pendant tout le défi
@@ -211,7 +217,8 @@ private fun ChallengeContent(challenge: Challenge, onExit: () -> Unit) {
                 total = total,
                 calculator = calculator,
                 onNext = { index += 1 },
-                onExit = onExit
+                onExit = onExit,
+                onReport = onReport
             )
         }
     }
@@ -231,7 +238,8 @@ private fun QuestionStep(
     total: Int,
     calculator: CalculatorModel,
     onNext: () -> Unit,
-    onExit: () -> Unit
+    onExit: () -> Unit,
+    onReport: (ReportTarget) -> Unit
 ) {
     val haptic = rememberHaptic()
     val shownAt = remember { SystemClock.elapsedRealtime() }
@@ -310,6 +318,20 @@ private fun QuestionStep(
             FlameProgressBar(progress = progress, modifier = Modifier.weight(1f))
             Spacer(Modifier.width(12.dp))
             Text("$done/$total", color = KalynoMuted, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.width(4.dp))
+            ReportFlagButton(
+                onClick = {
+                    onReport(
+                        ReportTarget.welcomeExercise(
+                            questionId = question.id,
+                            challengeTitle = title,
+                            position = index + 1,
+                            total = total,
+                            question = question.prompt
+                        )
+                    )
+                }
+            )
         }
 
         Column(

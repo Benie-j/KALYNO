@@ -94,6 +94,10 @@ import ci.kalyno.app.ui.theme.KalynoMuted
 import ci.kalyno.app.ui.theme.KalynoOutline
 import ci.kalyno.app.ui.theme.KalynoText
 import kotlinx.coroutines.launch
+import ci.kalyno.app.ui.report.ReportFlagButton
+import ci.kalyno.app.ui.report.ReportLayer
+import ci.kalyno.app.ui.report.ReportTarget
+import ci.kalyno.app.ui.report.rememberReportLayerState
 
 // ===========================================================================
 // SESSION DU DOJO : exercices objectifs (QCM / saisie libre), correction après validation,
@@ -116,6 +120,7 @@ fun DojoSessionScreen(
     val scope = rememberCoroutineScope()
     var calculatorOpen by remember { mutableStateOf(false) }
     var closing by remember { mutableStateOf(false) }
+    val report = rememberReportLayerState()
 
     // On attend l'écriture des notes dans Room avant de rendre la main au tableau de bord
     fun close(completed: Boolean) {
@@ -143,6 +148,18 @@ fun DojoSessionScreen(
                 dayStreak = dayStreak,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
                 calculatorSuggested = state.exercise?.calculatorSuggested == true,
+                onReport = {
+                    state.exercise?.let { ex ->
+                        report.open(
+                            ReportTarget.dojoExercise(
+                                cardId = ex.item.cardId,
+                                subjectName = ex.item.subjectName,
+                                lessonTitle = ex.lessonTitle ?: ex.item.chapterTitle,
+                                question = ex.item.front
+                            )
+                        )
+                    }
+                },
                 onClose = {
                     haptic()
                     close(false)
@@ -174,6 +191,7 @@ fun DojoSessionScreen(
                     ExercisePane(state = state, exercise = exercise, vm = vm)
                 }
             }
+            ReportLayer(report)
         }
     }
 
@@ -202,6 +220,7 @@ private fun TopBar(
     dayStreak: Int,
     modifier: Modifier = Modifier,
     calculatorSuggested: Boolean,
+    onReport: () -> Unit,
     onClose: () -> Unit,
     onCalculator: () -> Unit
 ) {
@@ -251,6 +270,8 @@ private fun TopBar(
                 fontWeight = FontWeight.ExtraBold
             )
             Spacer(Modifier.weight(1f))
+            ReportFlagButton(onClick = onReport)
+            Spacer(Modifier.width(4.dp))
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier

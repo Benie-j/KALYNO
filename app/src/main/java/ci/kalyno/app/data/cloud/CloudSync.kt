@@ -304,6 +304,9 @@ class CloudSync(context: Context) {
         pushedLessonsSignature = signature
     }
 
+    /** Jeton d'accès valide pour les autres dépôts (ex. signalements) ; null sans compte connecté. */
+    internal suspend fun validAccessToken(): String? = accessToken()
+
     /** Jeton d'accès valide : renouvelé automatiquement s'il expire dans moins d'une minute. */
     private suspend fun accessToken(): String? = tokenLock.withLock {
         val session = store.session() ?: return@withLock null

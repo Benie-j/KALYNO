@@ -40,6 +40,10 @@ import ci.kalyno.app.ui.profile.emailSupportOrSoon
 import ci.kalyno.app.ui.profile.openLinkOrSoon
 import ci.kalyno.app.ui.dojo.DojoSessionScreen
 import ci.kalyno.app.ui.progress.ProgressHistoryScreen
+import ci.kalyno.app.ui.report.ReportSheetHost
+import ci.kalyno.app.ui.report.ReportSnackbarHost
+import ci.kalyno.app.ui.report.ReportTarget
+import ci.kalyno.app.ui.report.rememberReportLayerState
 
 private data class TabItem(val icon: String, val label: String)
 
@@ -67,6 +71,7 @@ fun MainScreen(
 
     var tab by rememberSaveable { mutableStateOf(0) }
     var progressOpen by rememberSaveable { mutableStateOf(false) }
+    val reportLayer = rememberReportLayerState()
 
     // Tap sur une notification (Dojo / révisions urgentes) : on ouvre l'onglet Dojo
     val openDojo by StudyReminders.openDojoRequested
@@ -96,6 +101,7 @@ fun MainScreen(
 
         Scaffold(
             containerColor = KalynoBackground,
+            snackbarHost = { ReportSnackbarHost(reportLayer) },
             bottomBar = {
                 NavigationBar(containerColor = Color.White) {
                     TABS.forEachIndexed { index, item ->
@@ -120,6 +126,7 @@ fun MainScreen(
                 }
             }
         ) { padding ->
+            ReportSheetHost(reportLayer)
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -168,9 +175,8 @@ fun MainScreen(
                                 )
                             },
                             onReportIssue = {
-                                context.emailSupportOrSoon(
-                                    subject = "[KALYNO] Signalement bug / contenu",
-                                    body = "Décris le problème (matière, leçon, question concernée) :\n\n\n---\nClasse : $levelLabel\n$version"
+                                reportLayer.open(
+                                    ReportTarget.settings(levelLabel = levelLabel, versionLabel = version)
                                 )
                             },
                             onOpenTerms = { context.openLinkOrSoon(ProfileLinks.TERMS_URL) },

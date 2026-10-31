@@ -18,6 +18,7 @@ import ci.kalyno.app.ui.auth.KalynoAuthScreen
 import ci.kalyno.app.ui.main.MainScreen
 import ci.kalyno.app.ui.onboarding.NicknameScreen
 import ci.kalyno.app.ui.onboarding.RegistrationChoiceScreen
+import ci.kalyno.app.data.reports.ReportSyncScheduler
 
 @Composable
 fun KalynoApp() {
@@ -29,6 +30,9 @@ fun KalynoApp() {
 
     // Libellés des classes (Tle A1, Tle A2…) : Room d'abord, puis mise à jour réseau en douceur
     LaunchedEffect(Unit) { runCatching { CatalogRepository.get(context).warmUp() } }
+
+    // Signalements restés hors ligne lors d'une session précédente : on relance leur envoi
+    LaunchedEffect(Unit) { runCatching { ReportSyncScheduler.requestIfPending(context) } }
 
     val authViewModel: AuthViewModel = viewModel()
     val auth by authViewModel.state.collectAsStateWithLifecycle()
