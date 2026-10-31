@@ -37,8 +37,7 @@ fun HeroBannerCarousel(
     banners: List<ExplorerBanner>,
     chapters: List<ExplorerChapter>,
     onOpenLesson: (ExplorerChapter) -> Unit,
-    modifier: Modifier = Modifier,
-    listState: androidx.compose.foundation.lazy.LazyListState = rememberLazyListState()
+    modifier: Modifier = Modifier
 ) {
     if (banners.isEmpty()) return
     val chapterById = remember(chapters) { chapters.associateBy { it.id } }
@@ -53,6 +52,7 @@ fun HeroBannerCarousel(
         return
     }
 
+    val listState = rememberLazyListState()
     val current by remember { derivedStateOf { listState.firstVisibleItemIndex } }
 
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
