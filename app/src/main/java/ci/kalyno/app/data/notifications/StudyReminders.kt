@@ -9,6 +9,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
+import android.util.Log
 import androidx.compose.runtime.mutableStateOf
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -26,7 +27,9 @@ import ci.kalyno.app.data.dashboard.DashboardRepository
 import ci.kalyno.app.data.dashboard.MissionStatus
 import ci.kalyno.app.data.dashboard.StudentId
 import kotlinx.coroutines.CancellationException
+import java.time.Duration
 import java.time.LocalDate
+import java.time.LocalDateTime
 import java.time.LocalTime
 import java.util.concurrent.TimeUnit
 
@@ -56,16 +59,37 @@ object StudyReminders {
     internal const val QUIET_FROM_HOUR = 21
     internal const val QUIET_UNTIL_HOUR = 7
 
-    /** À appeler au lancement de l'appli : sans effet si la tâche est déjà programmée. */
+    /** Heures d'envoi (heure du téléphone) : pause de midi et sortie des cours. Modifiable ici. */
+    internal val SLOTS = listOf(LocalTime.of(12, 30), LocalTime.of(17, 30))
+
+    private const val OLD_WORK_NAME = "kalyno-study-reminders"
+    internal const val TAG = "KalynoReminders"
+
+    /** À appeler au lancement de l'appli : sans effet si les créneaux sont déjà programmés. */
     fun schedule(context: Context) {
         val app = context.applicationContext
         createChannels(app)
-        val request = PeriodicWorkRequestBuilder<StudyReminderWorker>(PERIOD_HOURS, TimeUnit.HOURS)
-            .setConstraints(Constraints.Builder().setRequiresBatteryNotLow(true).build())
-            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 10, TimeUnit.MINUTES)
-            .build()
-        WorkManager.getInstance(app)
-            .enqueueUniquePeriodicWork(WORK_NAME, ExistingPeriodicWorkPolicy.KEEP, request)
+        val manager = WorkManager.getInstance(app)
+        // L'ancienne cadence (toutes les 3 h, heure aléatoire) est remplacée par des créneaux fixes
+        manager.cancelUniqueWork(OLD_WORK_NAME)
+        SLOTS.forEach { slot ->
+            val request = PeriodicWorkRequestBuilder<StudyReminderWorker>(24, TimeUnit.HOURS)
+                .setInitialDelay(delayUntil(slot), TimeUnit.MILLISECONDS)
+                .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 10, TimeUnit.MINUTES)
+                .build()
+            manager.enqueueUniquePeriodicWork(
+                "kalyno-reminder-${slot.hour}h${slot.minute}",
+                ExistingPeriodicWorkPolicy.KEEP,
+                request
+            )
+        }
+    }
+
+    /** Millisecondes jusqu'à la prochaine occurrence de [slot] (aujourd'hui si pas encore passée, sinon demain). */
+    internal fun delayUntil(slot: LocalTime, now: LocalDateTime = LocalDateTime.now()): Long {
+        var next = now.toLocalDate().atTime(slot)
+        if (!next.isAfter(now)) next = next.plusDays(1)
+        return Duration.between(now, next).toMillis()
     }
 
     internal fun createChannels(context: Context) {
@@ -95,8 +119,8 @@ object StudyReminders {
         now.hour >= QUIET_FROM_HOUR || now.hour < QUIET_UNTIL_HOUR
 
     @SuppressLint("MissingPermission") // vérifié par canNotify() avant tout appel
-    internal fun post(context: Context, id: Int, channel: String, title: String, text: String) {
-        if (!canNotify(context)) return
+    internal fun post(context: Context, id: Int, channel: String, title: String, text: String): Boolean {
+        if (!canNotify(context)) return false
         val launch = context.packageManager.getLaunchIntentForPackage(context.packageName)
             ?.apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
@@ -117,6 +141,7 @@ object StudyReminders {
             .setAutoCancel(true)
             .build()
         NotificationManagerCompat.from(context).notify(id, notification)
+        return true
     }
 }
 
@@ -126,8 +151,20 @@ class StudyReminderWorker(context: Context, params: WorkerParameters) : Coroutin
 
     override suspend fun doWork(): Result {
         val context = applicationContext
-        val levelId = AppPrefs(context).level ?: return Result.success() // classe pas encore choisie
-        if (StudyReminders.isQuietHour()) return Result.success() // rien n'est marqué : le prochain passage notifiera
+        val levelId = AppPrefs(context).level
+        if (levelId == null) {
+            Log.i(StudyReminders.TAG, "Ignoré : classe pas encore choisie")
+            return Result.success()
+        }
+        if (StudyReminders.isQuietHour()) {
+            Log.i(StudyReminders.TAG, "Ignoré : heures de silence")
+            return Result.success() // rien n'est marqué : le prochain passage notifiera
+        }
+        if (!StudyReminders.canNotify(context)) {
+            // Autorisation refusée : inutile de calculer, et surtout ne rien marquer comme « envoyé »
+            Log.w(StudyReminders.TAG, "Ignoré : notifications non autorisées pour KALYNO")
+            return Result.success()
+        }
 
         val snapshot = try {
             DashboardRepository(context).load(levelId, StudentId.get(context))
@@ -147,7 +184,7 @@ class StudyReminderWorker(context: Context, params: WorkerParameters) : Coroutin
             manager.cancel(StudyReminders.ID_URGENT) // plus rien d'urgent : on retire l'alerte périmée
         } else if (state.getLong(KEY_URGENT_DAY, -1L) != today) {
             val topic = snapshot.urgentTopics.firstOrNull()?.label
-            StudyReminders.post(
+            val urgentSent = StudyReminders.post(
                 context = context,
                 id = StudyReminders.ID_URGENT,
                 channel = StudyReminders.CHANNEL_URGENT,
@@ -159,7 +196,9 @@ class StudyReminderWorker(context: Context, params: WorkerParameters) : Coroutin
                     append(". Quelques minutes suffisent pour la garder en tête !")
                 }
             )
-            state.edit().putLong(KEY_URGENT_DAY, today).apply()
+            // Marqué « fait » seulement si la notification est vraiment partie
+            if (urgentSent) state.edit().putLong(KEY_URGENT_DAY, today).apply()
+            Log.i(StudyReminders.TAG, "Révisions urgentes : $urgent, envoyée = $urgentSent")
         }
 
         // ----- Nouvelles cartes disponibles (mission du jour) -----
@@ -169,7 +208,7 @@ class StudyReminderWorker(context: Context, params: WorkerParameters) : Coroutin
             val alreadyKnown = state.getInt(KEY_NEW_SIGNATURE, 0) == signature
             if (!alreadyKnown && state.getLong(KEY_NEW_DAY, -1L) != today) {
                 val count = mission.items.size
-                StudyReminders.post(
+                val dojoSent = StudyReminders.post(
                     context = context,
                     id = StudyReminders.ID_DOJO,
                     channel = StudyReminders.CHANNEL_DOJO,
@@ -177,7 +216,8 @@ class StudyReminderWorker(context: Context, params: WorkerParameters) : Coroutin
                     text = (if (count == 1) "1 nouvelle carte t'attend" else "$count nouvelles cartes t'attendent") +
                         ". Lance ta mission du jour !"
                 )
-                state.edit().putLong(KEY_NEW_DAY, today).putInt(KEY_NEW_SIGNATURE, signature).apply()
+                if (dojoSent) state.edit().putLong(KEY_NEW_DAY, today).putInt(KEY_NEW_SIGNATURE, signature).apply()
+                Log.i(StudyReminders.TAG, "Nouvelles cartes : $count, envoyée = $dojoSent")
             }
         } else {
             manager.cancel(StudyReminders.ID_DOJO)
