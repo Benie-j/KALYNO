@@ -257,7 +257,7 @@ fun LessonScreen(
  * La validation est volontaire (aucune détection de scroll) et irréversible côté élève.
  */
 @Composable
-private fun LessonFinishBar(isCompleted: Boolean, onComplete: () -> Unit) {
+internal fun LessonFinishBar(isCompleted: Boolean, onComplete: () -> Unit) {
     if (isCompleted) {
         Row(
             modifier = Modifier

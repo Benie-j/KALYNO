@@ -213,7 +213,7 @@ fun DojoSessionScreen(
 // ---------------------------------------------------------------------------
 
 @Composable
-private fun TopBar(
+internal fun TopBar(
     done: Int,
     index: Int,
     total: Int,
@@ -409,7 +409,7 @@ internal fun ChoiceRow(
 // ---------------------------------------------------------------------------
 
 @Composable
-private fun DojoFeedback(exercise: DojoExercise, result: DojoResult) {
+internal fun DojoFeedback(exercise: DojoExercise, result: DojoResult) {
     val item = exercise.item
     // La bonne réponse : affichée en cas d'erreur, et toujours pour la saisie libre
     val showAnswer = !result.correct || exercise.kind == ExerciseKind.FREE_TEXT
