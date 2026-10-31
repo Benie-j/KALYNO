@@ -1,0 +1,41 @@
+diff --git a/src/App.tsx b/src/App.tsx
+index 2d39123..f83b1da 100644
+--- a/src/App.tsx
++++ b/src/App.tsx
+@@ -11,6 +11,7 @@ import CapsuleEditor, { type CapsuleEditorDraft } from "./CapsuleEditor";
+ import LevelsManager from "./LevelsManager";
+ import ThemesManager from "./ThemesManager";
+ import MotivationManager from "./MotivationManager";
++import FaqManager from "./FaqManager";
+ import SemanticSettingsManager from "./SemanticSettingsManager";
+ import { SlidersHorizontal } from "lucide-react";
+ import FirstChallengeComposer from "./FirstChallengeComposer";
+@@ -26,7 +27,7 @@ type Capsule = { id: string; chapter_id: string; title: string; body: string; mi
+ type Card = { id: string; chapter_id: string; capsule_id: string | null; kind: "flashcard" | "qcm" | "cloze"; front: string; back: string | null; choices: string[] | null; correct_index: number | null; explanation: string | null; position: number; is_high_yield: boolean };
+ type Banner = { id: string; title: string; subtitle: string | null; button_label: string | null; chapter_id: string | null; level_id: string | null; position: number; is_active: boolean };
+ 
+-type Section = "overview" | "levels" | "courses" | "banners" | "motivation" | "themes" | "firstchallenge" | "semantic";
++type Section = "overview" | "levels" | "courses" | "banners" | "motivation" | "themes" | "firstchallenge" | "semantic" | "faq";
+ const SUBJECT_ICONS = ["backpack","graduation-cap","book-open","pen-line","calculator","flask-conical","globe","brain","layers","target","lightbulb","rocket","trophy","dumbbell"];
+ // Champ facultatif rattaché à la leçon : affiché à l'élève dans un encart repliable en fin de leçon.
+ const COMPLEMENT_FIELD: FieldDef = {
+@@ -577,6 +578,7 @@ export default function App() {
+     { id: "motivation" as Section, label: "Accueil · Examens & citations", icon: Activity },
+     { id: "firstchallenge" as Section, label: "Premier défi · Onboarding", icon: Rocket },
+     { id: "semantic" as Section, label: "Évaluation · Seuils", icon: SlidersHorizontal },
++    { id: "faq" as Section, label: "Centre d’aide · FAQ", icon: CircleHelp },
+   ];
+ 
+   return (
+@@ -625,6 +627,11 @@ export default function App() {
+ 
+           {section === "semantic" && <SemanticSettingsManager busy={busy} onNotice={setNotice}/>}
+ 
++          {section === "faq" && <section className="page">
++            <div className="page-intro"><div><div className="eyebrow">AIDE DE L’APPLICATION</div><h2>Centre d’aide & FAQ</h2><p>Les questions et réponses affichées dans Profil › Centre d’aide & FAQ. Tout ce que tu écris ici arrive sur le téléphone des élèves, sans mise à jour de l’app.</p></div></div>
++            <FaqManager busy={busy} onNotice={setNotice}/>
++          </section>}
++
+           {section === "levels" && <section className="page">
+             <div className="page-intro"><div><div className="eyebrow">CATALOGUE OFFICIEL</div><h2>Classes et séries</h2><p>La liste active publiée ici est celle que l’application Android récupère depuis Supabase. Les identifiants sont conservés pour protéger les relations avec les contenus.</p></div><button className="secondary" onClick={()=>void reloadAll()}><RefreshCw size={16}/> Actualiser</button></div>
+             <LevelsManager levels={levels} busy={busy} onRefresh={reloadAll} onNotice={setNotice}/>

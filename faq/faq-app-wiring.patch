@@ -1,0 +1,178 @@
+diff --git a/app/src/main/java/ci/kalyno/app/data/dashboard/KalynoDatabase.kt b/app/src/main/java/ci/kalyno/app/data/dashboard/KalynoDatabase.kt
+index dd010fd..1dad166 100644
+--- a/app/src/main/java/ci/kalyno/app/data/dashboard/KalynoDatabase.kt
++++ b/app/src/main/java/ci/kalyno/app/data/dashboard/KalynoDatabase.kt
+@@ -13,6 +13,8 @@ import ci.kalyno.app.data.catalog.CatalogSubjectEntity
+ import ci.kalyno.app.data.badges.BadgeDao
+ import ci.kalyno.app.data.badges.BadgeUnlockEntity
+ import ci.kalyno.app.data.catalog.CatalogThemeEntity
++import ci.kalyno.app.data.faq.FaqDao
++import ci.kalyno.app.data.faq.FaqEntity
+ import ci.kalyno.app.data.lessons.LessonProgressDao
+ import ci.kalyno.app.data.lessons.LessonProgressEntity
+ import ci.kalyno.app.data.progress.AttemptDao
+@@ -39,9 +41,10 @@ import ci.kalyno.app.data.srs.SubjectEntity
+         BadgeUnlockEntity::class,
+         LessonProgressEntity::class,
+         DojoAttemptEntity::class,
+-        ReportEntity::class
++        ReportEntity::class,
++        FaqEntity::class
+     ],
+-    version = 12,
++    version = 13,
+     exportSchema = false
+ )
+ abstract class KalynoDatabase : RoomDatabase() {
+@@ -53,6 +56,7 @@ abstract class KalynoDatabase : RoomDatabase() {
+     abstract fun lessonProgressDao(): LessonProgressDao
+     abstract fun attemptDao(): AttemptDao
+     abstract fun reportDao(): ReportDao
++    abstract fun faqDao(): FaqDao
+ 
+     companion object {
+         @Volatile
+@@ -261,13 +265,27 @@ abstract class KalynoDatabase : RoomDatabase() {
+             }
+         }
+ 
++        /**
++         * Centre d'aide & FAQ : miroir local de la table Supabase `faq_items` (gérée par l'admin).
++         * Table neuve : aucune donnée existante n'est touchée. Remplie à la première synchronisation.
++         */
++        private val MIGRATION_12_13 = object : Migration(12, 13) {
++            override fun migrate(db: SupportSQLiteDatabase) {
++                db.execSQL(
++                    "CREATE TABLE IF NOT EXISTS `faq_items` (`id` TEXT NOT NULL, `category` TEXT NOT NULL, " +
++                        "`question` TEXT NOT NULL, `answer` TEXT NOT NULL, `orderIndex` INTEGER NOT NULL, " +
++                        "`updatedAt` INTEGER NOT NULL, PRIMARY KEY(`id`))"
++                )
++            }
++        }
++
+         fun get(context: Context): KalynoDatabase =
+             instance ?: synchronized(this) {
+                 instance ?: Room.databaseBuilder(
+                     context.applicationContext,
+                     KalynoDatabase::class.java,
+                     "kalyno.db"
+-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12)
++                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13)
+                     .build().also { instance = it }
+             }
+     }
+diff --git a/app/src/main/java/ci/kalyno/app/ui/KalynoApp.kt b/app/src/main/java/ci/kalyno/app/ui/KalynoApp.kt
+index 07c9244..8c6599e 100644
+--- a/app/src/main/java/ci/kalyno/app/ui/KalynoApp.kt
++++ b/app/src/main/java/ci/kalyno/app/ui/KalynoApp.kt
+@@ -10,6 +10,7 @@ import ci.kalyno.app.data.AppPrefs
+ import ci.kalyno.app.data.SupabaseChallengeRepository
+ import ci.kalyno.app.data.auth.AuthStore
+ import ci.kalyno.app.data.catalog.CatalogRepository
++import ci.kalyno.app.data.faq.FaqRepository
+ import ci.kalyno.app.data.auth.findActivity
+ import ci.kalyno.app.ui.auth.AuthViewModel
+ import ci.kalyno.app.ui.challenge.ChallengeScreen
+@@ -34,6 +35,9 @@ fun KalynoApp() {
+     // Signalements restés hors ligne lors d'une session précédente : on relance leur envoi
+     LaunchedEffect(Unit) { runCatching { ReportSyncScheduler.requestIfPending(context) } }
+ 
++    // Centre d'aide : mise à jour de la FAQ en arrière-plan (Room reste lisible hors ligne, un échec est sans effet)
++    LaunchedEffect(Unit) { runCatching { FaqRepository.get(context).refresh() } }
++
+     val authViewModel: AuthViewModel = viewModel()
+     val auth by authViewModel.state.collectAsStateWithLifecycle()
+ 
+diff --git a/app/src/main/java/ci/kalyno/app/ui/main/MainScreen.kt b/app/src/main/java/ci/kalyno/app/ui/main/MainScreen.kt
+index a520991..6b03321 100644
+--- a/app/src/main/java/ci/kalyno/app/ui/main/MainScreen.kt
++++ b/app/src/main/java/ci/kalyno/app/ui/main/MainScreen.kt
+@@ -32,6 +32,7 @@ import ci.kalyno.app.ui.theme.*
+ import ci.kalyno.app.ui.icons.KalynoSvgIcon
+ import androidx.lifecycle.viewmodel.compose.viewModel
+ import ci.kalyno.app.ui.dojo.DojoScreen
++import ci.kalyno.app.ui.faq.FaqScreen
+ import ci.kalyno.app.ui.explorer.ExplorerScreen
+ import ci.kalyno.app.ui.profile.ProfileLinks
+ import ci.kalyno.app.ui.profile.ProfileScreen
+@@ -40,6 +41,7 @@ import ci.kalyno.app.ui.profile.emailSupportOrSoon
+ import ci.kalyno.app.ui.profile.openLinkOrSoon
+ import ci.kalyno.app.ui.dojo.DojoSessionScreen
+ import ci.kalyno.app.ui.progress.ProgressHistoryScreen
++import ci.kalyno.app.ui.report.ReportLayer
+ import ci.kalyno.app.ui.report.ReportSheetHost
+ import ci.kalyno.app.ui.report.ReportSnackbarHost
+ import ci.kalyno.app.ui.report.ReportTarget
+@@ -71,8 +73,23 @@ fun MainScreen(
+ 
+     var tab by rememberSaveable { mutableStateOf(0) }
+     var progressOpen by rememberSaveable { mutableStateOf(false) }
++    var faqOpen by rememberSaveable { mutableStateOf(false) }
+     val reportLayer = rememberReportLayerState()
+ 
++    // Contact et signalement : mêmes actions depuis le Profil et depuis le Centre d'aide
++    val context = LocalContext.current
++    val levelLabel = Levels.label(levelId)
++    val version = context.appVersionLabel()
++    val contactSupport: () -> Unit = {
++        context.emailSupportOrSoon(
++            subject = "[KALYNO] Question",
++            body = "\n\n---\nClasse : $levelLabel\n$version"
++        )
++    }
++    val reportIssue: () -> Unit = {
++        reportLayer.open(ReportTarget.settings(levelLabel = levelLabel, versionLabel = version))
++    }
++
+     // Tap sur une notification (Dojo / révisions urgentes) : on ouvre l'onglet Dojo
+     val openDojo by StudyReminders.openDojoRequested
+     LaunchedEffect(openDojo) {
+@@ -96,6 +113,16 @@ fun MainScreen(
+             retentionScore = state.retentionScore,
+             onBack = { progressOpen = false }
+         )
++    } else if (faqOpen) {
++        BackHandler { faqOpen = false }
++        Box(Modifier.fillMaxSize()) {
++            FaqScreen(
++                onBack = { faqOpen = false },
++                onContactSupport = contactSupport,
++                onReportIssue = reportIssue
++            )
++            ReportLayer(reportLayer)
++        }
+     } else {
+         BackHandler(enabled = tab != 0) { tab = 0 }
+ 
+@@ -155,9 +182,6 @@ fun MainScreen(
+                         onStartChapter = viewModel::startCustomSession
+                     )
+                     else -> {
+-                        val context = LocalContext.current
+-                        val levelLabel = Levels.label(levelId)
+-                        val version = context.appVersionLabel()
+                         ProfileScreen(
+                             levelId = levelId,
+                             nickname = nickname,
+@@ -167,18 +191,9 @@ fun MainScreen(
+                             onChangeLevel = onChangeLevel,
+                             onLoginClick = onLoginClick,
+                             onLogoutClick = onLogoutClick,
+-                            onOpenHelp = { context.openLinkOrSoon(ProfileLinks.HELP_URL) },
+-                            onContactSupport = {
+-                                context.emailSupportOrSoon(
+-                                    subject = "[KALYNO] Question",
+-                                    body = "\n\n---\nClasse : $levelLabel\n$version"
+-                                )
+-                            },
+-                            onReportIssue = {
+-                                reportLayer.open(
+-                                    ReportTarget.settings(levelLabel = levelLabel, versionLabel = version)
+-                                )
+-                            },
++                            onOpenHelp = { faqOpen = true },
++                            onContactSupport = contactSupport,
++                            onReportIssue = reportIssue,
+                             onOpenTerms = { context.openLinkOrSoon(ProfileLinks.TERMS_URL) },
+                             onOpenPrivacy = { context.openLinkOrSoon(ProfileLinks.PRIVACY_URL) }
+                         )
