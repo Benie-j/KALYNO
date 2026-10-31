@@ -99,7 +99,8 @@ dependencies {
 
     debugImplementation("androidx.compose.ui:ui-tooling")
     testImplementation("junit:junit:4.13.2")
-}
+
 
 implementation(platform("com.google.firebase:firebase-bom:35.1.0"))
 implementation("com.google.firebase:firebase-messaging")
+}
