@@ -70,7 +70,8 @@ fun AccueilScreen(
     onRetry: () -> Unit,
     onResumeLastLesson: (LastLessonUi) -> Unit,
     onShuffleQuote: () -> Unit = {},
-    onToggleFavoriteQuote: (DailyQuote) -> Unit = {}
+    onToggleFavoriteQuote: (DailyQuote) -> Unit = {},
+    onOpenProgress: () -> Unit = {}
 ) {
     BoxWithConstraints(
         modifier = Modifier
@@ -162,6 +163,7 @@ fun AccueilScreen(
                                     masteredNotions = state.masteredNotions,
                                     urgentTopics = state.urgentTopics,
                                     loading = state.loading,
+                                    onOpenDetail = onOpenProgress,
                                     modifier = slot
                                 )
                             }

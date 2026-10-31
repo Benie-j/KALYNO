@@ -15,6 +15,8 @@ import ci.kalyno.app.data.badges.BadgeUnlockEntity
 import ci.kalyno.app.data.catalog.CatalogThemeEntity
 import ci.kalyno.app.data.lessons.LessonProgressDao
 import ci.kalyno.app.data.lessons.LessonProgressEntity
+import ci.kalyno.app.data.progress.AttemptDao
+import ci.kalyno.app.data.progress.DojoAttemptEntity
 import ci.kalyno.app.data.srs.CardProgressEntity
 import ci.kalyno.app.data.srs.FlashcardEntity
 import ci.kalyno.app.data.srs.ReviewLogEntity
@@ -33,9 +35,10 @@ import ci.kalyno.app.data.srs.SubjectEntity
         CatalogLessonEntity::class,
         QuoteFavoriteEntity::class,
         BadgeUnlockEntity::class,
-        LessonProgressEntity::class
+        LessonProgressEntity::class,
+        DojoAttemptEntity::class
     ],
-    version = 10,
+    version = 11,
     exportSchema = false
 )
 abstract class KalynoDatabase : RoomDatabase() {
@@ -45,6 +48,7 @@ abstract class KalynoDatabase : RoomDatabase() {
     abstract fun quoteFavoriteDao(): QuoteFavoriteDao
     abstract fun badgeDao(): BadgeDao
     abstract fun lessonProgressDao(): LessonProgressDao
+    abstract fun attemptDao(): AttemptDao
 
     companion object {
         @Volatile
@@ -200,13 +204,49 @@ abstract class KalynoDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * Historique des tentatives du Dojo (page « Ma progression »). Les anciennes révisions du journal
+         * `review_log` sont reprises : date, note, question, réponse attendue, leçon et discipline. Leur réponse
+         * saisie et leur rang de tentative n'ont jamais été conservés (NULL et 0, `isLegacy` = 1).
+         * Une ligne OUBLIE est un échec ; les trois autres notes sont des succès.
+         */
+        private val MIGRATION_10_11 = object : Migration(10, 11) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `dojo_attempts` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`studentId` TEXT NOT NULL, `flashcardId` TEXT NOT NULL, `attemptedAt` INTEGER NOT NULL, " +
+                        "`isSuccess` INTEGER NOT NULL, `attemptNumber` INTEGER NOT NULL, `rating` TEXT NOT NULL, " +
+                        "`kind` TEXT NOT NULL, `question` TEXT NOT NULL, `studentAnswer` TEXT, " +
+                        "`referenceAnswer` TEXT NOT NULL, `lessonTitle` TEXT NOT NULL, `subjectName` TEXT NOT NULL, " +
+                        "`isLegacy` INTEGER NOT NULL)"
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_dojo_attempts_studentId_attemptedAt` ON `dojo_attempts` (`studentId`, `attemptedAt`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_dojo_attempts_studentId_flashcardId` ON `dojo_attempts` (`studentId`, `flashcardId`)")
+                db.execSQL(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS `index_dojo_attempts_studentId_flashcardId_attemptedAt` " +
+                        "ON `dojo_attempts` (`studentId`, `flashcardId`, `attemptedAt`)"
+                )
+                db.execSQL(
+                    "INSERT OR IGNORE INTO dojo_attempts (studentId, flashcardId, attemptedAt, isSuccess, attemptNumber, " +
+                        "rating, kind, question, studentAnswer, referenceAnswer, lessonTitle, subjectName, isLegacy) " +
+                        "SELECT r.studentId, r.flashcardId, r.reviewedAt, CASE WHEN r.rating = 'OUBLIE' THEN 0 ELSE 1 END, " +
+                        "0, r.rating, COALESCE(f.kind, 'FREE_TEXT'), f.question, NULL, " +
+                        "COALESCE(NULLIF(f.adminReference, ''), f.reponse), " +
+                        "COALESCE((SELECT l.title FROM catalog_lessons l WHERE l.id = f.lessonId), f.chapitre), " +
+                        "COALESCE(s.name, ''), 1 " +
+                        "FROM review_log r INNER JOIN flashcards f ON f.id = r.flashcardId " +
+                        "LEFT JOIN subjects s ON s.id = f.subjectId"
+                )
+            }
+        }
+
         fun get(context: Context): KalynoDatabase =
             instance ?: synchronized(this) {
                 instance ?: Room.databaseBuilder(
                     context.applicationContext,
                     KalynoDatabase::class.java,
                     "kalyno.db"
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10)
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11)
                     .build().also { instance = it }
             }
     }

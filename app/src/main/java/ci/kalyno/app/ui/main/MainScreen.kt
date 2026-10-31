@@ -39,6 +39,7 @@ import ci.kalyno.app.ui.profile.appVersionLabel
 import ci.kalyno.app.ui.profile.emailSupportOrSoon
 import ci.kalyno.app.ui.profile.openLinkOrSoon
 import ci.kalyno.app.ui.dojo.DojoSessionScreen
+import ci.kalyno.app.ui.progress.ProgressHistoryScreen
 
 private data class TabItem(val icon: String, val label: String)
 
@@ -65,6 +66,7 @@ fun MainScreen(
     LaunchedEffect(levelId, nickname) { viewModel.load(levelId, nickname) }
 
     var tab by rememberSaveable { mutableStateOf(0) }
+    var progressOpen by rememberSaveable { mutableStateOf(false) }
 
     // Tap sur une notification (Dojo / révisions urgentes) : on ouvre l'onglet Dojo
     val openDojo by StudyReminders.openDojoRequested
@@ -82,6 +84,12 @@ fun MainScreen(
             session = session,
             levelId = levelId,
             onClose = { completed -> viewModel.closeSession(completed) }
+        )
+    } else if (progressOpen) {
+        BackHandler { progressOpen = false }
+        ProgressHistoryScreen(
+            retentionScore = state.retentionScore,
+            onBack = { progressOpen = false }
         )
     } else {
         BackHandler(enabled = tab != 0) { tab = 0 }
@@ -125,7 +133,8 @@ fun MainScreen(
                         onRetry = viewModel::retry,
                         onResumeLastLesson = { tab = 2 }, // ouvre l'onglet Explorer
                         onShuffleQuote = viewModel::shuffleQuote,
-                        onToggleFavoriteQuote = viewModel::toggleFavorite
+                        onToggleFavoriteQuote = viewModel::toggleFavorite,
+                        onOpenProgress = { progressOpen = true }
                     )
                     1 -> DojoScreen(
                         levelId = levelId,

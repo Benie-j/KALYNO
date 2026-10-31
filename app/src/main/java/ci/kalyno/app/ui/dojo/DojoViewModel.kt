@@ -38,6 +38,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import ci.kalyno.app.data.dashboard.KalynoDatabase
+import ci.kalyno.app.data.progress.DojoAttemptEntity
 
 /** Un exercice prêt à jouer : tout vient de l'admin (Room / Supabase), rien n'est écrit en dur. */
 data class DojoExercise(
@@ -117,6 +119,7 @@ class DojoViewModel(app: Application) : AndroidViewModel(app) {
     private val repository = DashboardRepository(app)
     private val studentId = StudentId.get(app)
     private val lessonProgress = LessonProgressRepository.get(app)
+    private val attempts = KalynoDatabase.get(app).attemptDao()
 
     /** Moteur ONNX + seuils de l'admin : le ViewModel ne manipule ni ONNX ni Supabase directement. */
     private val semanticEvaluator = SemanticEvaluator(
@@ -407,6 +410,7 @@ class DojoViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun finish(exercise: DojoExercise, verdict: Verdict, semantic: EvaluationResult?) {
+        val answered = _state.value // ce que l'élève a saisi ou coché, avant que l'état ne change
         val message = if (verdict.correct) DojoMessages.congrats() else DojoMessages.encourage()
         _state.update {
             it.copy(
@@ -422,13 +426,51 @@ class DojoViewModel(app: Application) : AndroidViewModel(app) {
                 correctCount = it.correctCount + if (verdict.correct) 1 else 0
             )
         }
-        persist(exercise.item.cardId, verdict.rating)
+        persist(exercise.item.cardId, verdict.rating, attemptFor(exercise, answered, verdict))
+    }
+
+    /** Copie ce que l'élève a vu et répondu (question, réponse saisie, réponse attendue, leçon, discipline) pour l'historique. */
+    private fun attemptFor(exercise: DojoExercise, answered: DojoUiState, verdict: Verdict): DojoAttemptEntity {
+        val item = exercise.item
+        val free = exercise.kind == ExerciseKind.FREE_TEXT
+        val given = if (free) {
+            answered.typed.trim()
+        } else {
+            answered.selected.sorted().mapNotNull { item.choices.getOrNull(it) }.joinToString(" ; ")
+        }
+        val expected = if (free) {
+            exercise.reference.split('|').map { it.trim() }.filter { it.isNotEmpty() }.joinToString(" / ")
+        } else {
+            exercise.correctIndices.sorted().mapNotNull { item.choices.getOrNull(it) }.joinToString(" ; ")
+        }
+        return DojoAttemptEntity(
+            studentId = studentId,
+            flashcardId = item.cardId,
+            attemptedAt = System.currentTimeMillis(),
+            isSuccess = verdict.correct,
+            attemptNumber = 1, // recalculé par AttemptDao.record selon les échecs précédents
+            rating = verdict.rating,
+            kind = exercise.kind.name,
+            question = item.front,
+            studentAnswer = given.ifBlank { null },
+            referenceAnswer = expected.ifBlank { item.answer },
+            lessonTitle = exercise.lessonTitle ?: item.chapterTitle,
+            subjectName = item.subjectName
+        )
     }
 
     /** SrsEngine (FSRS) recalcule stabilité, difficulté et échéance ; le résultat est écrit dans Room. */
-    private fun persist(cardId: String, rating: ReviewRating) {
+    private fun persist(cardId: String, rating: ReviewRating, attempt: DojoAttemptEntity? = null) {
         lastWrite = viewModelScope.launch {
             writeLock.withLock {
+                // Historique de « Ma progression » : une panne ici ne doit jamais empêcher la note FSRS
+                try {
+                    attempt?.let { attempts.record(it) }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    // tentative non enregistrée : la session continue
+                }
                 try {
                     val days = repository.rate(studentId, cardId, rating, levelId, latencyMs = lastLatencyMs)
                     _state.update { st ->

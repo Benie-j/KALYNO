@@ -250,20 +250,19 @@ internal fun ProgressModule(
     masteredNotions: List<MasteredNotion> = emptyList(),
     urgentTopics: List<UrgentTopic>,
     loading: Boolean,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onOpenDetail: () -> Unit = {}
 ) {
     val haptic = LocalHapticFeedback.current
-    var detailOpen by rememberSaveable { mutableStateOf(false) }
     val hasData = masteredCount != null || retentionScore != null
 
     KalynoCard(
         modifier = modifier,
-        onClick = if (hasData) {
-            {
-                haptic.performHapticFeedback(HapticFeedbackType.ContextClick)
-                detailOpen = true
-            }
-        } else null
+        // La carte ouvre toujours la page « Ma progression » (historique complet), même sans statistiques
+        onClick = {
+            haptic.performHapticFeedback(HapticFeedbackType.ContextClick)
+            onOpenDetail()
+        }
     ) {
         ModuleHeader(icon = "target", title = "Ma progression")
         Spacer(Modifier.height(14.dp))
@@ -307,16 +306,6 @@ internal fun ProgressModule(
                 KalynoSvgIcon(name = "chevron-right", size = 14.dp, tint = KalynoBlue)
             }
         }
-    }
-
-    if (detailOpen) {
-        ProgressDetailSheet(
-            masteredCount = masteredCount,
-            retentionScore = retentionScore,
-            masteredNotions = masteredNotions,
-            urgentTopics = urgentTopics,
-            onDismiss = { detailOpen = false }
-        )
     }
 }
 
