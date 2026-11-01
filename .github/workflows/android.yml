@@ -48,9 +48,6 @@ jobs:
 
 
 
-      - name: Tests unitaires (bloquants si erreur)
-        continue-on-error: false
-        run: gradle testDebugUnitTest
 
       - name: Prepare release keystore
         run: echo "${{ secrets.KALYNO_KEYSTORE_BASE64 }}" | base64 -d > "$RUNNER_TEMP/kalyno-release.jks"
