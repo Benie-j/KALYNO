@@ -40,6 +40,14 @@ jobs:
 
       
 
+      - name: Fichier Firebase (secret)
+        env:
+          GS_JSON: ${{ secrets.GOOGLE_SERVICES_JSON_B64 }}
+        run: |
+          if [ -n "$GS_JSON" ]; then echo "$GS_JSON" | base64 -d > app/google-services.json; fi
+
+
+
       - name: Tests unitaires (bloquants si erreur)
         continue-on-error: false
         run: gradle testDebugUnitTest
