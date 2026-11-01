@@ -7,3 +7,5 @@ local.properties
 *.keystore
 *.rej
 *.orig
+
+app/google-services.json
