@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import ci.kalyno.app.data.AppPrefs
+import ci.kalyno.app.data.ContentGate
 import ci.kalyno.app.data.ExplorerBanner
 import ci.kalyno.app.data.LearningCapsule
 import ci.kalyno.app.data.LearningCard
@@ -185,6 +186,7 @@ class ExplorerViewModel(app: Application) : AndroidViewModel(app) {
 
     private val remote = SupabaseLearningRepository()
     private val cache = LearningContentCache(app)
+    private val gate = ContentGate(app)
     private val catalog = CatalogRepository.get(app)
     private val dao = KalynoDatabase.get(app).dashboardDao()
     private val srs = KalynoDatabase.get(app).srsDao()
@@ -366,11 +368,12 @@ class ExplorerViewModel(app: Application) : AndroidViewModel(app) {
 
             // 2) Réseau : source de vérité (synchronisée avec l'admin)
             try {
-                val subjects = remote.loadPublishedContent(level)
+                // Contenu : téléchargé seulement si l'admin a modifié quelque chose (sinon une petite requête)
+                val loaded = gate.load(level)
+                val subjects = loaded.subjects
                 val banners = remote.loadBanners(level)
-                withContext(Dispatchers.IO) {
-                    cache.write(level, subjects)
-                    runCatching { catalog.storeTree(level, subjects) }
+                if (loaded.changed) {
+                    withContext(Dispatchers.IO) { runCatching { catalog.storeTree(level, subjects) } }
                 }
                 val chapters = withContext(Dispatchers.IO) { toChapters(subjects) }
                 _state.update {

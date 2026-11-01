@@ -6,6 +6,7 @@ import ci.kalyno.app.data.LearningCard
 import ci.kalyno.app.data.LearningChapter
 import ci.kalyno.app.data.LearningSubject
 import ci.kalyno.app.data.AppPrefs
+import ci.kalyno.app.data.ContentGate
 import ci.kalyno.app.data.SupabaseLearningRepository
 import ci.kalyno.app.data.cloud.CloudSync
 import ci.kalyno.app.data.cloud.CloudSyncScheduler
@@ -31,6 +32,7 @@ class DashboardRepository(context: Context) {
     private val srs = db.srsDao()
     private val dao = db.dashboardDao()
     private val remote = SupabaseLearningRepository()
+    private val gate = ContentGate(context)
     private val cloud = CloudSync(context)
     private val exams = ExamSchedule(context)
     private val prefs = AppPrefs(context)
@@ -68,9 +70,16 @@ class DashboardRepository(context: Context) {
         var content: List<LearningSubject>? = null
         var coefficients: Map<String, Float> = emptyMap()
         try {
-            val loaded = remote.loadPublishedContent(levelId)
-            coefficients = fetchCoefficients(levelId)
-            sync(levelId, loaded, coefficients)
+            val result = gate.load(levelId)
+            val loaded = result.subjects
+            if (result.changed || syncedLevels.add(levelId)) {
+                // Contenu modifié, ou premier chargement de cette session : mise à jour de la base locale
+                coefficients = fetchCoefficients(levelId)
+                sync(levelId, loaded, coefficients)
+            } else {
+                // Rien n'a changé : les coefficients déjà enregistrés restent valables
+                coefficients = dao.subjectsForLevel(levelId).associate { it.id to it.coefficient }
+            }
             content = loaded
         } catch (e: CancellationException) {
             throw e
@@ -481,3 +490,6 @@ class DashboardRepository(context: Context) {
         const val EXPERT_REPETITIONS = 8
     }
 }
+
+/** Classes déjà synchronisées vers Room depuis le lancement de l'appli (évite de refaire ce travail à chaque chargement). */
+private val syncedLevels: MutableSet<String> = java.util.Collections.synchronizedSet(HashSet())

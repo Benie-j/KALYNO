@@ -160,6 +160,18 @@ class SupabaseLearningRepository {
             }
         }
 
+    /** Numéro de version du contenu publié (augmenté par la base à chaque modification de l'admin) ; null si indisponible. */
+    suspend fun loadContentVersion(): Long? = withContext(Dispatchers.IO) {
+        try {
+            val rows = getArray("content_meta?select=version&id=eq.1")
+            if (rows.length() == 0) null else rows.getJSONObject(0).optLong("version", -1L).takeIf { it >= 0L }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            null
+        }
+    }
+
     /** Toutes les annonces « à la une » actives pour cette classe, dans l'ordre de l'admin (10 au maximum). */
     suspend fun loadBanners(levelId: String): List<ExplorerBanner> = withContext(Dispatchers.IO) {
         try {

@@ -80,6 +80,13 @@ class CloudSync(context: Context) {
         val token = accessToken() ?: return@withContext
         val userId = store.userId() ?: return@withContext
 
+        // Une seule fois après ce correctif : on renvoie toute la progression locale
+        val flags = appContext.getSharedPreferences("kalyno_cloud_flags", Context.MODE_PRIVATE)
+        if (!flags.getBoolean(FULL_RESEND_FLAG, false)) {
+            store.setLastPushAt(0L)
+            store.setLastLogPushId(0L)
+        }
+
         var firstError: Exception? = null
         suspend fun step(name: String, block: suspend () -> Unit) {
             try {
@@ -101,6 +108,7 @@ class CloudSync(context: Context) {
 
         val error = firstError
         if (error != null) throw error
+        flags.edit().putBoolean(FULL_RESEND_FLAG, true).apply()
     }
 
     // ------------------------------------------------------------------ Cartes apprises
@@ -205,20 +213,47 @@ class CloudSync(context: Context) {
         return o
     }
 
+    private fun sendCards(rows: List<CardProgressEntity>, userId: String, token: String, extended: Boolean) {
+        val body = JSONArray()
+        rows.forEach { body.put(cardJson(it, userId, extended)) }
+        SupabaseRest.request("POST", "student_card_progress", token, body.toString(), UPSERT)
+    }
+
+    /** Erreur « données refusées » (400, 409, 422) : propre à une carte, contrairement à un réseau coupé ou à un refus d'accès. */
+    private fun isRejectedData(e: IOException): Boolean {
+        val m = e.message.orEmpty()
+        return m.startsWith("Supabase HTTP 400") || m.startsWith("Supabase HTTP 409") || m.startsWith("Supabase HTTP 422")
+    }
+
+    /**
+     * Envoie un lot de cartes. Si le serveur refuse le lot (ex. une carte supprimée du catalogue), on renvoie les
+     * cartes une par une : seule la carte fautive est ignorée (et notée dans les logs), les autres sont sauvegardées.
+     * Avant, une seule carte refusée bloquait toute la sauvegarde, à chaque synchronisation.
+     */
     private fun postCards(rows: List<CardProgressEntity>, userId: String, token: String) {
-        fun send(extended: Boolean) {
-            val body = JSONArray()
-            rows.forEach { body.put(cardJson(it, userId, extended)) }
-            SupabaseRest.request("POST", "student_card_progress", token, body.toString(), UPSERT)
-        }
         try {
-            send(extendedCardColumns)
+            sendCards(rows, userId, token, extendedCardColumns)
         } catch (e: IOException) {
-            if (extendedCardColumns && isMissingSchema(e)) {
-                Log.w(TAG, "Colonnes FSRS étendues absentes côté Supabase : envoi au format réduit")
-                extendedCardColumns = false
-                send(false)
-            } else throw e
+            when {
+                extendedCardColumns && isMissingSchema(e) -> {
+                    Log.w(TAG, "Colonnes FSRS étendues absentes côté Supabase : envoi au format réduit")
+                    extendedCardColumns = false
+                    postCards(rows, userId, token)
+                }
+                rows.size > 1 && isRejectedData(e) -> {
+                    Log.w(TAG, "Lot refusé (${e.message?.take(160)}) : envoi carte par carte")
+                    rows.forEach { row ->
+                        try {
+                            sendCards(listOf(row), userId, token, extendedCardColumns)
+                        } catch (single: IOException) {
+                            if (isRejectedData(single)) {
+                                Log.w(TAG, "Carte ${row.flashcardId} ignorée : ${single.message?.take(160)}")
+                            } else throw single
+                        }
+                    }
+                }
+                else -> throw e
+            }
         }
     }
 
@@ -451,6 +486,7 @@ class CloudSync(context: Context) {
         var extendedLogColumns = true
 
         const val TAG = "KalynoCloud"
+        const val FULL_RESEND_FLAG = "full_resend_v2_done"
         const val UPSERT = "resolution=merge-duplicates,return=minimal"
         const val IGNORE_DUPLICATES = "resolution=ignore-duplicates,return=minimal"
         val MISSING_SCHEMA_MARKERS = listOf("PGRST204", "PGRST205", "42703", "42P01", "HTTP 404")
