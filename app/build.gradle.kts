@@ -4,7 +4,6 @@ plugins {
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
 
-id("com.google.gms.google-services")
 }
 
 // Firebase (notifications push) : activé seulement si google-services.json est présent dans app/,
