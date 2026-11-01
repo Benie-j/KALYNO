@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Icône de la barre d'état : une seule couleur, Android la teinte lui-même. Le livre est recadré pour remplir l'espace. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="64"
+    android:viewportHeight="64">
+    <group
+        android:translateX="-22"
+        android:translateY="-20.7">
+        <path android:fillColor="#FFFFFF" android:pathData="M25,31 C35,28 44,31 53,36.4 L53,77.4 C44,72 35,69 25,73 Z"/>
+        <path android:fillColor="#FFFFFF" android:pathData="M83,31 C73,28 64,31 55,36.4 L55,77.4 C64,72 73,69 83,73 Z"/>
+    </group>
+</vector>

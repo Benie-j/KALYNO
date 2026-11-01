@@ -32,6 +32,7 @@ import ci.kalyno.app.ui.theme.*
 import ci.kalyno.app.ui.icons.KalynoSvgIcon
 import androidx.lifecycle.viewmodel.compose.viewModel
 import ci.kalyno.app.ui.dojo.DojoScreen
+import ci.kalyno.app.ui.faq.FaqScreen
 import ci.kalyno.app.ui.explorer.ExplorerScreen
 import ci.kalyno.app.ui.profile.ProfileLinks
 import ci.kalyno.app.ui.profile.ProfileScreen
@@ -74,12 +75,26 @@ fun MainScreen(
     var tab by rememberSaveable { mutableStateOf(0) }
     var progressOpen by rememberSaveable { mutableStateOf(false) }
     var myReportsOpen by rememberSaveable { mutableStateOf(false) }
+    var faqOpen by rememberSaveable { mutableStateOf(false) }
     val appContext = LocalContext.current
     val reportRepository = remember { ReportRepository.get(appContext) }
     val unreadReplies by reportRepository.observeUnreadReplies().collectAsStateWithLifecycle(initialValue = 0)
     // Réponses de l'équipe aux signalements : lues à l'ouverture (silencieux hors ligne ou sans compte)
     LaunchedEffect(signedIn) { if (signedIn) runCatching { reportRepository.refreshFromServer() } }
     val reportLayer = rememberReportLayerState()
+
+    // Contact et signalement : mêmes actions depuis le Profil et depuis le Centre d'aide
+    val levelLabel = Levels.label(levelId)
+    val version = appContext.appVersionLabel()
+    val contactSupport: () -> Unit = {
+        appContext.emailSupportOrSoon(
+            subject = "[KALYNO] Question",
+            body = "\n\n---\nClasse : $levelLabel\n$version"
+        )
+    }
+    val reportIssue: () -> Unit = {
+        reportLayer.open(ReportTarget.settings(levelLabel = levelLabel, versionLabel = version))
+    }
 
     // Tap sur une notification (Dojo / révisions urgentes) : on ouvre l'onglet Dojo
     val openDojo by StudyReminders.openDojoRequested
@@ -101,6 +116,17 @@ fun MainScreen(
     } else if (myReportsOpen) {
         BackHandler { myReportsOpen = false }
         MyReportsScreen(onBack = { myReportsOpen = false })
+    } else if (faqOpen) {
+        BackHandler { faqOpen = false }
+        Box(Modifier.fillMaxSize()) {
+            FaqScreen(
+                onBack = { faqOpen = false },
+                onContactSupport = contactSupport,
+                onReportIssue = reportIssue
+            )
+            ReportSheetHost(reportLayer)
+            ReportSnackbarHost(reportLayer, Modifier.align(Alignment.BottomCenter))
+        }
     } else if (progressOpen) {
         BackHandler { progressOpen = false }
         ProgressHistoryScreen(
@@ -167,8 +193,6 @@ fun MainScreen(
                     )
                     else -> {
                         val context = LocalContext.current
-                        val levelLabel = Levels.label(levelId)
-                        val version = context.appVersionLabel()
                         ProfileScreen(
                             levelId = levelId,
                             nickname = nickname,
@@ -178,18 +202,9 @@ fun MainScreen(
                             onChangeLevel = onChangeLevel,
                             onLoginClick = onLoginClick,
                             onLogoutClick = onLogoutClick,
-                            onOpenHelp = { context.openLinkOrSoon(ProfileLinks.HELP_URL) },
-                            onContactSupport = {
-                                context.emailSupportOrSoon(
-                                    subject = "[KALYNO] Question",
-                                    body = "\n\n---\nClasse : $levelLabel\n$version"
-                                )
-                            },
-                            onReportIssue = {
-                                reportLayer.open(
-                                    ReportTarget.settings(levelLabel = levelLabel, versionLabel = version)
-                                )
-                            },
+                            onOpenHelp = { faqOpen = true },
+                            onContactSupport = contactSupport,
+                            onReportIssue = reportIssue,
                             onOpenMyReports = { myReportsOpen = true },
                             unreadReplies = unreadReplies,
                             onOpenTerms = { context.openLinkOrSoon(ProfileLinks.TERMS_URL) },

@@ -10,6 +10,7 @@ import ci.kalyno.app.data.AppPrefs
 import ci.kalyno.app.data.SupabaseChallengeRepository
 import ci.kalyno.app.data.auth.AuthStore
 import ci.kalyno.app.data.catalog.CatalogRepository
+import ci.kalyno.app.data.faq.FaqRepository
 import ci.kalyno.app.data.auth.findActivity
 import ci.kalyno.app.ui.auth.AuthViewModel
 import ci.kalyno.app.ui.challenge.ChallengeScreen
@@ -33,6 +34,9 @@ fun KalynoApp() {
 
     // Signalements restés hors ligne lors d'une session précédente : on relance leur envoi
     LaunchedEffect(Unit) { runCatching { ReportSyncScheduler.requestIfPending(context) } }
+
+    // Centre d'aide : mise à jour de la FAQ en arrière-plan (Room reste lisible hors ligne, un échec est sans effet)
+    LaunchedEffect(Unit) { runCatching { FaqRepository.get(context).refresh() } }
 
     val authViewModel: AuthViewModel = viewModel()
     val auth by authViewModel.state.collectAsStateWithLifecycle()

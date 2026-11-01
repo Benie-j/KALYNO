@@ -13,6 +13,8 @@ import ci.kalyno.app.data.catalog.CatalogSubjectEntity
 import ci.kalyno.app.data.badges.BadgeDao
 import ci.kalyno.app.data.badges.BadgeUnlockEntity
 import ci.kalyno.app.data.catalog.CatalogThemeEntity
+import ci.kalyno.app.data.faq.FaqDao
+import ci.kalyno.app.data.faq.FaqEntity
 import ci.kalyno.app.data.lessons.LessonProgressDao
 import ci.kalyno.app.data.lessons.LessonProgressEntity
 import ci.kalyno.app.data.progress.AttemptDao
@@ -39,9 +41,10 @@ import ci.kalyno.app.data.srs.SubjectEntity
         BadgeUnlockEntity::class,
         LessonProgressEntity::class,
         DojoAttemptEntity::class,
-        ReportEntity::class
+        ReportEntity::class,
+        FaqEntity::class
     ],
-    version = 13,
+    version = 14,
     exportSchema = false
 )
 abstract class KalynoDatabase : RoomDatabase() {
@@ -53,6 +56,7 @@ abstract class KalynoDatabase : RoomDatabase() {
     abstract fun lessonProgressDao(): LessonProgressDao
     abstract fun attemptDao(): AttemptDao
     abstract fun reportDao(): ReportDao
+    abstract fun faqDao(): FaqDao
 
     companion object {
         @Volatile
@@ -270,13 +274,27 @@ abstract class KalynoDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * Centre d'aide & FAQ : miroir local de la table Supabase `faq_items` (gérée par l'admin).
+         * Table neuve : aucune donnée existante n'est touchée. Remplie à la première synchronisation.
+         */
+        private val MIGRATION_13_14 = object : Migration(13, 14) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `faq_items` (`id` TEXT NOT NULL, `category` TEXT NOT NULL, " +
+                        "`question` TEXT NOT NULL, `answer` TEXT NOT NULL, `orderIndex` INTEGER NOT NULL, " +
+                        "`updatedAt` INTEGER NOT NULL, PRIMARY KEY(`id`))"
+                )
+            }
+        }
+
         fun get(context: Context): KalynoDatabase =
             instance ?: synchronized(this) {
                 instance ?: Room.databaseBuilder(
                     context.applicationContext,
                     KalynoDatabase::class.java,
                     "kalyno.db"
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13)
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14)
                     .build().also { instance = it }
             }
     }
