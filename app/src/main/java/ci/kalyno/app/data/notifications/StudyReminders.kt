@@ -8,6 +8,8 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.os.Build
 import android.util.Log
 import androidx.compose.runtime.mutableStateOf
@@ -120,6 +122,16 @@ object StudyReminders {
     internal fun isQuietHour(now: LocalTime = LocalTime.now()): Boolean =
         now.hour >= QUIET_FROM_HOUR || now.hour < QUIET_UNTIL_HOUR
 
+    /** Logo KALYNO en couleurs, dessiné en image pour la grande icône de la notification. */
+    private fun largeIcon(context: Context): Bitmap? {
+        val drawable = ContextCompat.getDrawable(context, R.drawable.ic_notification_large) ?: return null
+        val size = 192
+        val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        drawable.setBounds(0, 0, size, size)
+        drawable.draw(Canvas(bitmap))
+        return bitmap
+    }
+
     @SuppressLint("MissingPermission") // vérifié par canNotify() avant tout appel
     internal fun post(context: Context, id: Int, channel: String, title: String, text: String, openDojo: Boolean = true): Boolean {
         if (!canNotify(context)) return false
@@ -132,7 +144,8 @@ object StudyReminders {
             PendingIntent.getActivity(context, id, it, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         }
         val notification = NotificationCompat.Builder(context, channel)
-            .setSmallIcon(R.drawable.ic_launcher_monochrome)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setLargeIcon(largeIcon(context))
             .setColor(ContextCompat.getColor(context, R.color.kalyno_blue))
             .setContentTitle(title)
             .setContentText(text)
