@@ -133,7 +133,9 @@ object ContentWatcher {
         }
 
         // ----- Notifications -----
-        if (newLessons.isNotEmpty()) {
+        // Push actif : c'est lui qui prévient, la surveillance met seulement son état à jour (pas de doublon)
+        val silent = PushSetup.isActive(context)
+        if (!silent && newLessons.isNotEmpty()) {
             val first = newLessons.first().title.ifBlank { "Nouvelle leçon" }
             val more = newLessons.size - 1
             val sent = StudyReminders.post(
@@ -146,7 +148,7 @@ object ContentWatcher {
             Log.i(TAG, "Nouvelles leçons : ${newLessons.size}, envoyée = $sent")
         }
 
-        if (gained.isNotEmpty()) {
+        if (!silent && gained.isNotEmpty()) {
             val completed = KalynoDatabase.get(context).lessonProgressDao()
                 .completedLessonIds(StudentId.get(context)).toSet()
             val total = gained.sumOf { it.second }
@@ -162,7 +164,7 @@ object ContentWatcher {
             Log.i(TAG, "Nouvelles cartes : $total, envoyée = $sent")
         }
 
-        if (newBanners.isNotEmpty()) {
+        if (!silent && newBanners.isNotEmpty()) {
             val first = newBanners.first().title.ifBlank { "Une nouvelle annonce t'attend" }
             val more = newBanners.size - 1
             val sent = StudyReminders.post(
@@ -301,6 +303,7 @@ class ContentWatchWorker(context: Context, params: WorkerParameters) : Coroutine
     override suspend fun doWork(): Result {
         val context = applicationContext
         val levelId = AppPrefs(context).level ?: return Result.success() // classe pas encore choisie
+        PushSetup.sync(context) // s'abonne aux notifications push dès que la classe est connue
         if (!StudyReminders.canNotify(context)) return Result.success()   // rien à annoncer sans autorisation
 
         ContentWatcher.createChannel(context)
