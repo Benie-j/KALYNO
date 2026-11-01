@@ -7,6 +7,12 @@ plugins {
 id("com.google.gms.google-services")
 }
 
+// Firebase (notifications push) : activé seulement si google-services.json est présent dans app/,
+// sinon l'appli compile et fonctionne normalement avec la surveillance toutes les 15 min.
+if (file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
+}
+
 // Version auto-incrémentée : 1 commit git = +1 (versionCode et dernier chiffre du versionName)
 val gitCommitCount: Int = runCatching {
     providers.exec {

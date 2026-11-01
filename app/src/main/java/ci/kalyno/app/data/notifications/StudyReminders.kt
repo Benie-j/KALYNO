@@ -70,6 +70,7 @@ object StudyReminders {
         val app = context.applicationContext
         createChannels(app)
         ContentWatcher.schedule(app)
+        PushSetup.sync(app)
         val manager = WorkManager.getInstance(app)
         // L'ancienne cadence (toutes les 3 h, heure aléatoire) est remplacée par des créneaux fixes
         manager.cancelUniqueWork(OLD_WORK_NAME)
