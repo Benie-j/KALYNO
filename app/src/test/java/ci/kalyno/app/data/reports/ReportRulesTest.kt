@@ -15,7 +15,6 @@ class ReportRulesTest {
         assertEquals(
             listOf(
                 ReportCategory.WRONG_OFFICIAL_ANSWER,
-                ReportCategory.SEMANTIC_GRADING,
                 ReportCategory.AMBIGUOUS_STATEMENT
             ),
             ReportCategory.forSource(ReportSourceType.EXERCISE)
@@ -37,7 +36,7 @@ class ReportRulesTest {
         assertFalse(ReportRules.isValid(ReportCategory.OTHER, ""))
         assertFalse(ReportRules.isValid(ReportCategory.APP_BUG, "court"))
         assertFalse(ReportRules.isValid(ReportCategory.SYNC_PROBLEM, "   court   "))
-        assertTrue(ReportRules.isValid(ReportCategory.SEMANTIC_GRADING, "x".repeat(ReportRules.MIN_REQUIRED_DESCRIPTION)))
+        assertTrue(ReportRules.isValid(ReportCategory.APP_BUG, "x".repeat(ReportRules.MIN_REQUIRED_DESCRIPTION)))
     }
 
     @Test fun descriptionTronqueeAuMaximum() {

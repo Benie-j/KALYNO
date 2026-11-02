@@ -90,6 +90,6 @@ data class CatalogLessonEntity(
     val title: String,
     val position: Int,
     val tag: String?,
-    /** Résumé court de la leçon (bloc « intro » de l'admin), injecté dans le passage E5 du Dojo. */
+    /** Colonne conservée pour ne pas modifier le schéma de la base ; n'est plus alimentée. */
     val summary: String? = null
 )

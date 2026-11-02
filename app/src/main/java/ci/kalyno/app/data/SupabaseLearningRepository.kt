@@ -21,7 +21,7 @@ data class LearningCard(
     val explanation: String?,
     /** Bonnes réponses d'un QCM à choix multiples (colonne `correct_indices`, optionnelle). */
     val correctIndices: List<Int> = emptyList(),
-    /** Phrase de référence pour la correction sémantique (colonne `admin_reference`, optionnelle). */
+    /** Réponse de référence rédigée par l'admin (colonne `admin_reference`, optionnelle). */
     val adminReference: String? = null
 )
 

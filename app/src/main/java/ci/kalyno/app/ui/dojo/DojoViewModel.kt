@@ -4,7 +4,6 @@ import android.app.Application
 import android.os.SystemClock
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import ci.kalyno.app.data.SupabaseConfig
 import ci.kalyno.app.data.dashboard.DashboardRepository
 import ci.kalyno.app.data.dashboard.DojoCardMeta
 import ci.kalyno.app.data.dashboard.ReviewItem
@@ -13,20 +12,13 @@ import ci.kalyno.app.data.dashboard.StudentId
 import ci.kalyno.app.data.dojo.AnswerContext
 import ci.kalyno.app.data.dojo.AnswerGrader
 import ci.kalyno.app.data.dojo.CalculatorPolicy
-import ci.kalyno.app.data.dojo.DojoGrading
 import ci.kalyno.app.data.dojo.DojoStagePolicy
 import ci.kalyno.app.data.dojo.ExerciseKind
-import ci.kalyno.app.data.dojo.LessonReferenceProvider
 import ci.kalyno.app.data.dojo.Interleaver
 import ci.kalyno.app.data.dojo.mergeCorrectIndices
 import ci.kalyno.app.data.lessons.LessonProgressRepository
 import ci.kalyno.app.data.dojo.Verdict
 import ci.kalyno.app.data.srs.ReviewRating
-import ci.kalyno.app.ml.semantic.EvaluationResult
-import ci.kalyno.app.ml.semantic.EvaluationVerdict
-import ci.kalyno.app.ml.semantic.SemanticEvaluationEngine
-import ci.kalyno.app.ml.semantic.SemanticEvaluator
-import ci.kalyno.app.ml.semantic.SemanticSettingsRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -51,23 +43,13 @@ data class DojoExercise(
     val calculatorSuggested: Boolean,
     /** Niveau de répétition espacée de l'élève sur cette carte. */
     val stage: Int = 0,
-    /** Phrase de référence de l'admin : sert à la correction sémantique et à l'affichage de la bonne réponse. */
+    /** Réponse de référence de l'admin : affichée comme bonne réponse et conservée dans l'historique. */
     val reference: String = item.answer,
-    /** Vrai si la saisie est corrigée par le moteur d'embedding (sinon : mots-clés). */
-    val useSemantic: Boolean = false,
     /** Vrai si la carte était un QCM et vient de basculer en saisie libre grâce à son niveau. */
     val promotedToFreeInput: Boolean = false,
-    /** Passages de la leçon de la carte (vide si la leçon n'est pas en cache sur ce téléphone). */
-    val lessonPassages: List<String> = emptyList(),
-    /** Leçon parente de la question (relation Room flashcards.lessonId -> catalog_lessons.id) : contexte du passage E5. */
-    val lessonTitle: String? = null,
-    val lessonSummary: String? = null
+    /** Leçon parente de la question (relation Room flashcards.lessonId -> catalog_lessons.id), pour l'historique. */
+    val lessonTitle: String? = null
 ) {
-    /** Saisie libre corrigée par mots-clés, avec la leçon en renfort pour valider les reformulations. */
-    val canRescueWithLesson: Boolean
-        get() = requiresFreeInput && !useSemantic && lessonPassages.isNotEmpty() &&
-            DojoGrading.canRescueWithLesson(acceptedAnswers.firstOrNull() ?: item.answer)
-
     /** Règle d'affichage : saisie libre (champ texte) ou QCM (cartes de choix). */
     val requiresFreeInput: Boolean get() = kind == ExerciseKind.FREE_TEXT
 
@@ -81,11 +63,7 @@ data class DojoResult(
     val rating: ReviewRating,
     val message: String,
     /** Renseigné quand le moteur FSRS a planifié la prochaine révision. */
-    val nextReviewDays: Int? = null,
-    /** Retour pédagogique du moteur sémantique (saisie libre uniquement). */
-    val feedback: String? = null,
-    /** Proximité sémantique entre 0 et 1, null hors correction sémantique. */
-    val similarity: Float? = null
+    val nextReviewDays: Int? = null
 )
 
 data class DojoUiState(
@@ -97,8 +75,6 @@ data class DojoUiState(
     val typed: String = "",
     val hintShown: Boolean = false,
     val calculatorUsed: Boolean = false,
-    /** Correction sémantique en cours : le bouton de validation est bloqué (pas de double envoi). */
-    val evaluating: Boolean = false,
     /** null tant que l'élève n'a pas validé : la correction reste cachée. */
     val result: DojoResult? = null,
     val correctCount: Int = 0,
@@ -107,7 +83,7 @@ data class DojoUiState(
     val lockedOut: Boolean = false
 ) {
     val canSubmit: Boolean
-        get() = !evaluating && when (exercise?.kind) {
+        get() = when (exercise?.kind) {
             null -> false
             ExerciseKind.FREE_TEXT -> typed.isNotBlank()
             else -> selected.isNotEmpty()
@@ -121,14 +97,6 @@ class DojoViewModel(app: Application) : AndroidViewModel(app) {
     private val lessonProgress = LessonProgressRepository.get(app)
     private val attempts = KalynoDatabase.get(app).attemptDao()
 
-    /** Moteur ONNX + seuils de l'admin : le ViewModel ne manipule ni ONNX ni Supabase directement. */
-    private val semanticEvaluator = SemanticEvaluator(
-        app,
-        SemanticSettingsRepository(app, SupabaseConfig.BASE_URL, SupabaseConfig.PUBLISHABLE_KEY)
-    )
-    private var evaluation: Job? = null
-    private var lessons: LessonReferenceProvider? = null
-
     /** Calculatrice conservée pendant toute la session (survit aux rotations d'écran). */
     val calculator = CalculatorModel()
 
@@ -139,8 +107,6 @@ class DojoViewModel(app: Application) : AndroidViewModel(app) {
     private var exercises: List<DojoExercise> = emptyList()
     private var shownAt = 0L
 
-    /** Moteur ONNX utilisable sur cet appareil (lu une fois par session, hors thread principal). */
-    private var engineOn = false
     private var lastLatencyMs = 0L
 
     private val _state = MutableStateFlow(DojoUiState())
@@ -157,7 +123,6 @@ class DojoViewModel(app: Application) : AndroidViewModel(app) {
         if (sessionId == session.id) return
         sessionId = session.id
         this.levelId = levelId
-        lessons = LessonReferenceProvider(getApplication(), levelId)
         _state.value = DojoUiState(title = session.title, total = session.items.size)
         if (session.items.isEmpty()) {
             _state.update { it.copy(finished = true) }
@@ -188,47 +153,18 @@ class DojoViewModel(app: Application) : AndroidViewModel(app) {
             } catch (e: Exception) {
                 emptyMap() // sans niveau, tout reste en QCM : la session n'est jamais bloquée
             }
-            // Texte des leçons depuis le cache hors-ligne : sert à valider les reformulations
-            val passages = try {
-                lessons?.passagesFor(mixed.map { it.cardId }).orEmpty()
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                emptyMap()
-            }
-            engineOn = withContext(Dispatchers.Default) { semanticEvaluator.isAvailable }
-            exercises = mixed.map { buildExercise(it, meta[it.cardId], passages[it.cardId].orEmpty()) }
+            exercises = mixed.map { buildExercise(it, meta[it.cardId]) }
             show(0)
-            if (exercises.any { it.useSemantic || it.canRescueWithLesson }) warmUpSemanticEngine()
-        }
-    }
-
-    /** Chargement du modèle E5 (ONNX) et des seuils admin en arrière-plan, avant que l'élève n'atteigne une saisie libre. */
-    private fun warmUpSemanticEngine() {
-        if (!engineOn) return
-        viewModelScope.launch(Dispatchers.Default) {
-            runCatching { SemanticEvaluationEngine.getInstance(getApplication()) }
-            runCatching { semanticEvaluator.refreshSettings() }
-            // Réponses officielles de la session : vecteurs prêts avant la première saisie
-            runCatching {
-                semanticEvaluator.preloadReferences(exercises.filter { it.useSemantic }.map { it.reference }.distinct())
-            }
-            // Vecteurs des leçons calculés avant la première réponse (une seule fois par leçon)
-            val seen = java.util.IdentityHashMap<List<String>, Boolean>()
-            exercises.filter { it.canRescueWithLesson }.forEach { ex ->
-                if (seen.put(ex.lessonPassages, true) == null) {
-                    runCatching { semanticEvaluator.preloadPassages(ex.lessonPassages) }
-                }
-            }
         }
     }
 
     /**
      * Choisit l'interface de la carte. Un QCM bascule en saisie libre quand son niveau atteint le seuil
      * ([DojoStagePolicy.requiresFreeInput]) ; une carte « saisie libre » de l'admin l'est dès le départ.
-     * Un QCM à réponses multiples ne bascule que si l'admin a écrit une phrase de référence.
+     * Seule une carte à réponse courte (mots-clés) bascule : une phrase ne se corrige pas par mots-clés, et un QCM à
+     * réponses multiples reste un QCM.
      */
-    private fun buildExercise(item: ReviewItem, meta: DojoCardMeta?, lessonPassages: List<String>): DojoExercise {
+    private fun buildExercise(item: ReviewItem, meta: DojoCardMeta?): DojoExercise {
         val indices = mergeCorrectIndices(item.correctIndices, item.correctIndex)
             .filter { it in item.choices.indices }
         val declared = ExerciseKind.resolve(item.kind, item.choices, indices)
@@ -236,29 +172,31 @@ class DojoViewModel(app: Application) : AndroidViewModel(app) {
         val adminReference = meta?.adminReference?.takeIf { it.isNotBlank() }
 
         val canPromote = when (declared) {
-            ExerciseKind.SINGLE_CHOICE -> true
-            ExerciseKind.MULTIPLE_CHOICE -> adminReference != null
+            ExerciseKind.SINGLE_CHOICE -> isKeywordAnswer(item.answer)
+            ExerciseKind.MULTIPLE_CHOICE -> false
             ExerciseKind.FREE_TEXT -> false
         }
         val promoted = canPromote && DojoStagePolicy.requiresFreeInput(stage)
         val kind = if (promoted) ExerciseKind.FREE_TEXT else declared
 
         val reference = adminReference ?: item.answer
-        val useSemantic = engineOn && kind == ExerciseKind.FREE_TEXT && DojoGrading.useSemantic(reference)
         return DojoExercise(
             item = item,
             kind = kind,
             correctIndices = indices.toSet(),
-            acceptedAnswers = if (useSemantic) listOf(reference) else AnswerGrader.acceptedAnswers(item.answer),
+            acceptedAnswers = AnswerGrader.acceptedAnswers(item.answer),
             calculatorSuggested = CalculatorPolicy.suggested(listOf(item.front) + item.choices),
             stage = stage,
             reference = reference,
-            useSemantic = useSemantic,
             promotedToFreeInput = promoted,
-            lessonPassages = if (engineOn) lessonPassages else emptyList(),
-            lessonTitle = meta?.lessonTitle,
-            lessonSummary = meta?.lessonSummary
+            lessonTitle = meta?.lessonTitle
         )
+    }
+
+    /** Réponse « mots-clés » : chaque variante acceptée est courte (un mot, un nombre, une expression). */
+    private fun isKeywordAnswer(raw: String): Boolean {
+        val variants = AnswerGrader.acceptedAnswers(raw)
+        return variants.isNotEmpty() && variants.all { it.split(Regex("\\s+")).size <= MAX_KEYWORD_WORDS }
     }
 
     private fun show(index: Int) {
@@ -271,7 +209,6 @@ class DojoViewModel(app: Application) : AndroidViewModel(app) {
                 typed = "",
                 hintShown = false,
                 calculatorUsed = false,
-                evaluating = false,
                 result = null
             )
         }
@@ -289,9 +226,8 @@ class DojoViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun onTyped(value: String) {
-        if (_state.value.result != null || _state.value.evaluating) return
-        val limit = if (_state.value.exercise?.useSemantic == true) MAX_SENTENCE_INPUT else MAX_INPUT
-        _state.update { it.copy(typed = value.take(limit)) }
+        if (_state.value.result != null) return
+        _state.update { it.copy(typed = value.take(MAX_INPUT)) }
     }
 
     fun showHint() {
@@ -306,8 +242,8 @@ class DojoViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
-     * Valide la réponse : QCM -> comparaison des indices ; saisie libre -> moteur sémantique (ou mots-clés
-     * pour une référence courte). Note FSRS automatique, puis écriture dans Room.
+     * Valide la réponse : QCM -> comparaison des indices ; saisie libre -> comparaison aux mots-clés de l'admin.
+     * Note FSRS automatique, puis écriture dans Room.
      */
     fun submit() {
         val s = _state.value
@@ -323,105 +259,24 @@ class DojoViewModel(app: Application) : AndroidViewModel(app) {
 
         lastLatencyMs = context.elapsedMs
 
-        if (!exercise.requiresFreeInput) {
-            finish(exercise, AnswerGrader.gradeChoice(s.selected, exercise.correctIndices, context), semantic = null)
-            return
+        val verdict = if (exercise.requiresFreeInput) {
+            AnswerGrader.gradeText(s.typed, exercise.acceptedAnswers, context)
+        } else {
+            AnswerGrader.gradeChoice(s.selected, exercise.correctIndices, context)
         }
-
-        if (!exercise.useSemantic) {
-            val lexical = AnswerGrader.gradeText(s.typed, exercise.acceptedAnswers, context)
-            if (lexical.correct || !exercise.canRescueWithLesson) {
-                finish(exercise, lexical, semantic = null)
-                return
-            }
-            // Mots-clés refusés : la leçon peut encore valider une reformulation correcte
-            val typed = s.typed
-            _state.update { it.copy(evaluating = true) }
-            evaluation = viewModelScope.launch {
-                val result = semanticEvaluator.evaluateWithLesson(
-                    question = exercise.item.front,
-                    expectedShort = exercise.acceptedAnswers.firstOrNull() ?: exercise.item.answer,
-                    passages = exercise.lessonPassages,
-                    studentAnswer = typed
-                )
-                val rescued = DojoGrading.fromLesson(result)
-                finish(
-                    exercise,
-                    rescued ?: lexical,
-                    semantic = result.takeIf { it.verdict != EvaluationVerdict.ENGINE_ERROR }
-                )
-            }
-            return
-        }
-
-        val answer = s.typed
-        _state.update { it.copy(evaluating = true) }
-        evaluation = viewModelScope.launch {
-            // query: « réponse officielle » contre query: « saisie de l'élève » (tâche symétrique de la fiche E5)
-            val result = semanticEvaluator.evaluate(
-                adminReference = exercise.reference,
-                studentAnswer = answer,
-                question = exercise.item.front
-            )
-
-            // Si E5 rejette la réponse, vérifier aussi avec le contenu de la leçon.
-            val lessonResult = if (
-                exercise.lessonPassages.isNotEmpty() &&
-                DojoGrading.canRescueWithLesson(exercise.reference) &&
-                result.verdict in setOf(
-                    EvaluationVerdict.INCORRECT,
-                    EvaluationVerdict.ENGINE_ERROR
-                )
-            ) {
-                semanticEvaluator.evaluateWithLesson(
-                    question = exercise.item.front,
-                    expectedShort = exercise.item.answer,
-                    passages = exercise.lessonPassages,
-                    studentAnswer = answer
-                )
-            } else {
-                null
-            }
-
-            val rescued = lessonResult?.let { DojoGrading.fromLesson(it) }
-            val semanticVerdict = DojoGrading.fromSemantic(result, context)
-
-            val verdict = when {
-                rescued != null -> rescued
-                semanticVerdict != null -> semanticVerdict
-                else -> AnswerGrader.gradeText(
-                    answer,
-                    AnswerGrader.acceptedAnswers(exercise.item.answer),
-                    context
-                )
-            }
-
-            val feedbackResult = if (rescued != null) lessonResult else result
-
-            finish(
-                exercise,
-                verdict,
-                semantic = feedbackResult?.takeIf {
-                    it.verdict != EvaluationVerdict.ENGINE_ERROR
-                }
-            )
-
-        }
+        finish(exercise, verdict)
     }
 
-    private fun finish(exercise: DojoExercise, verdict: Verdict, semantic: EvaluationResult?) {
+    private fun finish(exercise: DojoExercise, verdict: Verdict) {
         val answered = _state.value // ce que l'élève a saisi ou coché, avant que l'état ne change
         val message = if (verdict.correct) DojoMessages.congrats() else DojoMessages.encourage()
         _state.update {
             it.copy(
-                evaluating = false,
                 result = DojoResult(
                     correct = verdict.correct,
                     partial = verdict.partial,
                     rating = verdict.rating,
-                    message = message,
-                    feedback = semantic?.feedback,
-                    similarity = semantic?.similarityScore
+                    message = message
                 ),
                 correctCount = it.correctCount + if (verdict.correct) 1 else 0
             )
@@ -509,6 +364,8 @@ class DojoViewModel(app: Application) : AndroidViewModel(app) {
 
     private companion object {
         const val MAX_INPUT = 200
-        const val MAX_SENTENCE_INPUT = 400
+
+        /** Réponse « mots-clés » : au-delà, la carte reste en QCM (une phrase ne se corrige pas par mots-clés). */
+        const val MAX_KEYWORD_WORDS = 4
     }
 }

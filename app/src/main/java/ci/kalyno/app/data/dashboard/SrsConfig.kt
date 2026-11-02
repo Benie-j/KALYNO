@@ -24,9 +24,6 @@ object SrsConfig {
     /** Niveau maximal d'une carte (au-delà, le niveau ne monte plus). */
     const val DOJO_MAX_STAGE = 6
 
-    /** Une référence d'au moins ce nombre de mots est corrigée par le moteur sémantique ; en dessous, mots-clés. */
-    const val DOJO_SEMANTIC_MIN_WORDS = 3
-
     /** Matière jamais étudiée : traitée comme si elle l'était depuis ce nombre de jours. */
     const val NEVER_STUDIED_DAYS = 14
 

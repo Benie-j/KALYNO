@@ -189,7 +189,7 @@ abstract class KalynoDatabase : RoomDatabase() {
         }
 
         /**
-         * Moteur E5 : chaque leçon du catalogue retient un résumé court. La relation carte -> leçon
+         * Chaque leçon du catalogue retient un résumé court (colonne conservée, plus alimentée). La relation carte -> leçon
          * (flashcards.lessonId -> catalog_lessons.id) est une relation Room SANS clé étrangère SQL :
          * le catalogue est vidé puis réinséré à chaque synchronisation, une clé étrangère en cascade
          * supprimerait les cartes et la progression de l'élève.

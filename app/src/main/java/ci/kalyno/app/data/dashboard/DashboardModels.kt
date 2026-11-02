@@ -94,9 +94,8 @@ data class MasteredNotion(
 data class DojoCardMeta(
     val stage: Int,
     val adminReference: String?,
-    /** Leçon parente de la carte (relation Room) : contexte injecté dans le passage E5. */
-    val lessonTitle: String? = null,
-    val lessonSummary: String? = null
+    /** Leçon parente de la carte (relation Room), pour l'historique de progression. */
+    val lessonTitle: String? = null
 )
 
 data class ReviewSession(

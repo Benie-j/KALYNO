@@ -11,7 +11,3 @@
 -keepclassmembers class ci.kalyno.app.ui.explorer.HeightBridge {
     @android.webkit.JavascriptInterface <methods>;
 }
-
-# KALYNO - ONNX Runtime
--keep class ai.onnxruntime.** { *; }
--dontwarn ai.onnxruntime.**

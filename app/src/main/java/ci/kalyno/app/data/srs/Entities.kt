@@ -45,7 +45,7 @@ data class FlashcardEntity(
     val choicesJson: String? = null,     // choix proposés, au format JSON
     val correctIndices: String? = null,  // indices des bonnes réponses, séparés par des virgules
     val explanation: String? = null,     // explication détaillée (révélée après la réponse)
-    // -- Phrase de référence absolue de l'admin, utilisée par le moteur ONNX en saisie libre (null = on retombe sur `reponse`) --
+    // -- Réponse de référence rédigée par l'admin : affichée comme bonne réponse en saisie libre (null = on retombe sur `reponse`) --
     val adminReference: String? = null,
     // -- Leçon (chapitre publié) dont la carte est issue : le Dojo ne propose la carte que si cette leçon est terminée --
     val lessonId: String? = null

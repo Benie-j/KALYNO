@@ -20,5 +20,4 @@ data class QuestionWithLesson(
     val lesson: CatalogLessonEntity?
 ) {
     val lessonTitle: String? get() = lesson?.title?.takeIf { it.isNotBlank() } ?: question.chapitre.takeIf { it.isNotBlank() }
-    val lessonSummary: String? get() = lesson?.summary?.takeIf { it.isNotBlank() }
 }

@@ -328,8 +328,7 @@ class DashboardRepository(context: Context) {
                 DojoCardMeta(
                     stage = stages[id] ?: 0,
                     adminReference = q?.question?.adminReference,
-                    lessonTitle = q?.lessonTitle,
-                    lessonSummary = q?.lessonSummary
+                    lessonTitle = q?.lessonTitle
                 )
             }
         }

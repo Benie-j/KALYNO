@@ -50,9 +50,8 @@ internal fun ColumnScope.DojoAnswerArea(
         if (freeInput) {
             FreeInputField(
                 value = state.typed,
-                locked = locked || state.evaluating,
+                locked = locked,
                 correct = state.result?.correct,
-                sentence = exercise.useSemantic,
                 onValueChange = onTyped,
                 onSubmit = onSubmit
             )
@@ -73,7 +72,6 @@ private fun FreeInputField(
     value: String,
     locked: Boolean,
     correct: Boolean?,
-    sentence: Boolean,
     onValueChange: (String) -> Unit,
     onSubmit: () -> Unit
 ) {
@@ -82,19 +80,16 @@ private fun FreeInputField(
         onValueChange = onValueChange,
         modifier = Modifier.fillMaxWidth(),
         enabled = !locked,
-        // Une phrase se rédige sur plusieurs lignes ; un mot-clé ou un nombre tient sur une seule
-        singleLine = !sentence,
-        minLines = if (sentence) 3 else 1,
-        maxLines = if (sentence) 6 else 1,
+        singleLine = true,
         shape = RoundedCornerShape(14.dp),
         textStyle = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.Bold),
         placeholder = {
             Text(
-                if (sentence) "Explique avec tes mots..." else "Écris ta réponse ici...",
+                "Écris ta réponse ici...",
                 color = QuizColors.Muted
             )
         },
-        keyboardOptions = KeyboardOptions(imeAction = if (sentence) ImeAction.Default else ImeAction.Done),
+        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
         keyboardActions = KeyboardActions(onDone = { onSubmit() }),
         colors = OutlinedTextFieldDefaults.colors(
             focusedContainerColor = QuizColors.Surface,
@@ -102,7 +97,7 @@ private fun FreeInputField(
             disabledContainerColor = when (correct) {
                 true -> QuizColors.CorrectBg
                 false -> QuizColors.WrongBg
-                null -> QuizColors.Surface // correction sémantique en cours
+                null -> QuizColors.Surface // pas encore validé
             },
             focusedBorderColor = QuizColors.Primary,
             unfocusedBorderColor = QuizColors.Border,

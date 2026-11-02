@@ -21,7 +21,6 @@ val gitCommitCount: Int = runCatching {
 }.getOrDefault(1).coerceAtLeast(1)
 
 android {
-    androidResources { noCompress += "onnx" }
     namespace = "ci.kalyno.app"
     compileSdk = 36
 
@@ -76,7 +75,6 @@ android {
 }
 
 dependencies {
-    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.27.0")
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
     implementation("androidx.room:room-runtime:2.7.1")
     implementation("androidx.room:room-ktx:2.7.1")

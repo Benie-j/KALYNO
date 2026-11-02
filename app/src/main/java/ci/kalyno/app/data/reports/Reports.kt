@@ -30,7 +30,6 @@ enum class ReportCategory(
 
     // Exercice (Dojo et exercice de bienvenue)
     WRONG_OFFICIAL_ANSWER("Réponse officielle fausse", ReportSourceType.EXERCISE, false),
-    SEMANTIC_GRADING("Problème de correction sémantique (E5)", ReportSourceType.EXERCISE, true),
     AMBIGUOUS_STATEMENT("Énoncé ambigu", ReportSourceType.EXERCISE, false),
 
     // Paramètres

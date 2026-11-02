@@ -332,7 +332,6 @@ private fun ExercisePane(state: DojoUiState, exercise: DojoExercise, vm: DojoVie
         QuizStickyFooter(
             validated = result != null,
             actionLabel = when {
-                state.evaluating -> "ANALYSE EN COURS..."
                 result == null -> "VALIDER MA RÉPONSE"
                 isLast -> "VOIR MON BILAN"
                 else -> "CONTINUER"
@@ -422,7 +421,6 @@ private fun DojoFeedback(exercise: DojoExercise, result: DojoResult) {
         },
         message = result.message,
         detail = when {
-            result.feedback != null -> result.feedback
             result.partial -> "Tu n'as pas coché toutes les bonnes réponses."
             !result.correct && exercise.kind == ExerciseKind.FREE_TEXT -> "Retiens le mot-clé : il résume l'idée en un mot."
             else -> null
