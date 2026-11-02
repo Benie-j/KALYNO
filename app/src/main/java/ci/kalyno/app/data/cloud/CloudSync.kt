@@ -462,7 +462,11 @@ class CloudSync(context: Context) {
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            null
+            Log.w(TAG, "Échec du renouvellement de session Supabase", e)
+            throw IOException(
+                "Impossible de renouveler la session cloud. Synchronisation à réessayer.",
+                e
+            )
         }
     }
 

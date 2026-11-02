@@ -1,0 +1,68 @@
+diff --git a/app/src/main/java/ci/kalyno/app/data/auth/AuthStore.kt b/app/src/main/java/ci/kalyno/app/data/auth/AuthStore.kt
+--- a/app/src/main/java/ci/kalyno/app/data/auth/AuthStore.kt
++++ b/app/src/main/java/ci/kalyno/app/data/auth/AuthStore.kt
+@@ -37,6 +37,9 @@ class AuthStore(context: Context) {
+
+     fun userId(): String? = prefs.getString(KEY_USER_ID, null)
+
++    /** Jeton de renouvellement disponible même si l'access token a été perdu ou effacé. */
++    fun refreshToken(): String? = prefs.getString(KEY_REFRESH_TOKEN, null)
++
+     fun userName(): String? = prefs.getString(KEY_NAME, null)
+
+     fun userEmail(): String? = prefs.getString(KEY_EMAIL, null)
+diff --git a/app/src/main/java/ci/kalyno/app/data/cloud/CloudSync.kt b/app/src/main/java/ci/kalyno/app/data/cloud/CloudSync.kt
+--- a/app/src/main/java/ci/kalyno/app/data/cloud/CloudSync.kt
++++ b/app/src/main/java/ci/kalyno/app/data/cloud/CloudSync.kt
+@@ -77,8 +77,10 @@ class CloudSync(context: Context) {
+
+     private suspend fun syncProgressLocked(studentId: String) = withContext(Dispatchers.IO) {
++        // Sans compte connecté (mode invité), aucune synchronisation cloud n'est attendue.
+         val token = accessToken() ?: return@withContext
+-        val userId = store.userId() ?: return@withContext
++        // Avec un jeton valide, l'identifiant du compte doit obligatoirement exister.
++        val userId = store.userId()
++            ?: throw IOException("Identifiant du compte cloud introuvable : reconnexion nécessaire.")
+
+         // Une seule fois après ce correctif : on renvoie toute la progression locale
+         val flags = appContext.getSharedPreferences("kalyno_cloud_flags", Context.MODE_PRIVATE)
+@@ -454,18 +456,30 @@ class CloudSync(context: Context) {
+     internal suspend fun validAccessToken(): String? = accessToken()
+
+-    /** Jeton d'accès valide : renouvelé automatiquement s'il expire dans moins d'une minute. */
++    /**
++     * Jeton d'accès valide. Un compte connecté peut encore être renouvelé même si
++     * l'access token est absent/corrompu : le refresh token est stocké séparément.
++     * L'absence de compte (mode invité) reste un cas normal et silencieux.
++     */
+     private suspend fun accessToken(): String? = tokenLock.withLock {
+-        val session = store.session() ?: return@withLock null
+-        if (session.expiresAtMillis - EXPIRY_MARGIN_MS > System.currentTimeMillis()) {
++        if (!store.isSignedIn()) return@withLock null
++
++        val session = store.session()
++        if (session != null &&
++            session.expiresAtMillis - EXPIRY_MARGIN_MS > System.currentTimeMillis()
++        ) {
+             return@withLock session.accessToken
+         }
++
++        val refreshToken = session?.refreshToken ?: store.refreshToken()
++            ?: throw IOException("Session cloud incomplète : reconnexion nécessaire.")
++
+         try {
+-            val renewed = authApi.refresh(session.refreshToken)
++            val renewed = authApi.refresh(refreshToken)
+             store.saveSession(renewed)
+             renewed.accessToken
+         } catch (e: CancellationException) {
+             throw e
+         } catch (e: Exception) {
+-            null
++            Log.w(TAG, "Échec du renouvellement de session Supabase", e)
++            throw IOException(
++                "Impossible de renouveler la session cloud. Synchronisation à réessayer.",
++                e
++            )
+         }
+     }
