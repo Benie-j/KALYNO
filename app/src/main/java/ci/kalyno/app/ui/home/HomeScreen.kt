@@ -49,6 +49,9 @@ import ci.kalyno.app.ui.theme.KalynoMuted
 import ci.kalyno.app.ui.theme.KalynoOutline
 import ci.kalyno.app.ui.theme.KalynoShadow
 import ci.kalyno.app.ui.theme.KalynoText
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
+import ci.kalyno.app.R
 
 private val CardShape = RoundedCornerShape(24.dp)
 private val CardGap = 10.dp
