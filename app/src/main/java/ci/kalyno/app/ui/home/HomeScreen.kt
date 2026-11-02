@@ -1,5 +1,6 @@
 package ci.kalyno.app.ui.home
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -88,39 +89,15 @@ fun HomeScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(top = 18.dp, bottom = 8.dp)
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(30.dp)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(KalynoBlueSoft),
-                    contentAlignment = Alignment.Center
-                ) {
-                    KalynoSvgIcon(name = "target", size = 18.dp, tint = KalynoBlue)
-                }
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    text = "C'est comment, élément ?",
-                    color = KalynoMuted,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.SemiBold
-                )
-            }
-            Spacer(Modifier.height(8.dp))
-            Text(
-                text = "Dis-nous, c'est quoi ton combat de cette année ?",
-                color = KalynoText,
-                fontSize = 24.sp,
-                lineHeight = 30.sp,
-                fontWeight = FontWeight.ExtraBold
+            Image(
+                painter = painterResource(id = R.drawable.rentree_student),
+                contentDescription = "Illustration de la rentrée scolaire",
+                contentScale = ContentScale.Fit,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(270.dp)
             )
-            Spacer(Modifier.height(6.dp))
-            Text(
-                text = "Choisis ta classe, on s'occupe de te mettre dans le bain.",
-                color = KalynoMuted,
-                style = MaterialTheme.typography.bodyMedium
-            )
-            Spacer(Modifier.height(18.dp))
+            Spacer(Modifier.height(12.dp))
 
             when {
                 state.loading -> LevelSkeleton()
