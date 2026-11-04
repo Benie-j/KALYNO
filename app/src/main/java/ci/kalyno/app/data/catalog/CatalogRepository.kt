@@ -31,9 +31,10 @@ class CatalogRepository private constructor(context: Context) {
         dao.observeLevels().map { rows -> rows.map { it.toInfo() } }
 
     /** Charge les classes de Room (rapide, hors ligne) pour que Levels.label() réponde correctement. */
-    suspend fun hydrateLabels() {
+    suspend fun hydrateLabels(): Boolean {
         val rows = dao.levelsOnce()
         if (rows.isNotEmpty()) Levels.register(rows.map { it.toInfo() })
+        return rows.isNotEmpty()
     }
 
     /**

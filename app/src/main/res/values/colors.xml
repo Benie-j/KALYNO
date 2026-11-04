@@ -7,4 +7,6 @@
     <color name="kalyno_background">#F8FAFC</color>
     <color name="kalyno_text">#0F172A</color>
     <color name="kalyno_splash_page">#EAF0FF</color>
+    <!-- Splash : couleur de marque KALYNO (même teal que le fond de l'icône de lancement) -->
+    <color name="kalyno_splash_background">#0F766E</color>
 </resources>

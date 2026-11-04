@@ -10,8 +10,14 @@
     </style>
 
     <style name="Theme.KALYNO.Starting" parent="Theme.SplashScreen">
-        <item name="windowSplashScreenBackground">@color/kalyno_background</item>
+        <!-- Fond : couleur de marque ; logo en blanc dessus (ic_kalyno_splash) -->
+        <item name="windowSplashScreenBackground">@color/kalyno_splash_background</item>
         <item name="windowSplashScreenAnimatedIcon">@drawable/ic_kalyno_splash</item>
         <item name="postSplashScreenTheme">@style/Theme.KALYNO</item>
+        <!-- Barres système fondues dans le fond pendant le splash (le thème clair reprend ensuite) -->
+        <item name="android:statusBarColor">@color/kalyno_splash_background</item>
+        <item name="android:navigationBarColor">@color/kalyno_splash_background</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
     </style>
 </resources>

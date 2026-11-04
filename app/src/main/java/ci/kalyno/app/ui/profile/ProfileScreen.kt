@@ -51,6 +51,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -186,7 +187,7 @@ fun ProfileScreen(
             }
         }
 
-        // ----- D. Légal (aucune ligne "Version" : elle vit sur le splash) -----
+        // ----- D. Légal -----
         item {
             SettingsGroup(title = "LÉGAL") {
                 SettingsItem(
@@ -203,6 +204,20 @@ fun ProfileScreen(
                     iconTint = KalynoMuted,
                     onClick = onOpenPrivacy,
                     showDivider = false
+                )
+            }
+        }
+
+        // ----- Version de l'application (discrète, lue dans le build) -----
+        item {
+            val version = LocalContext.current.appVersionName()
+            if (version.isNotBlank()) {
+                Text(
+                    text = "Version $version",
+                    color = KalynoMuted.copy(alpha = 0.7f),
+                    fontSize = 11.sp,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
                 )
             }
         }
