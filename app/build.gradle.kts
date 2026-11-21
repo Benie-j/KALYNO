@@ -102,6 +102,8 @@ dependencies {
 
     debugImplementation("androidx.compose.ui:ui-tooling")
     testImplementation("junit:junit:4.13.2")
+    // org.json réel pour les tests JVM (celui d'Android n'est qu'une coquille vide hors appareil)
+    testImplementation("org.json:json:20240303")
 
 
 implementation(platform("com.google.firebase:firebase-bom:35.1.0"))

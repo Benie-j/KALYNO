@@ -1,5 +1,14 @@
 package ci.kalyno.app.ui.challenge
 
+import ci.kalyno.app.data.Levels
+import ci.kalyno.app.data.ai.AiExerciseContext
+import ci.kalyno.app.data.ai.GeminiVerdict
+import ci.kalyno.app.data.ai.toDetailText
+import ci.kalyno.app.ui.ai.AiHelpButton
+import ci.kalyno.app.ui.ai.GradingStatus
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.viewmodel.compose.viewModel
 import ci.kalyno.app.ui.icons.KalynoSvgIcon
 
 import android.os.SystemClock
@@ -212,6 +221,7 @@ private fun ChallengeContent(challenge: Challenge, onExit: () -> Unit, onReport:
         key(index) {
             QuestionStep(
                 title = challenge.title,
+                levelId = challenge.levelId,
                 question = challenge.questions[index],
                 index = index,
                 total = total,
@@ -233,6 +243,7 @@ private const val OUTCOME_WRONG = 3
 @Composable
 private fun QuestionStep(
     title: String,
+    levelId: String,
     question: Question,
     index: Int,
     total: Int,
@@ -252,10 +263,26 @@ private fun QuestionStep(
     var outcome by rememberSaveable { mutableStateOf(OUTCOME_NONE) }
     var message by rememberSaveable { mutableStateOf("") }
 
+    // Correction IA (saisie libre avec compte connecté) : état conservé par ViewModel, une instance par question
+    val gradingVm: ChallengeGradingViewModel = viewModel(key = "challenge-grade-${question.id}")
+    val grading by gradingVm.grading.collectAsState()
+    val graded by gradingVm.graded.collectAsState()
+    LaunchedEffect(graded) {
+        val g = graded ?: return@LaunchedEffect
+        if (outcome == OUTCOME_NONE) {
+            outcome = when (g.verdict) {
+                GeminiVerdict.CORRECT -> OUTCOME_CORRECT
+                GeminiVerdict.PARTIAL -> OUTCOME_PARTIAL
+                GeminiVerdict.INCORRECT -> OUTCOME_WRONG
+            }
+            message = if (g.verdict == GeminiVerdict.CORRECT) DojoMessages.congrats() else DojoMessages.encourage()
+        }
+    }
+
     val selected = remember(selectedCsv) { parseIndexList(selectedCsv).toSet() }
     val locked = outcome != OUTCOME_NONE
     val isFree = question.kind == ExerciseKind.FREE_TEXT
-    val canSubmit = if (isFree) typed.isNotBlank() else selected.isNotEmpty()
+    val canSubmit = !grading.busy && if (isFree) typed.isNotBlank() else selected.isNotEmpty()
     val calculatorSuggested = remember(question.id) {
         CalculatorPolicy.suggested(listOf(question.prompt) + question.choices)
     }
@@ -271,9 +298,28 @@ private fun QuestionStep(
         }
     }
 
+    fun aiContext(locked: Boolean) = AiExerciseContext(
+        question = question.prompt,
+        reference = question.acceptedAnswers.firstOrNull().orEmpty(),
+        accepted = question.acceptedAnswers,
+        choices = question.choices,
+        explanation = question.explanation,
+        hint = question.hint,
+        level = Levels.label(levelId),
+        lesson = title,
+        studentAnswer = if (isFree) typed.trim().takeIf { it.isNotBlank() }
+        else selected.sorted().mapNotNull { question.choices.getOrNull(it) }.joinToString(" ; ").takeIf { it.isNotBlank() },
+        locked = locked
+    )
+
     // Correction objective du Dojo : jamais avant la validation
     fun submit() {
         if (locked || !canSubmit) return
+        // Saisie libre avec compte : Gemini corrige, même contexte et même logique que le Dojo
+        if (isFree && gradingVm.available) {
+            gradingVm.grade(aiContext(locked = false), typed.trim())
+            return
+        }
         val context = AnswerContext(
             elapsedMs = SystemClock.elapsedRealtime() - shownAt,
             questionLength = question.prompt.length + question.choices.sumOf { it.length },
@@ -352,13 +398,17 @@ private fun QuestionStep(
                 hintShown = hintShown,
                 calculatorSuggested = calculatorSuggested,
                 onToggle = { haptic(); toggle(it) },
-                onTyped = { if (!locked) typed = it.take(MAX_INPUT) },
+                onTyped = { if (!locked && !grading.busy) typed = it.take(MAX_INPUT) },
                 onSubmit = ::submit,
                 onShowHint = { hintShown = true },
                 onCalculator = {
                     haptic()
                     calculatorUsed = true
                     calculatorOpen = true
+                },
+                footer = {
+                    GradingStatus(grading = grading, onRetry = ::submit)
+                    AiHelpButton(context = aiContext(locked = locked), vmKey = "challenge-${question.id}")
                 }
             )
         }
@@ -367,6 +417,7 @@ private fun QuestionStep(
         QuizStickyFooter(
             validated = locked,
             actionLabel = when {
+                !locked && grading.busy -> "CORRECTION EN COURS…"
                 !locked -> "VALIDER MA RÉPONSE"
                 index == total - 1 -> "TERMINER"
                 else -> "CONTINUER"
@@ -374,7 +425,7 @@ private fun QuestionStep(
             actionEnabled = locked || canSubmit,
             onAction = { if (locked) onNext() else submit() },
             feedback = if (locked) {
-                { ChallengeCorrection(question = question, outcome = outcome, message = message) }
+                { ChallengeCorrection(question = question, outcome = outcome, message = message, aiDetail = graded?.toDetailText()) }
             } else null
         )
     }
@@ -407,7 +458,8 @@ private fun ChallengeQuestionCard(
     onTyped: (String) -> Unit,
     onSubmit: () -> Unit,
     onShowHint: () -> Unit,
-    onCalculator: () -> Unit
+    onCalculator: () -> Unit,
+    footer: @Composable () -> Unit = {}
 ) {
     val locked = outcome != OUTCOME_NONE
 
@@ -542,11 +594,13 @@ private fun ChallengeQuestionCard(
                 }
             }
         }
+
+        footer()
     }
 }
 
 @Composable
-private fun ChallengeCorrection(question: Question, outcome: Int, message: String) {
+private fun ChallengeCorrection(question: Question, outcome: Int, message: String, aiDetail: String? = null) {
     val isFree = question.kind == ExerciseKind.FREE_TEXT
     // La bonne réponse : affichée en cas d'erreur, et toujours pour la saisie libre
     val answer = if (outcome != OUTCOME_CORRECT || isFree) {
@@ -561,7 +615,7 @@ private fun ChallengeCorrection(question: Question, outcome: Int, message: Strin
             else -> FeedbackTone.Wrong
         },
         message = message,
-        detail = if (outcome == OUTCOME_PARTIAL) "Tu n'as pas coché toutes les bonnes réponses." else null,
+        detail = aiDetail ?: if (outcome == OUTCOME_PARTIAL) "Tu n'as pas coché toutes les bonnes réponses." else null,
         correctAnswer = answer,
         alsoAccepted = if (isFree) question.acceptedAnswers.drop(1) else emptyList(),
         explanationSteps = explanationSteps(question.explanation),

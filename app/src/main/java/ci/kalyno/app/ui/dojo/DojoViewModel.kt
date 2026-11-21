@@ -9,6 +9,13 @@ import ci.kalyno.app.data.dashboard.DojoCardMeta
 import ci.kalyno.app.data.dashboard.ReviewItem
 import ci.kalyno.app.data.dashboard.ReviewSession
 import ci.kalyno.app.data.dashboard.StudentId
+import ci.kalyno.app.data.ai.AiExerciseContext
+import ci.kalyno.app.data.ai.GeminiRepository
+import ci.kalyno.app.data.ai.GeminiVerdictMapper
+import ci.kalyno.app.data.ai.GradeResult
+import ci.kalyno.app.data.Levels
+import ci.kalyno.app.ui.ai.FreeTextGrader
+import ci.kalyno.app.ui.ai.GradingState
 import ci.kalyno.app.data.dojo.AnswerContext
 import ci.kalyno.app.data.dojo.AnswerGrader
 import ci.kalyno.app.data.dojo.CalculatorPolicy
@@ -63,7 +70,9 @@ data class DojoResult(
     val rating: ReviewRating,
     val message: String,
     /** Renseigné quand le moteur FSRS a planifié la prochaine révision. */
-    val nextReviewDays: Int? = null
+    val nextReviewDays: Int? = null,
+    /** Correction sémantique Gemini (saisie libre) ; null pour un QCM ou une correction locale. */
+    val ai: GradeResult? = null
 )
 
 data class DojoUiState(
@@ -80,10 +89,12 @@ data class DojoUiState(
     val correctCount: Int = 0,
     val finished: Boolean = false,
     /** Vrai si la session s'est vidée faute de leçon terminée : aucun bravo, aucune série créditée. */
-    val lockedOut: Boolean = false
+    val lockedOut: Boolean = false,
+    /** Correction IA en cours ou en échec : la réponse saisie reste conservée. */
+    val grading: GradingState = GradingState()
 ) {
     val canSubmit: Boolean
-        get() = when (exercise?.kind) {
+        get() = !grading.busy && when (exercise?.kind) {
             null -> false
             ExerciseKind.FREE_TEXT -> typed.isNotBlank()
             else -> selected.isNotEmpty()
@@ -111,6 +122,13 @@ class DojoViewModel(app: Application) : AndroidViewModel(app) {
 
     private val _state = MutableStateFlow(DojoUiState())
     val state: StateFlow<DojoUiState> = _state.asStateFlow()
+
+    /** Correction sémantique commune au Dojo et au Challenge. */
+    private val grader = FreeTextGrader(GeminiRepository.get(app), viewModelScope)
+
+    init {
+        viewModelScope.launch { grader.state.collect { g -> _state.update { it.copy(grading = g) } } }
+    }
 
     /**
      * Prépare la session. Deux règles s'appliquent ici, quelle que soit la provenance des cartes
@@ -200,6 +218,7 @@ class DojoViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun show(index: Int) {
+        grader.reset()
         shownAt = SystemClock.elapsedRealtime()
         _state.update {
             it.copy(
@@ -226,7 +245,8 @@ class DojoViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun onTyped(value: String) {
-        if (_state.value.result != null) return
+        val s = _state.value
+        if (s.result != null || s.grading.busy) return // pendant la correction, la réponse envoyée reste figée
         _state.update { it.copy(typed = value.take(MAX_INPUT)) }
     }
 
@@ -259,6 +279,19 @@ class DojoViewModel(app: Application) : AndroidViewModel(app) {
 
         lastLatencyMs = context.elapsedMs
 
+        // Saisie libre avec compte : Gemini est l'évaluateur. Sans compte, le correcteur local sert de secours.
+        if (exercise.requiresFreeInput && grader.available) {
+            val answer = s.typed.trim()
+            grader.grade(helpContext(exercise, answer, locked = false), answer) { graded ->
+                val now = _state.value
+                // Un seul verdict par exercice : une double soumission ne peut pas être enregistrée deux fois
+                if (now.result == null && now.exercise?.item?.cardId == exercise.item.cardId) {
+                    finish(exercise, GeminiVerdictMapper.toVerdict(graded, context), graded)
+                }
+            }
+            return
+        }
+
         val verdict = if (exercise.requiresFreeInput) {
             AnswerGrader.gradeText(s.typed, exercise.acceptedAnswers, context)
         } else {
@@ -267,7 +300,25 @@ class DojoViewModel(app: Application) : AndroidViewModel(app) {
         finish(exercise, verdict)
     }
 
-    private fun finish(exercise: DojoExercise, verdict: Verdict) {
+    /** Contexte pédagogique envoyé à Gemini (correction et aide) : seulement ce qui est utile à la question. */
+    fun helpContext(exercise: DojoExercise, studentAnswer: String, locked: Boolean): AiExerciseContext {
+        val item = exercise.item
+        return AiExerciseContext(
+            question = item.front,
+            reference = exercise.reference,
+            accepted = exercise.acceptedAnswers,
+            choices = if (exercise.requiresFreeInput) emptyList() else item.choices,
+            explanation = item.explanation,
+            hint = item.hint,
+            subject = item.subjectName.takeIf { it.isNotBlank() },
+            level = levelId?.let { Levels.label(it) },
+            lesson = exercise.lessonTitle ?: item.chapterTitle.takeIf { it.isNotBlank() },
+            studentAnswer = studentAnswer.takeIf { it.isNotBlank() },
+            locked = locked
+        )
+    }
+
+    private fun finish(exercise: DojoExercise, verdict: Verdict, ai: GradeResult? = null) {
         val answered = _state.value // ce que l'élève a saisi ou coché, avant que l'état ne change
         val message = if (verdict.correct) DojoMessages.congrats() else DojoMessages.encourage()
         _state.update {
@@ -276,7 +327,8 @@ class DojoViewModel(app: Application) : AndroidViewModel(app) {
                     correct = verdict.correct,
                     partial = verdict.partial,
                     rating = verdict.rating,
-                    message = message
+                    message = message,
+                    ai = ai
                 ),
                 correctCount = it.correctCount + if (verdict.correct) 1 else 0
             )

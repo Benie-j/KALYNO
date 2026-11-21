@@ -63,6 +63,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import ci.kalyno.app.data.ai.toDetailText
+import ci.kalyno.app.ui.ai.AiHelpButton
+import ci.kalyno.app.ui.ai.GradingStatus
 import ci.kalyno.app.data.StreakStore
 import ci.kalyno.app.data.dashboard.ReviewSession
 import ci.kalyno.app.data.dojo.ExerciseKind
@@ -332,6 +335,7 @@ private fun ExercisePane(state: DojoUiState, exercise: DojoExercise, vm: DojoVie
         QuizStickyFooter(
             validated = result != null,
             actionLabel = when {
+                result == null && state.grading.busy -> "CORRECTION EN COURS…"
                 result == null -> "VALIDER MA RÉPONSE"
                 isLast -> "VOIR MON BILAN"
                 else -> "CONTINUER"
@@ -379,6 +383,17 @@ private fun QuestionCard(state: DojoUiState, exercise: DojoExercise, vm: DojoVie
             onSubmit = vm::submit,
             onHaptic = haptic
         )
+        // Correction IA : chargement, ou erreur avec « Réessayer » (la réponse reste saisie)
+        GradingStatus(grading = state.grading, onRetry = vm::submit)
+        AiHelpButton(
+            context = vm.helpContext(
+                exercise = exercise,
+                studentAnswer = if (exercise.requiresFreeInput) state.typed.trim()
+                else state.selected.sorted().mapNotNull { item.choices.getOrNull(it) }.joinToString(" ; "),
+                locked = locked
+            ),
+            vmKey = "dojo-${item.cardId}"
+        )
     }
 }
 
@@ -421,6 +436,7 @@ private fun DojoFeedback(exercise: DojoExercise, result: DojoResult) {
         },
         message = result.message,
         detail = when {
+            result.ai != null -> result.ai.toDetailText()
             result.partial -> "Tu n'as pas coché toutes les bonnes réponses."
             !result.correct && exercise.kind == ExerciseKind.FREE_TEXT -> "Retiens le mot-clé : il résume l'idée en un mot."
             else -> null
