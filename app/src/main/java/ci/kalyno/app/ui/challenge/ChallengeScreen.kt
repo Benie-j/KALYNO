@@ -1,6 +1,6 @@
 package ci.kalyno.app.ui.challenge
 
-import ci.kalyno.app.data.Levels
+
 import ci.kalyno.app.data.ai.AiExerciseContext
 import ci.kalyno.app.data.ai.GeminiVerdict
 import ci.kalyno.app.data.ai.toDetailText
