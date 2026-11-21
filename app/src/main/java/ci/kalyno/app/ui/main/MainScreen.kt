@@ -25,7 +25,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import ci.kalyno.app.ui.ai.GeminiAssistantScreen
+import ci.kalyno.app.ui.ai.KalynoAssistantScreen
 import ci.kalyno.app.data.Levels
 import ci.kalyno.app.data.StreakStore
 import ci.kalyno.app.data.notifications.StudyReminders
@@ -55,7 +55,7 @@ private val TABS = listOf(
     TabItem("home", "Accueil"),
     TabItem("brain", "Dojo"),
     TabItem("book-open", "Explorer"),
-    TabItem("sparkles", "Gemini"),
+    TabItem("sparkles", "Kalyno"),
     TabItem("user-round", "Profil")
 )
 
@@ -193,7 +193,7 @@ fun MainScreen(
                         levelId = levelId,
                         onStartChapter = viewModel::startCustomSession
                     )
-                    3 -> GeminiAssistantScreen()
+                    3 -> KalynoAssistantScreen()
                     else -> {
                         val context = LocalContext.current
                         ProfileScreen(

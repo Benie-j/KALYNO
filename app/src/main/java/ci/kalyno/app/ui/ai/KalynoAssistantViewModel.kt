@@ -7,8 +7,8 @@ import ci.kalyno.app.data.ai.AiExerciseContext
 import ci.kalyno.app.data.ai.AiGateway
 import ci.kalyno.app.data.ai.AiPhase
 import ci.kalyno.app.data.ai.ChatTurn
-import ci.kalyno.app.data.ai.GeminiException
-import ci.kalyno.app.data.ai.GeminiRepository
+import ci.kalyno.app.data.ai.KalynoException
+import ci.kalyno.app.data.ai.KalynoRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -16,14 +16,14 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-/** Conversation avec Gemini : onglet indépendant (sans contexte) ou aide d'un exercice (avec contexte). */
-class GeminiAssistantViewModel(app: Application) : AndroidViewModel(app) {
+/** Conversation avec Kalyno : onglet indépendant (sans contexte) ou aide d'un exercice (avec contexte). */
+class KalynoAssistantViewModel(app: Application) : AndroidViewModel(app) {
 
-    private val gateway: AiGateway = GeminiRepository.get(app)
+    private val gateway: AiGateway = KalynoRepository.get(app)
     private var nextId = 0L
 
-    private val _state = MutableStateFlow(GeminiUiState(signedIn = gateway.isAvailable()))
-    val state: StateFlow<GeminiUiState> = _state.asStateFlow()
+    private val _state = MutableStateFlow(KalynoUiState(signedIn = gateway.isAvailable()))
+    val state: StateFlow<KalynoUiState> = _state.asStateFlow()
 
     /** Dernier message utilisateur sans réponse, pour « Réessayer ». */
     private var pending: String? = null
@@ -77,7 +77,7 @@ class GeminiAssistantViewModel(app: Application) : AndroidViewModel(app) {
                 }
             } catch (e: CancellationException) {
                 throw e
-            } catch (e: GeminiException) {
+            } catch (e: KalynoException) {
                 _state.update { it.copy(phase = AiPhase.ERROR, error = e.message) }
             } catch (e: Exception) {
                 _state.update { it.copy(phase = AiPhase.ERROR, error = "Erreur inattendue. Réessaie.") }

@@ -25,13 +25,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ci.kalyno.app.data.ai.AiExerciseContext
-import ci.kalyno.app.data.ai.GeminiRepository
+import ci.kalyno.app.data.ai.KalynoRepository
 import ci.kalyno.app.ui.icons.KalynoSvgIcon
 import ci.kalyno.app.ui.theme.KalynoBlue
 import ci.kalyno.app.ui.theme.KalynoBlueSoft
 
 /**
- * « Demander à Gemini » depuis un exercice (Dojo ou Challenge). L'aide ne valide rien et ne modifie pas la réponse :
+ * « Demander à Kalyno » depuis un exercice (Dojo ou Challenge). L'aide ne valide rien et ne modifie pas la réponse :
  * elle ouvre seulement une conversation avec le contexte de la question. Aucun appel tant que l'élève n'écrit pas.
  * Affichée uniquement avec un compte connecté.
  */
@@ -39,7 +39,7 @@ import ci.kalyno.app.ui.theme.KalynoBlueSoft
 @Composable
 fun AiHelpButton(context: AiExerciseContext, vmKey: String, modifier: Modifier = Modifier) {
     val appContext = LocalContext.current
-    if (!remember { GeminiRepository.get(appContext).isAvailable() }) return
+    if (!remember { KalynoRepository.get(appContext).isAvailable() }) return
     var open by rememberSaveable(vmKey) { mutableStateOf(false) }
 
     Row(
@@ -53,7 +53,7 @@ fun AiHelpButton(context: AiExerciseContext, vmKey: String, modifier: Modifier =
     ) {
         KalynoSvgIcon(name = "sparkles", size = 18.dp, tint = KalynoBlue)
         Text(
-            "Demander à Gemini",
+            "Demander à Kalyno",
             color = KalynoBlue,
             fontWeight = FontWeight.Bold,
             fontSize = 14.sp,
@@ -66,7 +66,7 @@ fun AiHelpButton(context: AiExerciseContext, vmKey: String, modifier: Modifier =
             onDismissRequest = { open = false },
             sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
         ) {
-            GeminiExerciseHelp(
+            KalynoExerciseHelp(
                 context = context,
                 vmKey = vmKey,
                 modifier = Modifier.fillMaxHeight(0.85f)

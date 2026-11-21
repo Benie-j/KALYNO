@@ -32,7 +32,7 @@ fun GradingStatus(grading: GradingState, onRetry: () -> Unit, modifier: Modifier
         ) {
             CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = KalynoBlue)
             Text(
-                if (grading.phase == AiPhase.RETRYING) "Nouvelle tentative…" else "Gemini corrige ta réponse…",
+                if (grading.phase == AiPhase.RETRYING) "Nouvelle tentative…" else "Kalyno corrige ta réponse…",
                 color = KalynoMuted,
                 fontSize = 14.sp,
                 modifier = Modifier.padding(start = 10.dp)

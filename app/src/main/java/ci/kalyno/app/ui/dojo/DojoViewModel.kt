@@ -10,8 +10,8 @@ import ci.kalyno.app.data.dashboard.ReviewItem
 import ci.kalyno.app.data.dashboard.ReviewSession
 import ci.kalyno.app.data.dashboard.StudentId
 import ci.kalyno.app.data.ai.AiExerciseContext
-import ci.kalyno.app.data.ai.GeminiRepository
-import ci.kalyno.app.data.ai.GeminiVerdictMapper
+import ci.kalyno.app.data.ai.KalynoRepository
+import ci.kalyno.app.data.ai.KalynoVerdictMapper
 import ci.kalyno.app.data.ai.GradeResult
 import ci.kalyno.app.data.Levels
 import ci.kalyno.app.ui.ai.FreeTextGrader
@@ -71,7 +71,7 @@ data class DojoResult(
     val message: String,
     /** Renseigné quand le moteur FSRS a planifié la prochaine révision. */
     val nextReviewDays: Int? = null,
-    /** Correction sémantique Gemini (saisie libre) ; null pour un QCM ou une correction locale. */
+    /** Correction sémantique Kalyno (saisie libre) ; null pour un QCM ou une correction locale. */
     val ai: GradeResult? = null
 )
 
@@ -124,7 +124,7 @@ class DojoViewModel(app: Application) : AndroidViewModel(app) {
     val state: StateFlow<DojoUiState> = _state.asStateFlow()
 
     /** Correction sémantique commune au Dojo et au Challenge. */
-    private val grader = FreeTextGrader(GeminiRepository.get(app), viewModelScope)
+    private val grader = FreeTextGrader(KalynoRepository.get(app), viewModelScope)
 
     init {
         viewModelScope.launch { grader.state.collect { g -> _state.update { it.copy(grading = g) } } }
@@ -279,14 +279,14 @@ class DojoViewModel(app: Application) : AndroidViewModel(app) {
 
         lastLatencyMs = context.elapsedMs
 
-        // Saisie libre avec compte : Gemini est l'évaluateur. Sans compte, le correcteur local sert de secours.
+        // Saisie libre avec compte : Kalyno est l'évaluateur. Sans compte, le correcteur local sert de secours.
         if (exercise.requiresFreeInput && grader.available) {
             val answer = s.typed.trim()
             grader.grade(helpContext(exercise, answer, locked = false), answer) { graded ->
                 val now = _state.value
                 // Un seul verdict par exercice : une double soumission ne peut pas être enregistrée deux fois
                 if (now.result == null && now.exercise?.item?.cardId == exercise.item.cardId) {
-                    finish(exercise, GeminiVerdictMapper.toVerdict(graded, context), graded)
+                    finish(exercise, KalynoVerdictMapper.toVerdict(graded, context), graded)
                 }
             }
             return
@@ -300,7 +300,7 @@ class DojoViewModel(app: Application) : AndroidViewModel(app) {
         finish(exercise, verdict)
     }
 
-    /** Contexte pédagogique envoyé à Gemini (correction et aide) : seulement ce qui est utile à la question. */
+    /** Contexte pédagogique envoyé à Kalyno (correction et aide) : seulement ce qui est utile à la question. */
     fun helpContext(exercise: DojoExercise, studentAnswer: String, locked: Boolean): AiExerciseContext {
         val item = exercise.item
         return AiExerciseContext(

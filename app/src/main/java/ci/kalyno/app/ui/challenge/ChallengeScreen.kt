@@ -2,7 +2,7 @@ package ci.kalyno.app.ui.challenge
 
 
 import ci.kalyno.app.data.ai.AiExerciseContext
-import ci.kalyno.app.data.ai.GeminiVerdict
+import ci.kalyno.app.data.ai.KalynoVerdict
 import ci.kalyno.app.data.ai.toDetailText
 import ci.kalyno.app.ui.ai.AiHelpButton
 import ci.kalyno.app.ui.ai.GradingStatus
@@ -271,11 +271,11 @@ private fun QuestionStep(
         val g = graded ?: return@LaunchedEffect
         if (outcome == OUTCOME_NONE) {
             outcome = when (g.verdict) {
-                GeminiVerdict.CORRECT -> OUTCOME_CORRECT
-                GeminiVerdict.PARTIAL -> OUTCOME_PARTIAL
-                GeminiVerdict.INCORRECT -> OUTCOME_WRONG
+                KalynoVerdict.CORRECT -> OUTCOME_CORRECT
+                KalynoVerdict.PARTIAL -> OUTCOME_PARTIAL
+                KalynoVerdict.INCORRECT -> OUTCOME_WRONG
             }
-            message = if (g.verdict == GeminiVerdict.CORRECT) DojoMessages.congrats() else DojoMessages.encourage()
+            message = if (g.verdict == KalynoVerdict.CORRECT) DojoMessages.congrats() else DojoMessages.encourage()
         }
     }
 
@@ -315,7 +315,7 @@ private fun QuestionStep(
     // Correction objective du Dojo : jamais avant la validation
     fun submit() {
         if (locked || !canSubmit) return
-        // Saisie libre avec compte : Gemini corrige, même contexte et même logique que le Dojo
+        // Saisie libre avec compte : Kalyno corrige, même contexte et même logique que le Dojo
         if (isFree && gradingVm.available) {
             gradingVm.grade(aiContext(locked = false), typed.trim())
             return

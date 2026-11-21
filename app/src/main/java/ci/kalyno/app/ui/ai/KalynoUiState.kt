@@ -17,7 +17,7 @@ data class GradingState(
 data class ChatMessage(val id: Long, val fromUser: Boolean, val text: String)
 
 /** État de l'assistant (écran indépendant et feuille d'aide des exercices). */
-data class GeminiUiState(
+data class KalynoUiState(
     val messages: List<ChatMessage> = emptyList(),
     val input: String = "",
     val phase: AiPhase = AiPhase.IDLE,

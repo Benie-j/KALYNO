@@ -22,7 +22,7 @@ interface AiGateway {
     suspend fun assist(message: String, context: AiExerciseContext?, history: List<ChatTurn>): String
 }
 
-class GeminiRepository private constructor(context: Context) : AiGateway {
+class KalynoRepository private constructor(context: Context) : AiGateway {
 
     private val appContext = context.applicationContext
     private val store = AuthStore(appContext)
@@ -36,8 +36,8 @@ class GeminiRepository private constructor(context: Context) : AiGateway {
             .put("answer", answer.take(MAX_ANSWER))
             .put("context", contextJson(context))
         val text = post(body.toString())
-        return GeminiResultParser.parseGradeEnvelope(text)
-            ?: throw GeminiException("malformed_result", "Correction illisible, réessaie.", retryable = true)
+        return KalynoResultParser.parseGradeEnvelope(text)
+            ?: throw KalynoException("malformed_result", "Correction illisible, réessaie.", retryable = true)
     }
 
     override suspend fun assist(message: String, context: AiExerciseContext?, history: List<ChatTurn>): String {
@@ -51,8 +51,8 @@ class GeminiRepository private constructor(context: Context) : AiGateway {
             .put("history", turns)
         if (context != null) body.put("context", contextJson(context))
         val text = post(body.toString())
-        return GeminiResultParser.parseAssistEnvelope(text)
-            ?: throw GeminiException("malformed_result", "Réponse illisible, réessaie.", retryable = true)
+        return KalynoResultParser.parseAssistEnvelope(text)
+            ?: throw KalynoException("malformed_result", "Réponse illisible, réessaie.", retryable = true)
     }
 
     private fun contextJson(c: AiExerciseContext): JSONObject = JSONObject()
@@ -68,15 +68,15 @@ class GeminiRepository private constructor(context: Context) : AiGateway {
         .put("student_answer", c.studentAnswer.orEmpty())
         .put("locked", c.locked)
 
-    /** POST vers la fonction Edge avec le jeton de l'élève (renouvelé si besoin). Jamais de clé Gemini ici. */
+    /** POST vers la fonction Edge avec le jeton de l'élève (renouvelé si besoin). Jamais de clé Kalyno ici. */
     private suspend fun post(json: String): String = withContext(Dispatchers.IO) {
         val token = try {
             cloud.validAccessToken()
         } catch (e: CancellationException) {
             throw e
         } catch (e: IOException) {
-            throw GeminiException("network", "Connexion impossible. Vérifie ta connexion et réessaie.", true)
-        } ?: throw GeminiException("unauthenticated", "Connecte-toi pour utiliser l'assistant IA.", false)
+            throw KalynoException("network", "Connexion impossible. Vérifie ta connexion et réessaie.", true)
+        } ?: throw KalynoException("unauthenticated", "Connecte-toi pour utiliser l'assistant IA.", false)
 
         val connection = URL("${SupabaseConfig.BASE_URL}/functions/v1/$FUNCTION").openConnection() as HttpURLConnection
         try {
@@ -94,19 +94,19 @@ class GeminiRepository private constructor(context: Context) : AiGateway {
             val stream = if (code in 200..299) connection.inputStream else connection.errorStream
             val text = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
             if (code in 200..299) return@withContext text
-            throw GeminiResultParser.parseError(text) ?: GeminiException(
+            throw KalynoResultParser.parseError(text) ?: KalynoException(
                 code = "http_$code",
                 message = if (code >= 500) "Le service IA est indisponible. Réessaie." else "Requête refusée.",
                 retryable = code >= 500 || code == 429
             )
         } catch (e: CancellationException) {
             throw e
-        } catch (e: GeminiException) {
+        } catch (e: KalynoException) {
             throw e
         } catch (e: SocketTimeoutException) {
-            throw GeminiException("timeout", "Gemini met trop de temps à répondre. Réessaie.", true)
+            throw KalynoException("timeout", "Kalyno met trop de temps à répondre. Réessaie.", true)
         } catch (e: IOException) {
-            throw GeminiException("network", "Connexion impossible. Vérifie ta connexion et réessaie.", true)
+            throw KalynoException("network", "Connexion impossible. Vérifie ta connexion et réessaie.", true)
         } finally {
             connection.disconnect()
         }
@@ -117,9 +117,9 @@ class GeminiRepository private constructor(context: Context) : AiGateway {
         private const val MAX_ANSWER = 600
         private const val MAX_HISTORY = 10
 
-        @Volatile private var instance: GeminiRepository? = null
+        @Volatile private var instance: KalynoRepository? = null
 
-        fun get(context: Context): GeminiRepository =
-            instance ?: synchronized(this) { instance ?: GeminiRepository(context).also { instance = it } }
+        fun get(context: Context): KalynoRepository =
+            instance ?: synchronized(this) { instance ?: KalynoRepository(context).also { instance = it } }
     }
 }

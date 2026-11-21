@@ -52,14 +52,14 @@ import ci.kalyno.app.ui.theme.KalynoMuted
 import ci.kalyno.app.ui.theme.KalynoOutline
 import ci.kalyno.app.ui.theme.KalynoText
 
-/** Onglet « Gemini » : conversation libre, sans contexte d'exercice. */
+/** Onglet « Kalyno » : conversation libre, sans contexte d'exercice. */
 @Composable
-fun GeminiAssistantScreen(modifier: Modifier = Modifier) {
-    val vm: GeminiAssistantViewModel = viewModel(key = "gemini-tab")
+fun KalynoAssistantScreen(modifier: Modifier = Modifier) {
+    val vm: KalynoAssistantViewModel = viewModel(key = "kalyno-tab")
     LaunchedEffect(Unit) { vm.setContext(null) }
     Column(modifier = modifier.fillMaxSize().background(KalynoBackground)) {
         Text(
-            "Gemini",
+            "Kalyno",
             color = KalynoText,
             fontSize = 22.sp,
             fontWeight = FontWeight.ExtraBold,
@@ -71,8 +71,8 @@ fun GeminiAssistantScreen(modifier: Modifier = Modifier) {
 
 /** Contenu de la feuille d'aide d'un exercice : même conversation, avec le contexte de la question. */
 @Composable
-fun GeminiExerciseHelp(context: AiExerciseContext, vmKey: String, modifier: Modifier = Modifier) {
-    val vm: GeminiAssistantViewModel = viewModel(key = "gemini-help-$vmKey")
+fun KalynoExerciseHelp(context: AiExerciseContext, vmKey: String, modifier: Modifier = Modifier) {
+    val vm: KalynoAssistantViewModel = viewModel(key = "kalyno-help-$vmKey")
     LaunchedEffect(context) { vm.setContext(context) }
     ChatPane(
         vm = vm,
@@ -86,7 +86,7 @@ private val HELP_BEFORE = listOf("Explique-moi cette question.", "Explique cette
 private val HELP_AFTER = listOf("Pourquoi ma réponse est-elle incorrecte ?", "Explique cette notion autrement.")
 
 @Composable
-private fun ChatPane(vm: GeminiAssistantViewModel, modifier: Modifier, suggestions: List<String>) {
+private fun ChatPane(vm: KalynoAssistantViewModel, modifier: Modifier, suggestions: List<String>) {
     val state by vm.state.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
     LaunchedEffect(state.messages.size, state.busy) {
@@ -96,7 +96,7 @@ private fun ChatPane(vm: GeminiAssistantViewModel, modifier: Modifier, suggestio
 
     Column(modifier = modifier.fillMaxWidth().imePadding()) {
         if (!state.signedIn) {
-            Notice("Connecte-toi pour discuter avec Gemini.", error = false, onRetry = null)
+            Notice("Connecte-toi pour discuter avec Kalyno.", error = false, onRetry = null)
         }
         LazyColumn(
             state = listState,
@@ -191,7 +191,7 @@ private fun TypingIndicator() {
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 6.dp)) {
         CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = KalynoBlue)
         Spacer(Modifier.size(8.dp))
-        Text("Gemini réfléchit…", color = KalynoMuted, fontSize = 13.sp)
+        Text("Kalyno réfléchit…", color = KalynoMuted, fontSize = 13.sp)
     }
 }
 

@@ -8,7 +8,7 @@ import org.json.JSONObject
  * Vérifie strictement la réponse de la fonction Edge. Une réponse malformée ne devient jamais une
  * correction : le résultat est null et l'appelant traite cela comme une erreur à réessayer.
  */
-object GeminiResultParser {
+object KalynoResultParser {
 
     /** Enveloppe `{ok:true, kind:"grade", result:{...}}` -> correction, ou null si invalide. */
     fun parseGradeEnvelope(body: String): GradeResult? = try {
@@ -22,9 +22,9 @@ object GeminiResultParser {
     fun parseGrade(o: JSONObject?): GradeResult? {
         o ?: return null
         val verdict = when (o.optString("verdict")) {
-            "CORRECT" -> GeminiVerdict.CORRECT
-            "PARTIAL" -> GeminiVerdict.PARTIAL
-            "INCORRECT" -> GeminiVerdict.INCORRECT
+            "CORRECT" -> KalynoVerdict.CORRECT
+            "PARTIAL" -> KalynoVerdict.PARTIAL
+            "INCORRECT" -> KalynoVerdict.INCORRECT
             else -> return null
         }
         val score = percent(o, "score") ?: return null
@@ -53,10 +53,10 @@ object GeminiResultParser {
     }
 
     /** `{ok:false, error:{code,message,retryable}}` -> exception ; null si le corps n'a pas cette forme. */
-    fun parseError(body: String): GeminiException? = try {
+    fun parseError(body: String): KalynoException? = try {
         val e = JSONObject(body).optJSONObject("error")
         if (e == null) null
-        else GeminiException(
+        else KalynoException(
             code = e.optString("code", "unknown"),
             message = e.optString("message").ifBlank { "Le service IA a échoué." },
             retryable = e.optBoolean("retryable", true)

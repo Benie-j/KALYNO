@@ -4,8 +4,8 @@ import ci.kalyno.app.data.ai.AiExerciseContext
 import ci.kalyno.app.data.ai.AiGateway
 import ci.kalyno.app.data.ai.AiPhase
 import ci.kalyno.app.data.ai.ChatTurn
-import ci.kalyno.app.data.ai.GeminiException
-import ci.kalyno.app.data.ai.GeminiVerdict
+import ci.kalyno.app.data.ai.KalynoException
+import ci.kalyno.app.data.ai.KalynoVerdict
 import ci.kalyno.app.data.ai.GradeResult
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -39,7 +39,7 @@ class FreeTextGraderTest {
 
     @After fun tearDown() = job.cancel()
 
-    private fun ok(v: GeminiVerdict = GeminiVerdict.CORRECT) = GradeResult(v, 90, 90, "ok")
+    private fun ok(v: KalynoVerdict = KalynoVerdict.CORRECT) = GradeResult(v, 90, 90, "ok")
 
     @Test fun `correction reussie appelle onGraded une seule fois`() {
         var got: GradeResult? = null
@@ -48,7 +48,7 @@ class FreeTextGraderTest {
         assertEquals(AiPhase.LOADING, grader.state.value.phase)
         gateway.next.complete(ok())
         assertEquals(AiPhase.SUCCESS, grader.state.value.phase)
-        assertEquals(GeminiVerdict.CORRECT, got!!.verdict)
+        assertEquals(KalynoVerdict.CORRECT, got!!.verdict)
         assertEquals(1, count)
     }
 
@@ -64,7 +64,7 @@ class FreeTextGraderTest {
     @Test fun `erreur reseau ne donne aucun verdict et permet de reessayer`() {
         var graded = 0
         grader.grade(ctx, "a") { graded++ }
-        gateway.next.completeExceptionally(GeminiException("network", "Connexion impossible", true))
+        gateway.next.completeExceptionally(KalynoException("network", "Connexion impossible", true))
         assertEquals(AiPhase.ERROR, grader.state.value.phase)
         assertEquals("Connexion impossible", grader.state.value.error)
         assertEquals(0, graded)
@@ -72,7 +72,7 @@ class FreeTextGraderTest {
         gateway.next = CompletableDeferred()
         assertTrue(grader.grade(ctx, "a") { graded++ })
         assertEquals(AiPhase.RETRYING, grader.state.value.phase)
-        gateway.next.complete(ok(GeminiVerdict.PARTIAL))
+        gateway.next.complete(ok(KalynoVerdict.PARTIAL))
         assertEquals(AiPhase.SUCCESS, grader.state.value.phase)
         assertEquals(1, graded)
         assertEquals(2, gateway.calls)
@@ -81,7 +81,7 @@ class FreeTextGraderTest {
     @Test fun `timeout est une erreur sans verdict`() {
         var graded = 0
         grader.grade(ctx, "a") { graded++ }
-        gateway.next.completeExceptionally(GeminiException("timeout", "Trop long", true))
+        gateway.next.completeExceptionally(KalynoException("timeout", "Trop long", true))
         assertTrue(grader.state.value.failed)
         assertEquals(0, graded)
     }
@@ -100,7 +100,7 @@ class FreeTextGraderTest {
 
     @Test fun `reset remet l'etat a zero`() {
         grader.grade(ctx, "a") { }
-        gateway.next.completeExceptionally(GeminiException("network", "x", true))
+        gateway.next.completeExceptionally(KalynoException("network", "x", true))
         grader.reset()
         assertEquals(AiPhase.IDLE, grader.state.value.phase)
     }

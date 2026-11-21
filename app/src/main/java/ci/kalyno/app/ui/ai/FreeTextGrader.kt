@@ -3,7 +3,7 @@ package ci.kalyno.app.ui.ai
 import ci.kalyno.app.data.ai.AiExerciseContext
 import ci.kalyno.app.data.ai.AiGateway
 import ci.kalyno.app.data.ai.AiPhase
-import ci.kalyno.app.data.ai.GeminiException
+import ci.kalyno.app.data.ai.KalynoException
 import ci.kalyno.app.data.ai.GradeResult
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -41,7 +41,7 @@ class FreeTextGrader(
                 onGraded(result)
             } catch (e: CancellationException) {
                 throw e
-            } catch (e: GeminiException) {
+            } catch (e: KalynoException) {
                 _state.value = GradingState(AiPhase.ERROR, e.message)
             } catch (e: Exception) {
                 _state.value = GradingState(AiPhase.ERROR, "La correction a échoué. Réessaie.")

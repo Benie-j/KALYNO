@@ -4,7 +4,7 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import ci.kalyno.app.data.ai.AiExerciseContext
-import ci.kalyno.app.data.ai.GeminiRepository
+import ci.kalyno.app.data.ai.KalynoRepository
 import ci.kalyno.app.data.ai.GradeResult
 import ci.kalyno.app.ui.ai.FreeTextGrader
 import ci.kalyno.app.ui.ai.GradingState
@@ -19,7 +19,7 @@ import kotlinx.coroutines.flow.asStateFlow
  */
 class ChallengeGradingViewModel(app: Application) : AndroidViewModel(app) {
 
-    private val grader = FreeTextGrader(GeminiRepository.get(app), viewModelScope)
+    private val grader = FreeTextGrader(KalynoRepository.get(app), viewModelScope)
 
     val grading: StateFlow<GradingState> = grader.state
     val available: Boolean get() = grader.available
