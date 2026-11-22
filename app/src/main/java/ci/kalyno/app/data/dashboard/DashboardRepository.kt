@@ -47,10 +47,12 @@ class DashboardRepository(context: Context) {
         val urgentItems: List<ReviewItem>,
         /** Jours restants avant l'examen publié par l'admin (null si aucune date). */
         val examDaysLeft: Int?,
-        /** Nombre de notions (chapitres) maitrisees = masteredNotions.size, toujours coherent avec la liste. */
+        /** Nombre de notions (chapitres) maitrisees = masteredNotions.size (differente du nombre de cartes maitrisees). */
         val masteredCount: Int,
         /** Detail des notions maitrisees (regroupees par chapitre), pour l'ecran "Ma progression". */
         val masteredNotions: List<MasteredNotion>,
+        /** Cartes maitrisees une a une (au moins MasteryCalculator.MASTERED_REPETITIONS repetitions reussies). */
+        val masteredCards: List<MasteredCard> = emptyList(),
         /** Probabilite moyenne de retention (courbe de l'oubli FSRS), null si aucune carte revisee. */
         val retentionScore: Float?,
         /** Derniere lecon ouverte dans l'Explorer ("Reprendre l'aventure"), null si aucune encore. */
@@ -227,40 +229,13 @@ class DashboardRepository(context: Context) {
             ?.average()
             ?.toFloat()
 
-        // ----- Détail des notions maîtrisées (groupées par chapitre) -----
-        // Une "notion" = un chapitre, pas une fiche isolée : c'est le niveau auquel l'élève
-        // raisonne. masteredCount en dérive directement pour que le chiffre affiché en tête
-        // de l'écran corresponde EXACTEMENT au nombre de cartes listées en dessous.
-        val masteredNotions = srs.masteredDetails(studentId, MASTERED_REPETITIONS)
-            .groupBy { "${it.subjectId}::${it.chapitre}" }
-            .mapNotNull { (key, rows) ->
-                val chapitre = rows.first().chapitre.takeIf { it.isNotBlank() } ?: return@mapNotNull null
-                val subjectName = rows.first().subjectName
-                val maxRepetitions = rows.maxOf { it.repetitions }
-                val tier = when {
-                    maxRepetitions >= EXPERT_REPETITIONS -> MasteryTier.EXPERTE
-                    maxRepetitions >= ADVANCED_REPETITIONS -> MasteryTier.AVANCEE
-                    else -> MasteryTier.SOLIDE
-                }
-                val score = rows
-                    .mapNotNull { row ->
-                        val last = row.lastReviewedAt ?: return@mapNotNull null
-                        val stability = row.stability.takeIf { it > 0.0 } ?: return@mapNotNull null
-                        SrsEngine.retrievability((now - last) / DAY_MS.toDouble(), stability)
-                    }
-                    .takeIf { it.isNotEmpty() }
-                    ?.average()
-                    ?.toFloat()
-                MasteredNotion(
-                    key = key,
-                    label = chapitre,
-                    domain = subjectName,
-                    masteredCards = rows.size,
-                    tier = tier,
-                    score = score
-                )
-            }
-            .sortedWith(compareByDescending<MasteredNotion> { it.tier }.thenByDescending { it.masteredCards })
+        // ----- Cartes et notions maîtrisées -----
+        // Une carte est maîtrisée dès MASTERED_REPETITIONS répétitions réussies. Une "notion" = un chapitre
+        // contenant au moins une carte maîtrisée : masteredCount compte les notions, la liste détaillée
+        // affiche les cartes une à une (les deux chiffres sont volontairement distincts).
+        val masteredRows = srs.masteredDetails(studentId, MasteryCalculator.MASTERED_REPETITIONS)
+        val masteredNotions = MasteryCalculator.notions(masteredRows, now)
+        val masteredCards = MasteryCalculator.cards(masteredRows, now)
         val masteredCount = masteredNotions.size
 
         Snapshot(
@@ -285,6 +260,7 @@ class DashboardRepository(context: Context) {
                 ?.takeIf { it >= 0 },
             masteredCount = masteredCount,
             masteredNotions = masteredNotions,
+            masteredCards = masteredCards,
             retentionScore = retentionScore,
             lastLesson = prefs.lastLessonChapterTitle?.let { chapterTitle ->
                 LastLessonUi(
@@ -568,11 +544,6 @@ class DashboardRepository(context: Context) {
 
     private companion object {
         const val DAY_MS = 24 * 60 * 60 * 1000L
-        /** Nombre de réussites d'affilée pour considérer une notion comme maîtrisée. */
-        const val MASTERED_REPETITIONS = 3
-        /** Paliers d'affichage de l'écran "Ma progression" (dérivés du seuil de maîtrise ci-dessus). */
-        const val ADVANCED_REPETITIONS = 5
-        const val EXPERT_REPETITIONS = 8
     }
 }
 

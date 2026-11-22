@@ -43,6 +43,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import ci.kalyno.app.data.dashboard.DailyQuote
 import ci.kalyno.app.data.dashboard.LastLessonUi
+import ci.kalyno.app.data.dashboard.MasteredCard
 import ci.kalyno.app.data.dashboard.MasteredNotion
 import ci.kalyno.app.data.dashboard.MasteryTier
 import ci.kalyno.app.data.dashboard.UrgentTopic
@@ -51,6 +52,7 @@ import ci.kalyno.app.ui.components.KalynoPrimaryButton
 import ci.kalyno.app.ui.components.KalynoProgressBar
 import ci.kalyno.app.ui.components.ShimmerBlock
 import ci.kalyno.app.ui.icons.KalynoSvgIcon
+import ci.kalyno.app.ui.progress.MasteredCardsSection
 import ci.kalyno.app.ui.theme.KalynoAmberDeep
 import ci.kalyno.app.ui.theme.KalynoAmberSoft
 import ci.kalyno.app.ui.theme.KalynoBackground
@@ -316,6 +318,7 @@ private fun ProgressDetailSheet(
     masteredCount: Int?,
     retentionScore: Float?,
     masteredNotions: List<MasteredNotion> = emptyList(),
+    masteredCards: List<MasteredCard> = emptyList(),
     urgentTopics: List<UrgentTopic>,
     onDismiss: () -> Unit
 ) {
@@ -432,6 +435,9 @@ private fun ProgressDetailSheet(
 
             Spacer(Modifier.height(22.dp))
             MasteredNotionsSection(notions = masteredNotions)
+
+            Spacer(Modifier.height(22.dp))
+            MasteredCardsSection(cards = masteredCards)
         }
     }
 }

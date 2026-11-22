@@ -133,7 +133,9 @@ fun MainScreen(
         BackHandler { progressOpen = false }
         ProgressHistoryScreen(
             retentionScore = state.retentionScore,
-            onBack = { progressOpen = false }
+            onBack = { progressOpen = false },
+            masteredCount = state.masteredCount,
+            masteredCards = state.masteredCards
         )
     } else {
         BackHandler(enabled = tab != 0) { tab = 0 }

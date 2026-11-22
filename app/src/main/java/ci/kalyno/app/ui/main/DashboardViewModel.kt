@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import ci.kalyno.app.data.StreakStore
+import ci.kalyno.app.data.cloud.StreakRecorder
 import ci.kalyno.app.data.badges.BadgesRepository
 import ci.kalyno.app.data.dashboard.DashboardRepository
 import ci.kalyno.app.data.dashboard.DashboardUiState
@@ -123,6 +124,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                         examLabel = exams.label(levelId),
                         masteredCount = snapshot.masteredCount,
                         masteredNotions = snapshot.masteredNotions,
+                        masteredCards = snapshot.masteredCards,
                         retentionScore = snapshot.retentionScore,
                         lastLesson = snapshot.lastLesson
                     )
@@ -226,7 +228,8 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     fun closeSession(completed: Boolean) {
         viewModelScope.launch {
             writeLock.withLock { }
-            if (completed) streakStore.recordCompletion()
+            // Enregistrement local immédiat, puis synchronisation cloud (en attente si hors ligne)
+            if (completed) StreakRecorder.complete(getApplication<Application>(), studentId)
             _state.update { it.copy(session = null) }
             loadedLevel?.let { refresh(it) }
             runCatching { badges.refresh(studentId) } // recalcule en silence ; la modale vit dans BadgesViewModel (écran Profil)

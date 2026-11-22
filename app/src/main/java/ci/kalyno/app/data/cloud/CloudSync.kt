@@ -3,6 +3,9 @@ package ci.kalyno.app.data.cloud
 import android.content.Context
 import android.util.Log
 import ci.kalyno.app.data.AppPrefs
+import ci.kalyno.app.data.StreakLogic
+import ci.kalyno.app.data.StreakState
+import ci.kalyno.app.data.StreakStore
 import ci.kalyno.app.data.auth.AuthStore
 import ci.kalyno.app.data.auth.SupabaseAuthApi
 import ci.kalyno.app.data.dashboard.KalynoDatabase
@@ -23,7 +26,7 @@ import org.json.JSONObject
 data class RemoteProfile(val nickname: String, val levelId: String)
 
 /**
- * Synchronisation du compte : profil, progression SRS et historique des révisions.
+ * Synchronisation du compte : profil, progression SRS, historique des révisions et série de jours.
  *
  * - Local d'abord : Room reste la source de travail, le cloud sert de sauvegarde et de reprise.
  * - Une carte en conflit : la révision la plus récente gagne.
@@ -106,9 +109,82 @@ class CloudSync(context: Context) {
         step("historique reçu") { pullLogs(studentId, userId, token) }
         step("historique envoyé") { pushLogs(studentId, userId, token) }
 
+        // La série a sa propre étape : une erreur ici n'empêche pas les autres, et ne bloque pas le drapeau d'envoi complet
+        var streakError: Exception? = null
+        try {
+            syncStreak(userId, token)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "Étape « série » en échec : ${e.message}")
+            streakError = e
+        }
+
         val error = firstError
         if (error != null) throw error
         flags.edit().putBoolean(FULL_RESEND_FLAG, true).apply()
+        if (streakError != null) throw streakError
+    }
+
+    // ------------------------------------------------------------------ Série de jours
+
+    /** Série du compte stockée dans student_streaks, ou null s'il n'y a pas encore de ligne. */
+    private fun fetchStreakRow(userId: String, token: String): StreakState? {
+        val rows = JSONArray(
+            SupabaseRest.request(
+                "GET",
+                "student_streaks?user_id=eq.$userId&select=streak,last_completion_day&limit=1",
+                token
+            )
+        )
+        if (rows.length() == 0) return null
+        val row = rows.getJSONObject(0)
+        if (row.isNull("streak") || row.isNull("last_completion_day")) return null
+        return StreakState(row.getInt("streak"), row.getLong("last_completion_day"))
+    }
+
+    private fun postStreak(userId: String, state: StreakState, token: String) {
+        val body = JSONObject()
+            .put("user_id", userId)
+            .put("streak", state.streak)
+            .put("last_completion_day", state.lastDay)
+            .put("updated_at", java.time.Instant.now().toString())
+            .toString()
+        SupabaseRest.request("POST", "student_streaks?on_conflict=user_id", token, body, UPSERT)
+    }
+
+    /**
+     * Fusionne la série locale et celle du cloud (règle : dernier jour de session), restaure ou envoie
+     * selon le cas. La clé distante est toujours le user_id du compte connecté.
+     * Table absente côté Supabase : étape ignorée, la série locale reste en attente d'envoi.
+     */
+    private suspend fun syncStreak(userId: String, token: String) {
+        val streaks = StreakStore(appContext)
+        val local = streaks.stateFor(userId)
+        val remote = try {
+            fetchStreakRow(userId, token)
+        } catch (e: IOException) {
+            if (isMissingSchema(e)) {
+                Log.w(TAG, "Table student_streaks absente côté Supabase : série non synchronisée")
+                return
+            }
+            throw e
+        }
+
+        val merge = StreakLogic.merge(local, remote)
+        if (merge.restoreLocal) streaks.restore(userId, merge.state)
+        if (merge.pushRemote) {
+            try {
+                postStreak(userId, merge.state, token)
+            } catch (e: IOException) {
+                if (isMissingSchema(e)) {
+                    Log.w(TAG, "Table student_streaks absente côté Supabase : série non envoyée")
+                    return
+                }
+                throw e
+            }
+        }
+        streaks.markSynced(userId, merge.state)
     }
 
     // ------------------------------------------------------------------ Cartes apprises

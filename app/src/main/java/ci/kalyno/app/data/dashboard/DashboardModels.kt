@@ -90,6 +90,21 @@ data class MasteredNotion(
     val score: Float?
 )
 
+/**
+ * Une carte individuelle jugée maîtrisée par le moteur (au moins MasteryCalculator.MASTERED_REPETITIONS
+ * répétitions réussies). À ne pas confondre avec [MasteredNotion], qui regroupe les cartes par chapitre.
+ * [score] est la probabilité de rétention (0..1), null si la carte n'a pas de stabilité connue.
+ */
+data class MasteredCard(
+    val cardId: String,
+    val question: String,
+    val subjectName: String,
+    val chapterTitle: String,
+    val repetitions: Int,
+    val tier: MasteryTier,
+    val score: Float?
+)
+
 /** Ce que le Dojo doit savoir d'une carte pour choisir son interface : niveau de l'élève et référence admin. */
 data class DojoCardMeta(
     val stage: Int,
@@ -127,6 +142,8 @@ data class DashboardUiState(
     val masteredCount: Int? = null,
     /** Détail des notions maîtrisées, regroupées par chapitre, piloté par le moteur SRS. */
     val masteredNotions: List<MasteredNotion> = emptyList(),
+    /** Cartes maîtrisées une à une (liste détaillée de « Ma progression »). */
+    val masteredCards: List<MasteredCard> = emptyList(),
     /** Score global de retention (0..1), derive de l'ease factor moyen des cartes. */
     val retentionScore: Float? = null,
     /** Derniere lecon consultee dans l'Explorer, pour "Reprendre l'aventure". */

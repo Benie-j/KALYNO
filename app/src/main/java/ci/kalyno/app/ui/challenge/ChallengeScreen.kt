@@ -56,7 +56,8 @@ import ci.kalyno.app.data.ChallengeRepository
 import ci.kalyno.app.data.ChallengeResult
 import ci.kalyno.app.data.Levels
 import ci.kalyno.app.data.Question
-import ci.kalyno.app.data.StreakStore
+import ci.kalyno.app.data.cloud.StreakRecorder
+import ci.kalyno.app.data.dashboard.StudentId
 import ci.kalyno.app.data.dojo.AnswerContext
 import ci.kalyno.app.data.dojo.AnswerGrader
 import ci.kalyno.app.data.dojo.CalculatorPolicy
@@ -214,7 +215,7 @@ private fun ChallengeContent(challenge: Challenge, onExit: () -> Unit, onReport:
         // Plus d'écran « Défi terminé » : on enregistre la série et on passe à la suite
         val context = LocalContext.current
         LaunchedEffect(Unit) {
-            StreakStore(context.applicationContext).recordCompletion()
+            StreakRecorder.complete(context.applicationContext, StudentId.get(context.applicationContext))
             onExit()
         }
     } else {

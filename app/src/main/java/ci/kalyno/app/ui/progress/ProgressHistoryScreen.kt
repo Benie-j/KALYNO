@@ -47,6 +47,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import ci.kalyno.app.data.dashboard.MasteredCard
 import ci.kalyno.app.ui.components.KalynoCard
 import ci.kalyno.app.ui.components.KalynoProgressBar
 import ci.kalyno.app.ui.components.MathText
@@ -74,6 +75,8 @@ import ci.kalyno.app.ui.theme.KalynoText
 fun ProgressHistoryScreen(
     retentionScore: Float?,
     onBack: () -> Unit,
+    masteredCount: Int? = null,
+    masteredCards: List<MasteredCard> = emptyList(),
     viewModel: ProgressHistoryViewModel = viewModel()
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -105,7 +108,15 @@ fun ProgressHistoryScreen(
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 32.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            item(key = "summary") { SummaryCard(state.summary, retentionScore, state.loading) }
+            item(key = "summary") { SummaryCard(state.summary, retentionScore, state.loading, masteredCount) }
+
+            // Cartes maîtrisées une à une (seuil du moteur : 3 répétitions réussies)
+            item(key = "mastered-header") { MasteredCardsHeader(masteredCards.size) }
+            if (masteredCards.isEmpty()) {
+                item(key = "mastered-empty") { MasteredCardsEmptyText() }
+            } else {
+                items(masteredCards, key = { "mastered-${it.cardId}" }) { card -> MasteredCardItem(card) }
+            }
 
             if (state.neverPlayed) {
                 item(key = "empty") { EmptyState() }
@@ -158,7 +169,7 @@ private fun TopBar(onBack: () -> Unit) {
 }
 
 @Composable
-private fun SummaryCard(summary: ProgressSummaryUi?, retentionScore: Float?, loading: Boolean) {
+private fun SummaryCard(summary: ProgressSummaryUi?, retentionScore: Float?, loading: Boolean, masteredCount: Int?) {
     val retention = retentionScore?.coerceIn(0f, 1f)
     KalynoCard(contentPadding = 20.dp) {
         Text("Taux de rétention", color = KalynoMuted, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
@@ -190,6 +201,7 @@ private fun SummaryCard(summary: ProgressSummaryUi?, retentionScore: Float?, loa
         } else {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 StatTile(summary?.learnedCards ?: 0, "Fiches apprises", KalynoText)
+                if (masteredCount != null) StatTile(masteredCount, if (masteredCount == 1) "Notion maîtrisée" else "Notions maîtrisées", KalynoBlue)
                 StatTile(summary?.successes ?: 0, "Succès", KalynoCorrect)
                 StatTile(summary?.failures ?: 0, "Échecs", KalynoDanger)
             }
