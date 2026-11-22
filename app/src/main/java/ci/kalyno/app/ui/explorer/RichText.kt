@@ -36,12 +36,15 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.BaselineShift
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
+import ci.kalyno.app.ui.explorer.tables.RichTextWithTables
+import ci.kalyno.app.ui.explorer.tables.containsTable
 import ci.kalyno.app.ui.theme.KalynoBlue
 import ru.noties.jlatexmath.JLatexMathDrawable
 
@@ -399,24 +402,32 @@ fun RichText(
     fontSize: TextUnit,
     lineHeight: TextUnit,
     fontWeight: FontWeight = FontWeight.Normal,
-    fontStyle: FontStyle = FontStyle.Normal
+    fontStyle: FontStyle = FontStyle.Normal,
+    textAlign: TextAlign = TextAlign.Unspecified,
+    /** false = jamais de WebView KaTeX (cellules de tableau : on reste sur JLaTeXMath, plus léger). */
+    allowKatex: Boolean = true
 ) {
-    if (KATEX_ENABLED && html.contains('$') && katexAvailable()) {
+    // Tableaux : rendu natif (voir ui/explorer/tables). Sans <table>, rien ne change ci-dessous.
+    if (allowKatex && containsTable(html)) {
+        RichTextWithTables(html, color, fontSize, lineHeight, fontWeight, fontStyle)
+        return
+    }
+    if (allowKatex && KATEX_ENABLED && html.contains('$') && katexAvailable()) {
         KatexText(html, color, fontSize, lineHeight, fontWeight, fontStyle)
         return
     }
     if (!html.contains('<') && !html.contains('$')) {
-        Text(text = html, color = color, fontSize = fontSize, lineHeight = lineHeight, fontWeight = fontWeight, fontStyle = fontStyle)
+        Text(text = html, color = color, fontSize = fontSize, lineHeight = lineHeight, fontWeight = fontWeight, fontStyle = fontStyle, textAlign = textAlign)
         return
     }
     val blocks = remember(html) { parseRich(html) }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        for (block in blocks) RichBlockView(block, color, fontSize, lineHeight, fontWeight, fontStyle)
+        for (block in blocks) RichBlockView(block, color, fontSize, lineHeight, fontWeight, fontStyle, textAlign)
     }
 }
 
 @Composable
-private fun RichBlockView(block: RBlock, color: Color, fontSize: TextUnit, lineHeight: TextUnit, fontWeight: FontWeight, fontStyle: FontStyle) {
+private fun RichBlockView(block: RBlock, color: Color, fontSize: TextUnit, lineHeight: TextUnit, fontWeight: FontWeight, fontStyle: FontStyle, textAlign: TextAlign) {
     val density = LocalDensity.current
     val inline = remember(block, color, fontSize, density) { buildInline(block, color, fontSize, density) }
     val heading = block.kind == RKind.H
@@ -430,7 +441,8 @@ private fun RichBlockView(block: RBlock, color: Color, fontSize: TextUnit, lineH
             fontSize = size,
             lineHeight = lh,
             fontWeight = if (heading) FontWeight.ExtraBold else fontWeight,
-            fontStyle = fontStyle
+            fontStyle = fontStyle,
+            textAlign = textAlign
         )
     }
     when (block.kind) {
