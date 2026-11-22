@@ -113,6 +113,8 @@ class LearningContentCache(context: Context) {
         put("correctIndex", card.correctIndex ?: JSONObject.NULL)
         put("explanation", card.explanation ?: JSONObject.NULL)
         put("correctIndices", JSONArray().apply { card.correctIndices.forEach { put(it) } })
+        // Réponses des tableaux (même donnée que Room, même stockage privé de l'appli) : sans elle, un tableau serait injouable hors ligne
+        put("adminReference", card.adminReference ?: JSONObject.NULL)
     }
 
     private fun decode(array: JSONArray): List<LearningSubject> =
@@ -177,7 +179,9 @@ class LearningContentCache(context: Context) {
             explanation = if (o.isNull("explanation")) null else o.optString("explanation"),
             correctIndices = o.optJSONArray("correctIndices")
                 ?.let { a -> List(a.length()) { a.optInt(it, -1) }.filter { it >= 0 } }
-                ?: emptyList()
+                ?: emptyList(),
+            adminReference = if (o.isNull("adminReference")) null
+            else o.optString("adminReference").trim().takeIf { it.isNotEmpty() }
         )
     }
 }

@@ -324,7 +324,7 @@ class DashboardRepository(context: Context) {
                         .mergeCorrectIndices(c.correctIndices, c.correctIndex)
                         .joinToString(","),
                     explanation = c.explanation,
-                    adminReference = null,
+                    adminReference = c.adminReference,
                     lessonId = null
                 )
             }
@@ -441,7 +441,16 @@ class DashboardRepository(context: Context) {
                 }
             }
         }
-        cards.chunked(300).forEach { dao.upsertFlashcards(it) }
+        // Un tableau sans réponses reçues (contenu relu depuis un ancien cache) garde les réponses déjà stockées :
+        // sans elles il deviendrait injouable hors ligne.
+        val missingRef = cards.filter { it.adminReference == null && ci.kalyno.app.data.dojo.TableCodec.looksLikeTable(it.question) }
+        val keptRefs: Map<String, String?> = missingRef.map { it.id }.chunked(500)
+            .flatMap { dao.flashcardsByIds(it) }
+            .associate { it.id to it.adminReference }
+        val merged = cards.map { c ->
+            if (c.adminReference == null) c.copy(adminReference = keptRefs[c.id]) else c
+        }
+        merged.chunked(300).forEach { dao.upsertFlashcards(it) }
     }
 
     /**
@@ -501,10 +510,13 @@ class DashboardRepository(context: Context) {
     }
 
     private fun answerOf(card: LearningCard): String? =
-        ci.kalyno.app.data.dojo.answerText(
+        ci.kalyno.app.data.dojo.cardAnswerText(
+            card.kind,
+            card.front,
             card.choices,
             ci.kalyno.app.data.dojo.mergeCorrectIndices(card.correctIndices, card.correctIndex),
-            card.back
+            card.back,
+            card.adminReference
         )
 
     private fun choicesFromJson(json: String?): List<String> = try {

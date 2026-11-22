@@ -476,6 +476,7 @@ private fun ChallengeQuestionCard(
                     ExerciseKind.SINGLE_CHOICE -> "UNE BONNE RÉPONSE"
                     ExerciseKind.MULTIPLE_CHOICE -> "PLUSIEURS RÉPONSES"
                     ExerciseKind.FREE_TEXT -> "SAISIE LIBRE"
+                    ExerciseKind.TABLE -> "TABLEAU"
                 }
             )
             Spacer(Modifier.weight(1f))

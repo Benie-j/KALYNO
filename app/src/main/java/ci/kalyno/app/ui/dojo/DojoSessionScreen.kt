@@ -68,7 +68,11 @@ import ci.kalyno.app.ui.ai.AiHelpButton
 import ci.kalyno.app.ui.ai.GradingStatus
 import ci.kalyno.app.data.StreakStore
 import ci.kalyno.app.data.dashboard.ReviewSession
+import ci.kalyno.app.data.dojo.CellResult
 import ci.kalyno.app.data.dojo.ExerciseKind
+import ci.kalyno.app.data.dojo.TableAttempt
+import ci.kalyno.app.data.dojo.TableGrade
+import ci.kalyno.app.data.dojo.TableOutcome
 import ci.kalyno.app.ui.components.KalynoCard
 import ci.kalyno.app.ui.components.MathText
 import ci.kalyno.app.ui.components.KalynoPill
@@ -158,7 +162,7 @@ fun DojoSessionScreen(
                                 cardId = ex.item.cardId,
                                 subjectName = ex.item.subjectName,
                                 lessonTitle = ex.lessonTitle ?: ex.item.chapterTitle,
-                                question = ex.item.front
+                                question = ex.displayQuestion
                             )
                         )
                     }
@@ -362,9 +366,10 @@ private fun QuestionCard(state: DojoUiState, exercise: DojoExercise, vm: DojoVie
     ).distinct().joinToString(" · ").ifBlank { state.title.orEmpty() }
 
     KalynoQuestionCard(
-        question = item.front,
+        question = exercise.displayQuestion,
         lessonLabel = lessonLabel,
         typeLabel = when {
+            exercise.kind == ExerciseKind.TABLE -> "Tableau à compléter"
             exercise.promotedToFreeInput -> "Saisie libre · niveau débloqué"
             exercise.kind == ExerciseKind.SINGLE_CHOICE -> "Une bonne réponse"
             exercise.kind == ExerciseKind.MULTIPLE_CHOICE -> "Plusieurs réponses"
@@ -381,19 +386,23 @@ private fun QuestionCard(state: DojoUiState, exercise: DojoExercise, vm: DojoVie
             onToggleChoice = vm::toggleChoice,
             onTyped = vm::onTyped,
             onSubmit = vm::submit,
-            onHaptic = haptic
+            onHaptic = haptic,
+            onTableCell = vm::onTableCell
         )
         // Correction IA : chargement, ou erreur avec « Réessayer » (la réponse reste saisie)
         GradingStatus(grading = state.grading, onRetry = vm::submit)
-        AiHelpButton(
-            context = vm.helpContext(
-                exercise = exercise,
-                studentAnswer = if (exercise.requiresFreeInput) state.typed.trim()
-                else state.selected.sorted().mapNotNull { item.choices.getOrNull(it) }.joinToString(" ; "),
-                locked = locked
-            ),
-            vmKey = "dojo-${item.cardId}"
-        )
+        // Tableau : pas d'aide IA (elle recevrait le JSON de la carte et les réponses attendues)
+        if (exercise.kind != ExerciseKind.TABLE) {
+            AiHelpButton(
+                context = vm.helpContext(
+                    exercise = exercise,
+                    studentAnswer = if (exercise.requiresFreeInput) state.typed.trim()
+                    else state.selected.sorted().mapNotNull { item.choices.getOrNull(it) }.joinToString(" ; "),
+                    locked = locked
+                ),
+                vmKey = "dojo-${item.cardId}"
+            )
+        }
     }
 }
 
@@ -426,7 +435,8 @@ internal fun ChoiceRow(
 private fun DojoFeedback(exercise: DojoExercise, result: DojoResult) {
     val item = exercise.item
     // La bonne réponse : affichée en cas d'erreur, et toujours pour la saisie libre
-    val showAnswer = !result.correct || exercise.kind == ExerciseKind.FREE_TEXT
+    val showAnswer = exercise.kind != ExerciseKind.TABLE && (!result.correct || exercise.kind == ExerciseKind.FREE_TEXT)
+    val tableGrade = result.table
 
     QuizFeedbackPanel(
         tone = when {
@@ -434,8 +444,9 @@ private fun DojoFeedback(exercise: DojoExercise, result: DojoResult) {
             result.partial -> FeedbackTone.Partial
             else -> FeedbackTone.Wrong
         },
-        message = result.message,
+        message = if (tableGrade != null) tableHeadline(tableGrade, result.message) else result.message,
         detail = when {
+            tableGrade != null -> tableDetail(tableGrade)
             result.ai != null -> result.ai.toDetailText()
             result.partial -> "Tu n'as pas coché toutes les bonnes réponses."
             !result.correct && exercise.kind == ExerciseKind.FREE_TEXT -> "Retiens le mot-clé : il résume l'idée en un mot."
@@ -449,6 +460,25 @@ private fun DojoFeedback(exercise: DojoExercise, result: DojoResult) {
         explanationSteps = explanationSteps(item.explanation),
         feynman = remember(item.explanation) { FeynmanParser.parse(item.explanation) }
     )
+}
+
+/** Titre de la correction d'un tableau : bonne, partielle ou mauvaise, avec le score global. */
+internal fun tableHeadline(grade: TableGrade, message: String): String = when (grade.outcome) {
+    TableOutcome.GOOD -> "$message · ${grade.correct}/${grade.total} (${grade.percent} %)"
+    TableOutcome.PARTIAL -> "Réponse partielle · ${grade.correct}/${grade.total} (${grade.percent} %)"
+    TableOutcome.BAD -> "Réponse incorrecte · ${grade.correct}/${grade.total} (${grade.percent} %)"
+}
+
+/** Détail cellule par cellule : seules les cellules fausses ou non renseignées sont citées (les bonnes réponses sont dans le tableau). */
+internal fun tableDetail(grade: TableGrade): String? {
+    val lines = grade.cells.mapNotNull { (key, cell) ->
+        when (cell) {
+            CellResult.WRONG -> "${TableAttempt.positionLabel(key)} : incorrecte"
+            CellResult.EMPTY -> "${TableAttempt.positionLabel(key)} : non renseignée"
+            CellResult.CORRECT -> null
+        }
+    }
+    return if (lines.isEmpty()) null else lines.joinToString("\n")
 }
 
 // ---------------------------------------------------------------------------

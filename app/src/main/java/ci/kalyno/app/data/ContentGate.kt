@@ -49,7 +49,7 @@ class ContentGate(context: Context) {
     private companion object {
         const val NONE = -1L
         /** À changer si le format du cache évolue : force un nouveau téléchargement. */
-        const val FORMAT = 1
+        const val FORMAT = 2
         const val FALLBACK_MIN_INTERVAL_MS = 10 * 60 * 1000L
     }
 }

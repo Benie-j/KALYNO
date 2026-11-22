@@ -27,11 +27,15 @@ object FreeExercises {
      */
     fun fetch(levelId: String): List<FreeExercise> {
         val level = URLEncoder.encode(levelId, "UTF-8")
+        val filter = "&is_published=eq.true&or=(level_id.is.null,level_id.eq.$level)&order=position.asc"
+        val base = "free_exercises?select=id,label,kind,front,back,choices,correct_index,explanation,position"
+        // `admin_reference` (réponses des tableaux) : si la colonne n'existe pas encore (HTTP 400), on relit sans elle
         val rows = JSONArray(
-            SupabaseHttp.get(
-                "free_exercises?select=id,label,kind,front,back,choices,correct_index,explanation,position" +
-                    "&is_published=eq.true&or=(level_id.is.null,level_id.eq.$level)&order=position.asc"
-            )
+            try {
+                SupabaseHttp.get("$base,admin_reference$filter")
+            } catch (e: java.io.IOException) {
+                if (e.message?.contains("400") == true) SupabaseHttp.get("$base$filter") else throw e
+            }
         )
         return buildList {
             for (i in 0 until rows.length()) {
@@ -48,7 +52,9 @@ object FreeExercises {
                             back = if (row.isNull("back")) null else row.optString("back"),
                             choices = choices,
                             correctIndex = if (row.isNull("correct_index")) null else row.optInt("correct_index"),
-                            explanation = if (row.isNull("explanation")) null else row.optString("explanation")
+                            explanation = if (row.isNull("explanation")) null else row.optString("explanation"),
+                            adminReference = if (row.isNull("admin_reference")) null
+                            else row.optString("admin_reference").trim().takeIf { it.isNotEmpty() }
                         ),
                         label = if (row.isNull("label")) null else row.optString("label").trim().ifEmpty { null }
                     )

@@ -1,5 +1,6 @@
 package ci.kalyno.app.ui.progress
 
+import ci.kalyno.app.data.dojo.TableAttempt
 import ci.kalyno.app.data.progress.DojoAttemptEntity
 import java.time.Instant
 import java.time.LocalDate
@@ -73,7 +74,8 @@ internal object HistoryFormat {
         attemptLine = attemptLine(a.isSuccess, a.attemptNumber),
         time = timeLabel(a.attemptedAt, zone),
         question = a.question,
-        studentAnswer = a.studentAnswer?.takeIf { it.isNotBlank() },
+        // Tableau : la saisie est stockée en JSON ; on affiche le détail cellule par cellule, jamais le JSON brut
+        studentAnswer = (TableAttempt.describe(a.studentAnswer) ?: a.studentAnswer)?.takeIf { it.isNotBlank() },
         referenceAnswer = a.referenceAnswer,
         isLegacy = a.isLegacy
     )

@@ -451,7 +451,7 @@ class ExplorerViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun toItem(card: LearningCard, subject: String, chapter: String): ReviewItem? {
         val indices = ci.kalyno.app.data.dojo.mergeCorrectIndices(card.correctIndices, card.correctIndex)
-        val answer = ci.kalyno.app.data.dojo.answerText(card.choices, indices, card.back)
+        val answer = ci.kalyno.app.data.dojo.cardAnswerText(card.kind, card.front, card.choices, indices, card.back, card.adminReference)
         if (card.front.isBlank() || answer.isNullOrBlank()) return null
         return ReviewItem(
             cardId = card.id,

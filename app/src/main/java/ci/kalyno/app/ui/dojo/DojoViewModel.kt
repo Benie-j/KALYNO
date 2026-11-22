@@ -22,6 +22,13 @@ import ci.kalyno.app.data.dojo.CalculatorPolicy
 import ci.kalyno.app.data.dojo.DojoStagePolicy
 import ci.kalyno.app.data.dojo.ExerciseKind
 import ci.kalyno.app.data.dojo.Interleaver
+import ci.kalyno.app.data.dojo.TableAnswers
+import ci.kalyno.app.data.dojo.TableAttempt
+import ci.kalyno.app.data.dojo.TableCodec
+import ci.kalyno.app.data.dojo.TableExercise
+import ci.kalyno.app.data.dojo.TableGrade
+import ci.kalyno.app.data.dojo.TableGrader
+import ci.kalyno.app.data.dojo.TableCell
 import ci.kalyno.app.data.dojo.mergeCorrectIndices
 import ci.kalyno.app.data.lessons.LessonProgressRepository
 import ci.kalyno.app.data.dojo.Verdict
@@ -55,13 +62,21 @@ data class DojoExercise(
     /** Vrai si la carte était un QCM et vient de basculer en saisie libre grâce à son niveau. */
     val promotedToFreeInput: Boolean = false,
     /** Leçon parente de la question (relation Room flashcards.lessonId -> catalog_lessons.id), pour l'historique. */
-    val lessonTitle: String? = null
+    val lessonTitle: String? = null,
+    /** Tableau à compléter : cellules telles que l'élève les voit (aucune réponse) ; null pour les autres types. */
+    val table: TableExercise? = null,
+    /** Tableau à compléter : réponses attendues, utilisées seulement par la correction locale (jamais affichées avant la validation). */
+    val tableAnswers: TableAnswers? = null
 ) {
     /** Règle d'affichage : saisie libre (champ texte) ou QCM (cartes de choix). */
     val requiresFreeInput: Boolean get() = kind == ExerciseKind.FREE_TEXT
 
+    /** Énoncé à afficher : pour un tableau, l'énoncé seul (le JSON de la carte n'est jamais montré). */
+    val displayQuestion: String get() = table?.statement ?: item.front
+
     val promptLength: Int
-        get() = item.front.length + if (requiresFreeInput) 0 else item.choices.sumOf { it.length }
+        get() = if (table != null) table.textLength
+        else item.front.length + if (requiresFreeInput) 0 else item.choices.sumOf { it.length }
 }
 
 data class DojoResult(
@@ -72,7 +87,9 @@ data class DojoResult(
     /** Renseigné quand le moteur FSRS a planifié la prochaine révision. */
     val nextReviewDays: Int? = null,
     /** Correction sémantique Kalyno (saisie libre) ; null pour un QCM ou une correction locale. */
-    val ai: GradeResult? = null
+    val ai: GradeResult? = null,
+    /** Tableau à compléter : résultat cellule par cellule et score ; null pour les autres types. */
+    val table: TableGrade? = null
 )
 
 data class DojoUiState(
@@ -82,6 +99,8 @@ data class DojoUiState(
     val exercise: DojoExercise? = null,
     val selected: Set<Int> = emptySet(),
     val typed: String = "",
+    /** Tableau à compléter : saisie de chaque cellule à compléter, par clé de cellule (« r2c3 » -> « Variable »). */
+    val tableTyped: Map<String, String> = emptyMap(),
     val hintShown: Boolean = false,
     val calculatorUsed: Boolean = false,
     /** null tant que l'élève n'a pas validé : la correction reste cachée. */
@@ -97,6 +116,7 @@ data class DojoUiState(
         get() = !grading.busy && when (exercise?.kind) {
             null -> false
             ExerciseKind.FREE_TEXT -> typed.isNotBlank()
+            ExerciseKind.TABLE -> tableTyped.values.any { it.isNotBlank() }
             else -> selected.isNotEmpty()
         }
 }
@@ -171,7 +191,13 @@ class DojoViewModel(app: Application) : AndroidViewModel(app) {
             } catch (e: Exception) {
                 emptyMap() // sans niveau, tout reste en QCM : la session n'est jamais bloquée
             }
-            exercises = mixed.map { buildExercise(it, meta[it.cardId]) }
+            // Un tableau dont le contenu ou les réponses sont illisibles est écarté : il ne devient jamais une saisie libre
+            exercises = mixed.mapNotNull { buildExercise(it, meta[it.cardId]) }
+            if (exercises.isEmpty()) {
+                _state.update { it.copy(total = 0, finished = true) }
+                return@launch
+            }
+            _state.update { it.copy(total = exercises.size) }
             show(0)
         }
     }
@@ -182,17 +208,37 @@ class DojoViewModel(app: Application) : AndroidViewModel(app) {
      * Seule une carte à réponse courte (mots-clés) bascule : une phrase ne se corrige pas par mots-clés, et un QCM à
      * réponses multiples reste un QCM.
      */
-    private fun buildExercise(item: ReviewItem, meta: DojoCardMeta?): DojoExercise {
+    private fun buildExercise(item: ReviewItem, meta: DojoCardMeta?): DojoExercise? {
         val indices = mergeCorrectIndices(item.correctIndices, item.correctIndex)
             .filter { it in item.choices.indices }
         val declared = ExerciseKind.resolve(item.kind, item.choices, indices)
         val stage = meta?.stage ?: 0
         val adminReference = meta?.adminReference?.takeIf { it.isNotBlank() }
 
+        if (declared == ExerciseKind.TABLE) {
+            val table = TableCodec.parseFront(item.front) ?: return null
+            val answers = TableCodec.parseAnswers(adminReference) ?: return null
+            if (!TableCodec.isPlayable(table, answers)) return null
+            val fixedTexts = table.rows.flatten().mapNotNull { (it as? TableCell.Fixed)?.text }
+            return DojoExercise(
+                item = item,
+                kind = ExerciseKind.TABLE,
+                correctIndices = emptySet(),
+                acceptedAnswers = emptyList(),
+                calculatorSuggested = CalculatorPolicy.suggested(listOf(table.statement) + fixedTexts),
+                stage = stage,
+                reference = item.answer,
+                lessonTitle = meta?.lessonTitle,
+                table = table,
+                tableAnswers = answers
+            )
+        }
+
         val canPromote = when (declared) {
             ExerciseKind.SINGLE_CHOICE -> isKeywordAnswer(item.answer)
             ExerciseKind.MULTIPLE_CHOICE -> false
             ExerciseKind.FREE_TEXT -> false
+            ExerciseKind.TABLE -> false
         }
         val promoted = canPromote && DojoStagePolicy.requiresFreeInput(stage)
         val kind = if (promoted) ExerciseKind.FREE_TEXT else declared
@@ -226,6 +272,7 @@ class DojoViewModel(app: Application) : AndroidViewModel(app) {
                 exercise = exercises[index],
                 selected = emptySet(),
                 typed = "",
+                tableTyped = emptyMap(),
                 hintShown = false,
                 calculatorUsed = false,
                 result = null
@@ -248,6 +295,17 @@ class DojoViewModel(app: Application) : AndroidViewModel(app) {
         val s = _state.value
         if (s.result != null || s.grading.busy) return // pendant la correction, la réponse envoyée reste figée
         _state.update { it.copy(typed = value.take(MAX_INPUT)) }
+    }
+
+    /**
+     * Saisie dans une cellule à compléter. Seules les clés du tableau courant sont acceptées : une cellule fixe
+     * n'est jamais modifiable, et chaque saisie est rangée sous sa propre clé (jamais dans celle d'une autre cellule).
+     */
+    fun onTableCell(key: String, value: String) {
+        val s = _state.value
+        val table = s.exercise?.table ?: return
+        if (s.result != null || key !in table.blankKeys) return
+        _state.update { it.copy(tableTyped = it.tableTyped + (key to value.take(MAX_CELL_INPUT))) }
     }
 
     fun showHint() {
@@ -278,6 +336,15 @@ class DojoViewModel(app: Application) : AndroidViewModel(app) {
         )
 
         lastLatencyMs = context.elapsedMs
+
+        // Tableau à compléter : correction locale, déterministe, cellule par cellule (jamais le correcteur sémantique ni l'IA)
+        if (exercise.kind == ExerciseKind.TABLE) {
+            val table = exercise.table ?: return
+            val answers = exercise.tableAnswers ?: return
+            val grade = TableGrader.grade(table, answers, s.tableTyped)
+            finish(exercise, TableGrader.verdict(grade, context), tableGrade = grade)
+            return
+        }
 
         // Saisie libre avec compte : Kalyno est l'évaluateur. Sans compte, le correcteur local sert de secours.
         if (exercise.requiresFreeInput && grader.available) {
@@ -318,7 +385,7 @@ class DojoViewModel(app: Application) : AndroidViewModel(app) {
         )
     }
 
-    private fun finish(exercise: DojoExercise, verdict: Verdict, ai: GradeResult? = null) {
+    private fun finish(exercise: DojoExercise, verdict: Verdict, ai: GradeResult? = null, tableGrade: TableGrade? = null) {
         val answered = _state.value // ce que l'élève a saisi ou coché, avant que l'état ne change
         val message = if (verdict.correct) DojoMessages.congrats() else DojoMessages.encourage()
         _state.update {
@@ -328,17 +395,37 @@ class DojoViewModel(app: Application) : AndroidViewModel(app) {
                     partial = verdict.partial,
                     rating = verdict.rating,
                     message = message,
-                    ai = ai
+                    ai = ai,
+                    table = tableGrade
                 ),
                 correctCount = it.correctCount + if (verdict.correct) 1 else 0
             )
         }
-        persist(exercise.item.cardId, verdict.rating, attemptFor(exercise, answered, verdict))
+        persist(exercise.item.cardId, verdict.rating, attemptFor(exercise, answered, verdict, tableGrade))
     }
 
     /** Copie ce que l'élève a vu et répondu (question, réponse saisie, réponse attendue, leçon, discipline) pour l'historique. */
-    private fun attemptFor(exercise: DojoExercise, answered: DojoUiState, verdict: Verdict): DojoAttemptEntity {
+    private fun attemptFor(exercise: DojoExercise, answered: DojoUiState, verdict: Verdict, tableGrade: TableGrade? = null): DojoAttemptEntity {
         val item = exercise.item
+        val table = exercise.table
+        val answers = exercise.tableAnswers
+        if (exercise.kind == ExerciseKind.TABLE && table != null && answers != null && tableGrade != null) {
+            // Tableau : l'énoncé lisible (jamais le JSON de la carte), la saisie cellule par cellule et les réponses attendues
+            return DojoAttemptEntity(
+                studentId = studentId,
+                flashcardId = item.cardId,
+                attemptedAt = System.currentTimeMillis(),
+                isSuccess = verdict.correct,
+                attemptNumber = 1, // recalculé par AttemptDao.record selon les échecs précédents
+                rating = verdict.rating,
+                kind = ExerciseKind.TABLE.name,
+                question = table.statement.ifBlank { "Tableau à compléter" },
+                studentAnswer = TableAttempt.encode(answered.tableTyped, tableGrade),
+                referenceAnswer = TableAttempt.expectedText(table, answers).ifBlank { item.answer },
+                lessonTitle = exercise.lessonTitle ?: item.chapterTitle,
+                subjectName = item.subjectName
+            )
+        }
         val free = exercise.kind == ExerciseKind.FREE_TEXT
         val given = if (free) {
             answered.typed.trim()
@@ -416,6 +503,9 @@ class DojoViewModel(app: Application) : AndroidViewModel(app) {
 
     private companion object {
         const val MAX_INPUT = 200
+
+        /** Longueur maximale de la saisie d'une cellule de tableau (même plafond que l'administration). */
+        const val MAX_CELL_INPUT = 200
 
         /** Réponse « mots-clés » : au-delà, la carte reste en QCM (une phrase ne se corrige pas par mots-clés). */
         const val MAX_KEYWORD_WORDS = 4

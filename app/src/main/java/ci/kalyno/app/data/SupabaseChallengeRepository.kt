@@ -104,6 +104,8 @@ class SupabaseChallengeRepository : ChallengeRepository {
         val indices = mergeCorrectIndices(multi, single).filter { it in choices.indices }
 
         val kind = ExerciseKind.resolve(q.text("kind"), choices, indices)
+        // Le Défi n'a pas d'interface de tableau : une telle question est ignorée, jamais jouée comme une saisie libre
+        if (kind == ExerciseKind.TABLE) return null
         val accepted = AnswerGrader.acceptedAnswers(q.text("answer").orEmpty())
         if (kind == ExerciseKind.FREE_TEXT && accepted.isEmpty()) return null
         if (kind != ExerciseKind.FREE_TEXT && choices.any { it.isEmpty() }) return null

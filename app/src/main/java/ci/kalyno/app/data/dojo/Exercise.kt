@@ -1,10 +1,13 @@
 package ci.kalyno.app.data.dojo
 
-/** Les trois types d'exercices que l'admin peut publier. */
+/** Les types d'exercices que l'admin peut publier (QCM, saisie libre, tableau à compléter ; la flashcard se corrige comme une saisie libre). */
 enum class ExerciseKind {
     SINGLE_CHOICE,
     MULTIPLE_CHOICE,
-    FREE_TEXT;
+    FREE_TEXT,
+
+    /** Tableau à compléter : cellules fixes + cellules à saisir, correction déterministe cellule par cellule. */
+    TABLE;
 
     companion object {
         private val SINGLE_NAMES = setOf("SINGLE_CHOICE", "SINGLE", "QCU", "QCM", "MCQ", "CHOICE")
@@ -12,15 +15,19 @@ enum class ExerciseKind {
             "MULTIPLE_CHOICE", "MULTIPLE", "MULTI_CHOICE", "QCM_MULTIPLE", "MCQ_MULTIPLE", "QCM_MULTI"
         )
         private val FREE_NAMES = setOf("FREE_TEXT", "TEXT", "OPEN", "INPUT", "SAISIE", "SAISIE_LIBRE")
+        private val TABLE_NAMES = setOf("TABLE", "TABLEAU", "TABLEAU_A_COMPLETER", "FILL_TABLE")
 
         /**
          * Déduit le type d'exercice : le champ `kind` de l'admin d'abord, les données ensuite.
          * Un QCM sans choix ou sans bonne réponse exploitable devient une saisie libre.
+         * Un tableau déclaré par l'admin reste TOUJOURS un tableau : il n'est jamais rabattu sur la saisie libre
+         * (un tableau illisible est écarté du Dojo, voir [TableExercise]).
          */
         fun resolve(rawKind: String?, choices: List<String>, correctIndices: List<Int>): ExerciseKind {
             val name = rawKind.orEmpty().trim().uppercase().replace('-', '_').replace(' ', '_')
             val hasChoices = choices.size >= 2 && correctIndices.isNotEmpty()
             return when {
+                name in TABLE_NAMES -> TABLE
                 name in FREE_NAMES -> FREE_TEXT
                 !hasChoices -> FREE_TEXT
                 name in MULTIPLE_NAMES -> MULTIPLE_CHOICE

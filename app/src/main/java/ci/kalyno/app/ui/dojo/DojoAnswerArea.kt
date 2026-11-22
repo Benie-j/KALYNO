@@ -38,9 +38,30 @@ internal fun ColumnScope.DojoAnswerArea(
     onToggleChoice: (Int) -> Unit,
     onTyped: (String) -> Unit,
     onSubmit: () -> Unit,
-    onHaptic: () -> Unit
+    onHaptic: () -> Unit,
+    onTableCell: (String, String) -> Unit = { _, _ -> }
 ) {
     val locked = state.result != null
+
+    // Tableau à compléter : jamais une saisie libre, ni une liste de choix
+    val table = exercise.table
+    if (exercise.kind == ExerciseKind.TABLE && table != null) {
+        val answers = exercise.tableAnswers
+        // Les bonnes réponses ne sont transmises à l'écran qu'après la validation
+        val expected = if (state.result != null && answers != null) {
+            answers.byKey.mapValues { it.value.joinToString(" / ") }
+        } else {
+            emptyMap()
+        }
+        DojoTableArea(
+            table = table,
+            typed = state.tableTyped,
+            grade = state.result?.table,
+            expected = expected,
+            onCellChange = onTableCell
+        )
+        return
+    }
 
     Crossfade(
         targetState = exercise.requiresFreeInput,
