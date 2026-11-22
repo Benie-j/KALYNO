@@ -31,5 +31,5 @@ for (const [name, answer, expected] of cases) {
   const body = await res.json();
   const v = body?.result?.verdict ?? `ERREUR ${body?.error?.code}`;
   const ok = expected.split("|").includes(v);
-  console.log(`${ok ? "OK  " : "KO  "} ${name} -> ${v} (attendu ${expected}) confiance=${body?.result?.confidence ?? "-"}`);
+  console.log(`${ok ? "OK  " : "KO  "} ${name} -> ${v} (attendu ${expected}) confiance=${body?.result?.confidence ?? "-"} via ${body?.provider ?? "?"}`);
 }
