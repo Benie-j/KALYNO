@@ -56,7 +56,8 @@ fun DojoScreen(
     state: DashboardUiState,
     onStartMission: () -> Unit,
     onReviewUrgent: () -> Unit,
-    onRetry: () -> Unit
+    onRetry: () -> Unit,
+    onStartFreeExercises: () -> Unit = {}
 ) {
     Column(
         modifier = Modifier
@@ -97,6 +98,7 @@ fun DojoScreen(
             else -> {
                 UrgentHero(state = state, onReview = onReviewUrgent)
                 MissionBlock(state = state, onStart = onStartMission, onReview = onReviewUrgent)
+                if (state.freeTotal > 0) FreeExercisesBlock(state = state, onStart = onStartFreeExercises)
             }
         }
     }
@@ -299,6 +301,34 @@ private fun MissionBlock(
                 lineHeight = 20.sp
             )
         }
+    }
+}
+
+/** Exercices libres : une banque d'entrainement qui ne depend d'aucune lecon. */
+@Composable
+private fun FreeExercisesBlock(state: DashboardUiState, onStart: () -> Unit) {
+    KalynoCard(modifier = Modifier.fillMaxWidth()) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            KalynoSvgIcon(name = "dumbbell", size = 18.dp, tint = KalynoBlue)
+            Spacer(Modifier.width(8.dp))
+            SectionHeader(title = "Exercices libres")
+        }
+        Spacer(Modifier.height(10.dp))
+        Text(
+            text = "Entraîne-toi quand tu veux, sans passer par une leçon.",
+            color = KalynoText,
+            fontSize = 15.sp,
+            lineHeight = 22.sp
+        )
+        Spacer(Modifier.height(6.dp))
+        Text(
+            text = if (state.freeNew > 0) "${state.freeTotal} exercice(s), dont ${state.freeNew} à découvrir"
+            else "${state.freeTotal} exercice(s) à refaire quand tu veux",
+            color = KalynoMuted,
+            fontSize = 12.sp
+        )
+        Spacer(Modifier.height(14.dp))
+        KalynoPrimaryButton(label = "M'ENTRAÎNER", onClick = onStart)
     }
 }
 

@@ -114,6 +114,10 @@ data class DashboardUiState(
     val urgentTotal: Int = 0,
     val urgentTopics: List<UrgentTopic> = emptyList(),
     val urgentItems: List<ReviewItem> = emptyList(),
+    /** Exercices libres (hors cours) : une session d'entrainement, nombre publie et part jamais faite. */
+    val freeItems: List<ReviewItem> = emptyList(),
+    val freeTotal: Int = 0,
+    val freeNew: Int = 0,
     /** Jours avant l'examen publié par l'admin ; null tant qu'aucune date n'est publiée. */
     val examDaysLeft: Int? = null,
     val session: ReviewSession? = null,

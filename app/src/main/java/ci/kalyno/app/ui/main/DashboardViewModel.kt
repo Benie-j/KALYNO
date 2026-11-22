@@ -116,6 +116,9 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                         urgentTotal = snapshot.urgentTotal,
                         urgentTopics = snapshot.urgentTopics,
                         urgentItems = snapshot.urgentItems,
+                        freeItems = snapshot.freeItems,
+                        freeTotal = snapshot.freeTotal,
+                        freeNew = snapshot.freeNew,
                         examDaysLeft = snapshot.examDaysLeft,
                         examLabel = exams.label(levelId),
                         masteredCount = snapshot.masteredCount,
@@ -179,6 +182,21 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         if (items.isEmpty()) return
         _state.update {
             it.copy(session = ReviewSession(id = UUID.randomUUID().toString(), title = title, items = items))
+        }
+    }
+
+    /** Lance une session d'entrainement sur les exercices libres. */
+    fun startFreeExercises() {
+        val items = _state.value.freeItems
+        if (items.isEmpty()) return
+        _state.update {
+            it.copy(
+                session = ReviewSession(
+                    id = UUID.randomUUID().toString(),
+                    title = ci.kalyno.app.data.freeexercises.FreeExercises.SUBJECT_NAME,
+                    items = items
+                )
+            )
         }
     }
 

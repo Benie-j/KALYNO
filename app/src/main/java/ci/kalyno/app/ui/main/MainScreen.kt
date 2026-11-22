@@ -187,7 +187,8 @@ fun MainScreen(
                         state = state,
                         onStartMission = viewModel::startMission,
                         onReviewUrgent = viewModel::startUrgentReview,
-                        onRetry = viewModel::retry
+                        onRetry = viewModel::retry,
+                        onStartFreeExercises = viewModel::startFreeExercises
                     )
                     2 -> ExplorerScreen(
                         levelId = levelId,

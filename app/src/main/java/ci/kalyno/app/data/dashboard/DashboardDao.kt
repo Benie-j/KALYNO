@@ -40,6 +40,16 @@ interface DashboardDao {
     @Query("SELECT * FROM flashcards WHERE id IN (:ids)")
     suspend fun flashcardsByIds(ids: List<String>): List<FlashcardEntity>
 
+    @Query("SELECT * FROM flashcards WHERE subjectId = :subjectId")
+    suspend fun flashcardsForSubject(subjectId: String): List<FlashcardEntity>
+
+    @Query("SELECT id FROM flashcards WHERE subjectId = :subjectId")
+    suspend fun flashcardIdsForSubject(subjectId: String): List<String>
+
+    /** Retire les exercices libres depublies ou supprimes par l'admin (la progression associee part avec eux). */
+    @Query("DELETE FROM flashcards WHERE id IN (:ids)")
+    suspend fun deleteFlashcardsByIds(ids: List<String>)
+
     /** Cartes avec leur leçon parente (relation Room, une seule lecture groupée pour la session du Dojo). */
     @Transaction
     @Query("SELECT * FROM flashcards WHERE id IN (:ids)")
