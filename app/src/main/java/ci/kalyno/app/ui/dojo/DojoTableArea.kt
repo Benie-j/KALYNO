@@ -198,12 +198,27 @@ private fun BlankCell(
         )
         // Correction : bonne réponse sous une cellule fausse ou vide (fournie seulement après la validation)
         if (!expected.isNullOrBlank() && (result == CellResult.WRONG || result == CellResult.EMPTY)) {
-            Text(
-                text = "Attendu : $expected",
+            // Formules LaTeX rendues par le moteur existant (JLaTeXMath, sans WebView) ; le texte passe à la ligne
+            // dans la largeur de la cellule au lieu de déborder.
+            RichText(
+                html = expectedHtml(expected),
                 color = QuizColors.CorrectText,
                 fontSize = 12.sp,
-                fontWeight = FontWeight.SemiBold
+                lineHeight = 16.sp,
+                fontWeight = FontWeight.SemiBold,
+                allowKatex = false
             )
         }
     }
+}
+
+/**
+ * « Attendu : … » prêt pour RichText : &, < et > échappés (RichText lit du HTML simple). Une réponse écrite en LaTeX
+ * sans les `$` (ex. `\dfrac{-2}{3}`) est mise entre `$…$` pour être rendue comme formule.
+ */
+internal fun expectedHtml(expected: String): String {
+    val body = expected.trim()
+    val math = if (!body.contains('$') && body.contains('\\')) "\$" + body + "\$" else body
+    val safe = math.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    return "Attendu : $safe"
 }

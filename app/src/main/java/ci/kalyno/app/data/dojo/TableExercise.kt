@@ -154,7 +154,10 @@ object TableCodec {
     fun statementOf(front: String): String = parseFront(front)?.statement?.takeIf { it.isNotBlank() } ?: "Tableau à compléter"
 }
 
-/** Correction déterministe. Aucun modèle, aucune approximation : seule une égalité après normalisation est une réponse juste. */
+/**
+ * Correction déterministe. Aucun modèle, aucune approximation : une réponse est juste si le texte est égal après normalisation,
+ * ou si les deux réponses sont des nombres simples exactement égaux (fractions, décimaux : voir [MathAnswer]).
+ */
 object TableGrader {
 
     private val MARKS_SPACES = Regex("[\\s\\p{Z}]+")
@@ -183,8 +186,16 @@ object TableGrader {
     fun cellResult(typed: String?, accepted: List<String>): CellResult {
         val value = normalize(typed.orEmpty())
         if (value.isEmpty()) return CellResult.EMPTY // une cellule vide n'est jamais juste
-        return if (accepted.any { normalize(it) == value }) CellResult.CORRECT else CellResult.WRONG
+        return if (accepted.any { sameAnswer(it, typed.orEmpty(), value) }) CellResult.CORRECT else CellResult.WRONG
     }
+
+    /**
+     * Texte identique après normalisation (règle d'origine, inchangée), ou valeurs numériques exactement égales
+     * (« -2/3 » = `$\dfrac{-2}{3}$` = « -4/6 » ; « 0,5 » = « 1/2 »). Les deux côtés doivent être des nombres reconnus
+     * par [MathAnswer] ; sinon seule la comparaison textuelle compte (jamais de réponse acceptée « en partie »).
+     */
+    private fun sameAnswer(expected: String, typed: String, typedNormalized: String): Boolean =
+        normalize(expected) == typedNormalized || MathAnswer.equivalent(expected, typed)
 
     /** Ne vérifie QUE les cellules à compléter ; les saisies hors de ces clés sont ignorées. */
     fun grade(table: TableExercise, answers: TableAnswers, typed: Map<String, String>): TableGrade {
