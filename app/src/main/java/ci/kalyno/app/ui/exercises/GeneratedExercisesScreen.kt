@@ -18,6 +18,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.Alignment
 import kotlinx.coroutines.launch
 
 private class GeneratedExerciseApi(private val context: Context) {
@@ -121,6 +123,7 @@ fun GeneratedExercisesScreen() {
     val context = LocalContext.current
     val api = remember { GeneratedExerciseApi(context) }
     val scope = rememberCoroutineScope()
+    val colors = MaterialTheme.colorScheme
 
     var exercises by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
     var selected by remember { mutableStateOf<JSONObject?>(null) }
@@ -130,6 +133,7 @@ fun GeneratedExercisesScreen() {
     var selectedChoices by remember { mutableStateOf(setOf<Int>()) }
     var freeAnswer by remember { mutableStateOf("") }
     var tableAnswers by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    var filter by remember { mutableStateOf("all") }
 
     val cache = remember {
         context.getSharedPreferences("generated_exercises_cache", Context.MODE_PRIVATE)
@@ -161,7 +165,11 @@ fun GeneratedExercisesScreen() {
                 exercises = items
                 saveCache(items)
             } catch (e: Exception) {
-                error = e.message ?: "Impossible de charger les exercices."
+                error = when {
+                    e.message.orEmpty().contains("Erreur serveur") ->
+                        "Nous n'avons pas pu récupérer tes exercices. Réessaie dans un instant."
+                    else -> e.message ?: "Une erreur est survenue. Réessaie."
+                }
                 if (exercises.isEmpty()) exercises = loadCache()
             } finally {
                 loading = false
@@ -174,12 +182,30 @@ fun GeneratedExercisesScreen() {
         refresh()
     }
 
+    fun isCompleted(exercise: JSONObject): Boolean {
+        return exercise.optString("status").lowercase() in setOf(
+            "completed", "done", "submitted", "corrected", "finished"
+        )
+    }
+
+    val completedCount = exercises.count { isCompleted(it) }
+    val todoCount = exercises.size - completedCount
+
+    val visibleExercises = exercises.filter {
+        when (filter) {
+            "todo" -> !isCompleted(it)
+            "done" -> isCompleted(it)
+            else -> true
+        }
+    }
+
     fun openExercise(exercise: JSONObject) {
         selected = exercise
         result = null
         selectedChoices = emptySet()
         freeAnswer = ""
         tableAnswers = emptyMap()
+        error = null
     }
 
     fun sendAnswer() {
@@ -199,12 +225,12 @@ fun GeneratedExercisesScreen() {
             else -> JSONObject().put("text", freeAnswer.trim())
         }
 
-        if (kind == "qcm" && selectedChoices.isEmpty()) {
-            error = "Sélectionne au moins une réponse."
+        if ((kind == "qcm" || kind == "multiple_choice") && selectedChoices.isEmpty()) {
+            error = "Choisis au moins une réponse."
             return
         }
         if (kind == "free_text" && freeAnswer.isBlank()) {
-            error = "Écris une réponse avant de valider."
+            error = "Écris ta réponse avant de continuer."
             return
         }
 
@@ -219,96 +245,347 @@ fun GeneratedExercisesScreen() {
                 )
                 refresh()
             } catch (e: Exception) {
-                error = e.message ?: "La correction a échoué."
+                error = "Ta réponse n'a pas pu être envoyée. Vérifie ta connexion puis réessaie."
             } finally {
                 loading = false
             }
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        Text("Mes exercices IA", style = MaterialTheme.typography.headlineSmall)
-        Text(
-            "Des exercices générés à partir de tes cours. Tes réponses ne modifient pas ta progression FSRS.",
-            style = MaterialTheme.typography.bodyMedium
-        )
-
-        if (selected == null) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = { refresh() }, enabled = !loading) {
-                    Text("Actualiser")
-                }
-                if (loading) CircularProgressIndicator(modifier = Modifier.size(24.dp))
+    if (selected == null) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp, vertical = 18.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp)
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    "TON ESPACE D'ENTRAÎNEMENT",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = colors.primary,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                )
+                Text(
+                    "À toi de jouer !",
+                    style = MaterialTheme.typography.headlineLarge,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                    color = colors.onBackground
+                )
+                Text(
+                    "Renforce tes connaissances, relève de nouveaux défis et progresse à ton rythme.",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = colors.onSurfaceVariant
+                )
             }
 
-            error?.let {
-                Text(it, color = MaterialTheme.colorScheme.error)
-            }
-
-            if (exercises.isEmpty() && !loading) {
-                Text("Aucun exercice disponible pour le moment.")
-            }
-
-            exercises.forEach { exercise ->
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    onClick = { openExercise(exercise) }
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
+                color = colors.primaryContainer
+            ) {
+                Column(
+                    modifier = Modifier.padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
-                    Column(Modifier.padding(14.dp)) {
-                        Text(
-                            exercise.optString("title", "Exercice"),
-                            style = MaterialTheme.typography.titleMedium
-                        )
-                        Text(exercise.optString("statement"))
-                        Spacer(Modifier.height(6.dp))
-                        Text(
-                            "${exercise.optString("kind")} • ${exercise.optString("difficulty")} • ${exercise.optString("status")}",
-                            style = MaterialTheme.typography.labelSmall
-                        )
+                    Text(
+                        "Ton entraînement",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = colors.onPrimaryContainer,
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                "$todoCount",
+                                style = MaterialTheme.typography.headlineMedium,
+                                color = colors.onPrimaryContainer,
+                                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                            )
+                            Text(
+                                "À découvrir",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = colors.onPrimaryContainer
+                            )
+                        }
+                        Surface(
+                            modifier = Modifier.width(1.dp).height(46.dp),
+                            color = colors.onPrimaryContainer.copy(alpha = 0.20f)
+                        ) {}
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                "$completedCount",
+                                style = MaterialTheme.typography.headlineMedium,
+                                color = colors.onPrimaryContainer,
+                                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                            )
+                            Text(
+                                "Terminés",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = colors.onPrimaryContainer
+                            )
+                        }
                     }
                 }
             }
-        } else {
-            val exercise = selected!!
-            val kind = exercise.optString("kind")
-            val payload = exercise.optJSONObject("payload") ?: JSONObject()
 
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    "Tes exercices",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                )
+                TextButton(
+                    onClick = { refresh() },
+                    enabled = !loading
+                ) {
+                    Text(if (loading) "Chargement…" else "↻ Actualiser")
+                }
+            }
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(
+                    selected = filter == "all",
+                    onClick = { filter = "all" },
+                    label = { Text("Tout") }
+                )
+                FilterChip(
+                    selected = filter == "todo",
+                    onClick = { filter = "todo" },
+                    label = { Text("À faire") }
+                )
+                FilterChip(
+                    selected = filter == "done",
+                    onClick = { filter = "done" },
+                    label = { Text("Terminés") }
+                )
+            }
+
+            error?.let {
+                Surface(
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp),
+                    color = colors.errorContainer
+                ) {
+                    Text(
+                        it,
+                        modifier = Modifier.padding(14.dp),
+                        color = colors.onErrorContainer,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            }
+
+            if (loading && exercises.isEmpty()) {
+                Box(
+                    modifier = Modifier.fillMaxWidth().padding(30.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator()
+                }
+            } else if (visibleExercises.isEmpty()) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(22.dp),
+                    color = colors.surfaceVariant.copy(alpha = 0.55f)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(24.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Text(
+                            if (exercises.isEmpty()) "Ton espace se prépare" else "Tout est à jour !",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                        )
+                        Text(
+                            if (exercises.isEmpty())
+                                "Tes prochains exercices apparaîtront ici. Reviens bientôt pour découvrir de nouveaux défis."
+                            else if (filter == "todo")
+                                "Tu as terminé tous les exercices disponibles. Bravo !"
+                            else
+                                "Aucun exercice dans cette catégorie pour le moment.",
+                            color = colors.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                }
+            } else {
+                visibleExercises.forEachIndexed { index, exercise ->
+                    val kind = exercise.optString("kind")
+                    val difficulty = exercise.optString("difficulty").lowercase()
+                    val done = isCompleted(exercise)
+
+                    val typeLabel = when (kind) {
+                        "qcm", "multiple_choice" -> "Choix multiples"
+                        "free_text" -> "Réponse écrite"
+                        "table" -> "Tableau à compléter"
+                        else -> "Exercice"
+                    }
+
+                    val difficultyLabel = when (difficulty) {
+                        "easy", "facile", "beginner" -> "Facile"
+                        "hard", "difficult", "difficile", "advanced" -> "Avancé"
+                        "medium", "intermediate", "moyen" -> "Intermédiaire"
+                        else -> ""
+                    }
+
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = { openExercise(exercise) },
+                        shape = androidx.compose.foundation.shape.RoundedCornerShape(22.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = colors.surface
+                        ),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(18.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Surface(
+                                    shape = androidx.compose.foundation.shape.RoundedCornerShape(50),
+                                    color = colors.secondaryContainer
+                                ) {
+                                    Text(
+                                        typeLabel,
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+                                        color = colors.onSecondaryContainer,
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold
+                                    )
+                                }
+                                Text(
+                                    if (done) "Terminé ✓" else "À faire",
+                                    color = if (done) colors.primary else colors.onSurfaceVariant,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold
+                                )
+                            }
+
+                            Text(
+                                exercise.optString("title", "Ton défi ${index + 1}"),
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                                color = colors.onSurface
+                            )
+
+                            Text(
+                                exercise.optString("statement"),
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = colors.onSurfaceVariant
+                            )
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    difficultyLabel,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = colors.onSurfaceVariant
+                                )
+                                Text(
+                                    if (done) "Revoir l'exercice" else "Commencer  →",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = colors.primary,
+                                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(12.dp))
+        }
+    } else {
+        val exercise = selected!!
+        val kind = exercise.optString("kind")
+        val payload = exercise.optJSONObject("payload") ?: JSONObject()
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
             TextButton(onClick = {
                 selected = null
                 result = null
                 error = null
-            }) { Text("← Retour aux exercices") }
+            }) {
+                Text("← Tous mes exercices")
+            }
+
+            Text(
+                when (kind) {
+                    "qcm", "multiple_choice" -> "À toi de choisir"
+                    "table" -> "Complète le tableau"
+                    else -> "Prends le temps de réfléchir"
+                },
+                style = MaterialTheme.typography.labelLarge,
+                color = colors.primary,
+                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+            )
 
             Text(
                 exercise.optString("title"),
-                style = MaterialTheme.typography.titleLarge
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
             )
-            Text(exercise.optString("statement"))
+            Text(
+                exercise.optString("statement"),
+                style = MaterialTheme.typography.bodyLarge
+            )
 
             when (kind) {
                 "qcm", "multiple_choice" -> {
                     val choices = payload.optJSONArray("choices") ?: JSONArray()
-                    Text("Choisis la ou les bonnes réponses.")
+                    Text(
+                        "Sélectionne la ou les bonnes réponses.",
+                        style = MaterialTheme.typography.titleSmall
+                    )
                     for (i in 0 until choices.length()) {
-                        val label = choices.optString(i)
-                        Row(
+                        Surface(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.Start
+                            shape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp),
+                            color = if (i in selectedChoices) colors.secondaryContainer
+                                else colors.surfaceVariant.copy(alpha = 0.45f)
                         ) {
-                            Checkbox(
-                                checked = i in selectedChoices,
-                                onCheckedChange = { checked ->
-                                    selectedChoices = if (checked) selectedChoices + i
-                                    else selectedChoices - i
-                                }
-                            )
-                            Text(label, modifier = Modifier.padding(top = 12.dp))
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 5.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Checkbox(
+                                    checked = i in selectedChoices,
+                                    onCheckedChange = { checked ->
+                                        selectedChoices = if (checked) selectedChoices + i
+                                        else selectedChoices - i
+                                    }
+                                )
+                                Text(
+                                    choices.optString(i),
+                                    modifier = Modifier.padding(vertical = 10.dp),
+                                    color = colors.onSurface
+                                )
+                            }
                         }
                     }
                 }
@@ -316,8 +593,7 @@ fun GeneratedExercisesScreen() {
                 "table" -> {
                     val front = payload.optJSONObject("table_front") ?: JSONObject()
                     val rows = front.optJSONArray("rows") ?: JSONArray()
-                    Text("Complète les cellules vides.")
-
+                    Text("Complète les cases manquantes.")
                     for (r in 0 until rows.length()) {
                         val row = rows.optJSONArray(r) ?: JSONArray()
                         Row(
@@ -333,7 +609,7 @@ fun GeneratedExercisesScreen() {
                                         onValueChange = {
                                             tableAnswers = tableAnswers + (key to it)
                                         },
-                                        label = { Text("Réponse") },
+                                        label = { Text("Ta réponse") },
                                         modifier = Modifier.weight(1f),
                                         singleLine = true
                                     )
@@ -352,15 +628,15 @@ fun GeneratedExercisesScreen() {
                     OutlinedTextField(
                         value = freeAnswer,
                         onValueChange = { freeAnswer = it },
-                        label = { Text("Ta réponse") },
+                        label = { Text("Écris ta réponse ici") },
                         modifier = Modifier.fillMaxWidth(),
-                        minLines = 3
+                        minLines = 4
                     )
                 }
             }
 
             error?.let {
-                Text(it, color = MaterialTheme.colorScheme.error)
+                Text(it, color = colors.error)
             }
 
             Button(
@@ -368,35 +644,63 @@ fun GeneratedExercisesScreen() {
                 enabled = !loading && result == null,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text(if (loading) "Correction en cours…" else "Valider ma réponse")
+                Text(if (loading) "Vérification en cours…" else "Valider ma réponse")
             }
 
-            if (loading) CircularProgressIndicator()
+            if (loading) {
+                CircularProgressIndicator()
+            }
 
             result?.let { correction ->
                 val verdict = correction.optString("verdict")
                 val score = correction.optInt("score")
-                Card(Modifier.fillMaxWidth()) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(22.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = colors.primaryContainer
+                    )
+                ) {
                     Column(
-                        Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                        Modifier.padding(20.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Text("Résultat : $verdict", style = MaterialTheme.typography.titleMedium)
-                        Text("Note : $score / 100")
-                        Text(correction.optString("feedback"))
+                        Text(
+                            when (verdict.lowercase()) {
+                                "correct", "success", "passed" -> "Bravo, bonne réponse !"
+                                "partial", "partially_correct" -> "Bon effort, continue !"
+                                else -> "Voyons cela ensemble"
+                            },
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                            color = colors.onPrimaryContainer
+                        )
+                        Text(
+                            "Ton résultat : $score / 100",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = colors.onPrimaryContainer
+                        )
+                        Text(
+                            correction.optString("feedback"),
+                            color = colors.onPrimaryContainer
+                        )
                         val details = correction.optJSONObject("correction")
                         if (details != null) {
                             Text(
                                 details.optString("explanation"),
-                                style = MaterialTheme.typography.bodyMedium
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = colors.onPrimaryContainer
                             )
                         }
-                        TextButton(onClick = {
-                            selected = null
-                            result = null
-                            refresh()
-                        }) {
-                            Text("Retour à la liste")
+                        Button(
+                            onClick = {
+                                selected = null
+                                result = null
+                                refresh()
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Continuer")
                         }
                     }
                 }
