@@ -33,6 +33,7 @@ import ci.kalyno.app.ui.theme.*
 import ci.kalyno.app.ui.icons.KalynoSvgIcon
 import androidx.lifecycle.viewmodel.compose.viewModel
 import ci.kalyno.app.ui.dojo.DojoScreen
+import ci.kalyno.app.ui.exercises.GeneratedExercisesScreen
 import ci.kalyno.app.ui.faq.FaqScreen
 import ci.kalyno.app.ui.explorer.ExplorerScreen
 import ci.kalyno.app.ui.profile.ProfileLinks
@@ -54,6 +55,7 @@ private data class TabItem(val icon: String, val label: String)
 private val TABS = listOf(
     TabItem("home", "Accueil"),
     TabItem("brain", "Dojo"),
+    TabItem("clipboard-list", "Exercices IA"),
     TabItem("book-open", "Explorer"),
     TabItem("sparkles", "Kalyno"),
     TabItem("user-round", "Profil")
@@ -192,11 +194,12 @@ fun MainScreen(
                         onRetry = viewModel::retry,
                         onStartFreeExercises = viewModel::startFreeExercises
                     )
-                    2 -> ExplorerScreen(
+                    2 -> GeneratedExercisesScreen()
+                    3 -> ExplorerScreen(
                         levelId = levelId,
                         onStartChapter = viewModel::startCustomSession
                     )
-                    3 -> KalynoAssistantScreen()
+                    4 -> KalynoAssistantScreen()
                     else -> {
                         val context = LocalContext.current
                         ProfileScreen(
