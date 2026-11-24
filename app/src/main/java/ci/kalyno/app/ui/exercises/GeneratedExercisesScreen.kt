@@ -21,10 +21,55 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 
 private class GeneratedExerciseApi(private val context: Context) {
-    private fun request(body: JSONObject): JSONObject {
-        val session = AuthStore(context).session()
+
+    private val authStore = AuthStore(context)
+
+    private class HttpStatusException(
+        val status: Int,
+        message: String
+    ) : Exception(message)
+
+    private suspend fun refreshSession(): ci.kalyno.app.data.auth.AuthSession {
+        val oldSession = authStore.session()
+            ?: throw IllegalStateException("Reconnecte-toi à ton compte pour accéder aux exercices.")
+
+        return try {
+            val renewed = ci.kalyno.app.data.auth.SupabaseAuthApi()
+                .refresh(oldSession.refreshToken)
+            authStore.saveSession(renewed)
+            renewed
+        } catch (e: Exception) {
+            throw IllegalStateException(
+                "Ta session ne peut plus être renouvelée. Déconnecte-toi puis reconnecte-toi.",
+                e
+            )
+        }
+    }
+
+    private suspend fun request(body: JSONObject): JSONObject {
+        var session = authStore.session()
             ?: throw IllegalStateException("Connecte-toi à ton compte pour accéder aux exercices.")
 
+        // Renouvellement préventif si le jeton approche de son expiration.
+        if (session.expiresAtMillis <= System.currentTimeMillis() + 60_000L) {
+            session = refreshSession()
+        }
+
+        try {
+            return requestWithToken(body, session.accessToken)
+        } catch (e: HttpStatusException) {
+            if (e.status != 401) throw e
+
+            // Le serveur refuse le jeton : renouvellement puis une seule nouvelle tentative.
+            session = refreshSession()
+            return requestWithToken(body, session.accessToken)
+        }
+    }
+
+    private suspend fun requestWithToken(
+        body: JSONObject,
+        accessToken: String
+    ): JSONObject = withContext(Dispatchers.IO) {
         val connection = URL("${SupabaseConfig.BASE_URL}/functions/v1/kalyno-generate")
             .openConnection() as HttpURLConnection
 
@@ -35,7 +80,7 @@ private class GeneratedExerciseApi(private val context: Context) {
             connection.doOutput = true
             connection.setRequestProperty("Content-Type", "application/json")
             connection.setRequestProperty("apikey", SupabaseConfig.PUBLISHABLE_KEY)
-            connection.setRequestProperty("Authorization", "Bearer ${session.accessToken}")
+            connection.setRequestProperty("Authorization", "Bearer $accessToken")
 
             connection.outputStream.use {
                 it.write(body.toString().toByteArray(Charsets.UTF_8))
@@ -46,31 +91,29 @@ private class GeneratedExerciseApi(private val context: Context) {
             val response = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
 
             if (code !in 200..299) {
-                throw IllegalStateException("Erreur serveur ($code) : $response")
+                throw HttpStatusException(code, "Erreur serveur ($code) : $response")
             }
-            return JSONObject(response)
+
+            JSONObject(response)
         } finally {
             connection.disconnect()
         }
     }
 
-    suspend fun list(): JSONObject = withContext(Dispatchers.IO) {
+    suspend fun list(): JSONObject =
         request(JSONObject().put("action", "list"))
-    }
 
     suspend fun submit(
         exerciseId: String,
         answer: JSONObject,
         attemptId: String
-    ): JSONObject = withContext(Dispatchers.IO) {
-        request(
-            JSONObject()
-                .put("action", "submit")
-                .put("exercise_id", exerciseId)
-                .put("client_attempt_id", attemptId)
-                .put("submitted_answer", answer)
-        )
-    }
+    ): JSONObject = request(
+        JSONObject()
+            .put("action", "submit")
+            .put("exercise_id", exerciseId)
+            .put("client_attempt_id", attemptId)
+            .put("submitted_answer", answer)
+    )
 }
 
 @Composable
