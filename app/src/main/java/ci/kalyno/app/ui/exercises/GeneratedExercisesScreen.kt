@@ -1,5 +1,6 @@
 package ci.kalyno.app.ui.exercises
 
+import ci.kalyno.app.ui.explorer.RichText
 import android.content.Context
 import ci.kalyno.app.data.SupabaseConfig
 import ci.kalyno.app.data.auth.AuthStore
@@ -522,11 +523,11 @@ fun GeneratedExercisesScreen() {
                                 fontWeight = FontWeight.Bold,
                                 color = colors.onSurface
                             )
-                            Text(
-                                exercise.optString("statement"),
-                                style = MaterialTheme.typography.bodyMedium,
+                            RichText(
+                                html = exercise.optString("statement"),
                                 color = colors.onSurfaceVariant,
-                                maxLines = 3
+                                fontSize = MaterialTheme.typography.bodyMedium.fontSize,
+                                lineHeight = MaterialTheme.typography.bodyMedium.lineHeight
                             )
                             Row(
                                 Modifier.fillMaxWidth(),
@@ -582,9 +583,11 @@ fun GeneratedExercisesScreen() {
                 fontWeight = FontWeight.Bold
             )
 
-            Text(
-                exercise.optString("title"),
-                style = MaterialTheme.typography.headlineSmall,
+            RichText(
+                html = exercise.optString("title"),
+                color = colors.onBackground,
+                fontSize = MaterialTheme.typography.headlineSmall.fontSize,
+                lineHeight = MaterialTheme.typography.headlineSmall.lineHeight,
                 fontWeight = FontWeight.ExtraBold
             )
 
@@ -605,9 +608,11 @@ fun GeneratedExercisesScreen() {
                         color = colors.primary,
                         fontWeight = FontWeight.Bold
                     )
-                    Text(
-                        exercise.optString("statement"),
-                        style = MaterialTheme.typography.bodyLarge
+                    RichText(
+                        html = exercise.optString("statement"),
+                        color = colors.onSurface,
+                        fontSize = MaterialTheme.typography.bodyLarge.fontSize,
+                        lineHeight = MaterialTheme.typography.bodyLarge.lineHeight
                     )
                 }
             }
@@ -656,11 +661,14 @@ fun GeneratedExercisesScreen() {
                                                 selectedChoices + i else selectedChoices - i
                                         }
                                     )
-                                    Text(
-                                        choices.optString(i),
-                                        Modifier.padding(vertical = 8.dp),
-                                        color = colors.onSurface
-                                    )
+                                    Box(Modifier.padding(vertical = 8.dp)) {
+                                        RichText(
+                                            html = choices.optString(i),
+                                            color = colors.onSurface,
+                                            fontSize = MaterialTheme.typography.bodyLarge.fontSize,
+                                            lineHeight = MaterialTheme.typography.bodyLarge.lineHeight
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -695,11 +703,14 @@ fun GeneratedExercisesScreen() {
                                             color = colors.surfaceVariant,
                                             shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp)
                                         ) {
-                                            Text(
-                                                cell.optString("value"),
-                                                Modifier.padding(12.dp),
-                                                color = colors.onSurface
-                                            )
+                                            Box(Modifier.padding(12.dp)) {
+                                                RichText(
+                                                    html = cell.optString("value"),
+                                                    color = colors.onSurface,
+                                                    fontSize = MaterialTheme.typography.bodyMedium.fontSize,
+                                                    lineHeight = MaterialTheme.typography.bodyMedium.lineHeight
+                                                )
+                                            }
                                         }
                                     }
                                 }
@@ -773,10 +784,11 @@ fun GeneratedExercisesScreen() {
                             fontWeight = FontWeight.ExtraBold,
                             color = colors.onPrimaryContainer
                         )
-                        Text(
-                            correction.optString("feedback"),
+                        RichText(
+                            html = correction.optString("feedback"),
                             color = colors.onPrimaryContainer,
-                            style = MaterialTheme.typography.bodyLarge
+                            fontSize = MaterialTheme.typography.bodyLarge.fontSize,
+                            lineHeight = MaterialTheme.typography.bodyLarge.lineHeight
                         )
                         if (details != null && details.optString("explanation").isNotBlank()) {
                             HorizontalDivider(
@@ -788,9 +800,11 @@ fun GeneratedExercisesScreen() {
                                 color = colors.onPrimaryContainer,
                                 fontWeight = FontWeight.Bold
                             )
-                            Text(
-                                details.optString("explanation"),
-                                color = colors.onPrimaryContainer
+                            RichText(
+                                html = details.optString("explanation"),
+                                color = colors.onPrimaryContainer,
+                                fontSize = MaterialTheme.typography.bodyMedium.fontSize,
+                                lineHeight = MaterialTheme.typography.bodyMedium.lineHeight
                             )
                         }
                     }
