@@ -222,6 +222,40 @@ fun GeneratedExercisesScreen() {
             error = "Choisis au moins une réponse."
             return
         }
+        if (kind == "table") {
+            val payload = exercise.optJSONObject("payload") ?: JSONObject()
+            val front = payload.optJSONObject("table_front") ?: JSONObject()
+            val rows = front.optJSONArray("rows") ?: JSONArray()
+            val blankKeys = linkedSetOf<String>()
+
+            for (r in 0 until rows.length()) {
+                val row = rows.optJSONArray(r) ?: JSONArray()
+
+                for (c in 0 until row.length()) {
+                    val cell = row.optJSONObject(c) ?: JSONObject()
+
+                    if (cell.optString("type") == "blank") {
+                        val key = cell.optString("key")
+                        if (key.isNotBlank()) blankKeys.add(key)
+                    }
+                }
+            }
+
+            if (blankKeys.isEmpty()) {
+                error = "Ce tableau ne contient aucune cellule à compléter."
+                return
+            }
+
+            val missingCells = blankKeys.count {
+                tableAnswers[it].isNullOrBlank()
+            }
+
+            if (missingCells > 0) {
+                error = "Il te reste $missingCells cellule(s) à compléter."
+                return
+            }
+        }
+
         if (kind == "free_text" && freeAnswer.isBlank()) {
             error = "Écris ta réponse avant de continuer."
             return
@@ -1100,6 +1134,82 @@ fun GeneratedExercisesScreen() {
                                     color = colors.onSurfaceVariant,
                                     style = MaterialTheme.typography.bodyMedium
                                 )
+
+                                val blankKeys = linkedSetOf<String>()
+
+                                for (r in 0 until rows.length()) {
+                                    val row = rows.optJSONArray(r) ?: JSONArray()
+
+                                    for (c in 0 until row.length()) {
+                                        val cell = row.optJSONObject(c) ?: JSONObject()
+
+                                        if (cell.optString("type") == "blank") {
+                                            val key = cell.optString("key")
+                                            if (key.isNotBlank()) blankKeys.add(key)
+                                        }
+                                    }
+                                }
+
+                                val filledCells = blankKeys.count {
+                                    !tableAnswers[it].isNullOrBlank()
+                                }
+
+                                val tableProgress = if (blankKeys.isEmpty()) {
+                                    0f
+                                } else {
+                                    filledCells.toFloat() / blankKeys.size.toFloat()
+                                }
+
+                                Surface(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    color = colors.primaryContainer.copy(alpha = 0.45f),
+                                    shape = androidx.compose.foundation.shape.RoundedCornerShape(15.dp)
+                                ) {
+                                    Column(
+                                        Modifier.padding(13.dp),
+                                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Row(
+                                            Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                "PROGRESSION DU TABLEAU",
+                                                color = colors.onSurfaceVariant,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontWeight = FontWeight.ExtraBold
+                                            )
+
+                                            Text(
+                                                "$filledCells / ${blankKeys.size}",
+                                                color = colors.primary,
+                                                style = MaterialTheme.typography.labelLarge,
+                                                fontWeight = FontWeight.ExtraBold
+                                            )
+                                        }
+
+                                        LinearProgressIndicator(
+                                            progress = tableProgress,
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(7.dp),
+                                            color = KalynoLightBlue,
+                                            trackColor = colors.surfaceVariant
+                                        )
+
+                                        Text(
+                                            if (blankKeys.isEmpty())
+                                                "Aucune cellule à compléter détectée."
+                                            else if (filledCells == blankKeys.size)
+                                                "Toutes les cellules sont renseignées."
+                                            else
+                                                "${blankKeys.size - filledCells} cellule(s) restante(s).",
+                                            color = colors.onSurfaceVariant,
+                                            style = MaterialTheme.typography.bodySmall
+                                        )
+                                    }
+                                }
 
                                 for (r in 0 until rows.length()) {
                                     val row = rows.optJSONArray(r) ?: JSONArray()
