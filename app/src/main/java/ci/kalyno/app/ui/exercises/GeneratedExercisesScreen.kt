@@ -704,38 +704,145 @@ fun GeneratedExercisesScreen() {
         val payload = exercise.optJSONObject("payload") ?: JSONObject()
         val isQcm = kind == "qcm" || kind == "multiple_choice"
 
+        val exercisePosition = (
+            exercises.indexOfFirst {
+                it.optString("id") == exercise.optString("id")
+            } + 1
+        ).coerceAtLeast(1)
+
+        val exerciseTotal = exercises.size.coerceAtLeast(1)
+
+        val difficultyLabel = when (
+            exercise.optString("difficulty").lowercase()
+        ) {
+            "easy", "facile", "beginner" -> "FACILE"
+            "medium", "intermediate", "moyen" -> "INTERMÉDIAIRE"
+            "hard", "difficult", "difficile", "advanced" -> "AVANCÉ"
+            else -> "ENTRAÎNEMENT"
+        }
+
+        val exerciseTypeLabel = when {
+            isQcm -> "CHOIX MULTIPLES"
+            kind == "table" -> "TABLEAU À COMPLÉTER"
+            else -> "RÉPONSE ÉCRITE"
+        }
+
+
         Column(
             modifier = Modifier.fillMaxSize()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 18.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            TextButton(onClick = {
-                selected = null
-                result = null
-                error = null
-            }) {
-                Text("←  Mes exercices")
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(26.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = colors.primary
+                ),
+                elevation = CardDefaults.cardElevation(3.dp)
+            ) {
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(18.dp),
+                    verticalArrangement = Arrangement.spacedBy(15.dp)
+                ) {
+
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextButton(
+                            onClick = {
+                                selected = null
+                                result = null
+                                error = null
+                            },
+                            colors = ButtonDefaults.textButtonColors(
+                                contentColor = colors.onPrimary
+                            )
+                        ) {
+                            Text(
+                                "←  Mes exercices",
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        Surface(
+                            color = colors.onPrimary.copy(alpha = 0.14f),
+                            shape = androidx.compose.foundation.shape.RoundedCornerShape(50)
+                        ) {
+                            Text(
+                                difficultyLabel,
+                                Modifier.padding(
+                                    horizontal = 11.dp,
+                                    vertical = 7.dp
+                                ),
+                                color = colors.onPrimary,
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.ExtraBold
+                            )
+                        }
+                    }
+
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(7.dp)
+                    ) {
+                        Text(
+                            "DÉFI $exerciseTypeLabel",
+                            color = colors.onPrimary.copy(alpha = 0.76f),
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.ExtraBold
+                        )
+
+                        RichText(
+                            html = exercise.optString("title"),
+                            color = Color.White,
+                            fontSize = MaterialTheme.typography.headlineSmall.fontSize,
+                            lineHeight = MaterialTheme.typography.headlineSmall.lineHeight,
+                            fontWeight = FontWeight.ExtraBold
+                        )
+                    }
+
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                "TON PARCOURS",
+                                color = colors.onPrimary.copy(alpha = 0.8f),
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+
+                            Text(
+                                "$exercisePosition / $exerciseTotal",
+                                color = colors.onPrimary,
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.ExtraBold
+                            )
+                        }
+
+                        LinearProgressIndicator(
+                            progress = (
+                                exercisePosition.toFloat() /
+                                    exerciseTotal.toFloat()
+                            ).coerceIn(0f, 1f),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(6.dp),
+                            color = KalynoLightBlue,
+                            trackColor = colors.onPrimary.copy(alpha = 0.18f)
+                        )
+                    }
+                }
             }
-
-            Text(
-                when {
-                    isQcm -> "DÉFI · CHOIX MULTIPLES"
-                    kind == "table" -> "DÉFI · TABLEAU"
-                    else -> "DÉFI · RÉPONSE ÉCRITE"
-                },
-                color = colors.primary,
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.Bold
-            )
-
-            RichText(
-                html = exercise.optString("title"),
-                color = colors.onBackground,
-                fontSize = MaterialTheme.typography.headlineSmall.fontSize,
-                lineHeight = MaterialTheme.typography.headlineSmall.lineHeight,
-                fontWeight = FontWeight.ExtraBold
-            )
 
             Card(
                 modifier = Modifier.fillMaxWidth(),
