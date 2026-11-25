@@ -1,5 +1,10 @@
 package ci.kalyno.app.ui.exercises
 
+import androidx.compose.foundation.background
+import androidx.compose.ui.graphics.Color
+import ci.kalyno.app.ui.theme.KalynoLightBlue
+import ci.kalyno.app.ui.theme.KalynoYellow
+
 import ci.kalyno.app.ui.explorer.RichText
 import android.content.Context
 import ci.kalyno.app.data.SupabaseConfig
@@ -267,12 +272,12 @@ fun GeneratedExercisesScreen() {
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
                     Text(
-                        "KALYNO  /  APPRENDRE AUTREMENT",
+                        "KALYNO / LABORATOIRE D’APPRENTISSAGE",
                         style = MaterialTheme.typography.labelSmall,
                         color = colors.primary,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.ExtraBold
                     )
                     Text(
                         "Ton espace de défis",
@@ -280,97 +285,185 @@ fun GeneratedExercisesScreen() {
                         fontWeight = FontWeight.ExtraBold,
                         color = colors.onBackground
                     )
+                    Text(
+                        "Apprends. Applique. Progresse.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colors.onSurfaceVariant
+                    )
                 }
-                TextButton(onClick = { refresh() }, enabled = !loading) {
-                    Text("↻")
+
+                Surface(
+                    onClick = { refresh() },
+                    enabled = !loading,
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                    color = colors.surface,
+                    border = androidx.compose.foundation.BorderStroke(
+                        1.dp,
+                        colors.outlineVariant
+                    )
+                ) {
+                    Box(
+                        Modifier.size(48.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            "↻",
+                            color = colors.primary,
+                            style = MaterialTheme.typography.titleLarge
+                        )
+                    }
                 }
             }
 
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = androidx.compose.foundation.shape.RoundedCornerShape(26.dp),
-                colors = CardDefaults.cardColors(containerColor = colors.primary)
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(28.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = colors.primary
+                ),
+                elevation = CardDefaults.cardElevation(5.dp)
             ) {
                 Column(
-                    modifier = Modifier.fillMaxWidth().padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(21.dp),
+                    verticalArrangement = Arrangement.spacedBy(17.dp)
                 ) {
-                    Text(
-                        "TON PARCOURS",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = colors.onPrimary.copy(alpha = 0.78f),
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        if (remaining > 0) "Chaque défi te fait avancer."
-                        else if (exercises.isEmpty()) "Prêt à commencer ?"
-                        else "Beau travail. Tu avances !",
-                        style = MaterialTheme.typography.titleLarge,
-                        color = colors.onPrimary,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        Column(
+                            Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(7.dp)
+                        ) {
+                            Surface(
+                                color = colors.onPrimary.copy(alpha = 0.14f),
+                                shape = androidx.compose.foundation.shape.RoundedCornerShape(50)
+                            ) {
+                                Text(
+                                    "TON PARCOURS",
+                                    Modifier.padding(
+                                        horizontal = 11.dp,
+                                        vertical = 6.dp
+                                    ),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = colors.onPrimary,
+                                    fontWeight = FontWeight.ExtraBold
+                                )
+                            }
+
+                            Text(
+                                if (remaining > 0)
+                                    "Chaque défi te rapproche de la maîtrise."
+                                else if (exercises.isEmpty())
+                                    "Ton prochain progrès commence ici."
+                                else
+                                    "Parcours accompli. Bravo !",
+                                style = MaterialTheme.typography.titleLarge,
+                                color = colors.onPrimary,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        Box(
+                            Modifier.size(72.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator(
+                                progress = progress,
+                                modifier = Modifier.fillMaxSize(),
+                                color = colors.onPrimary,
+                                trackColor = colors.onPrimary.copy(alpha = 0.2f),
+                                strokeWidth = 6.dp
+                            )
+
+                            Text(
+                                "${(progress * 100).toInt()}%",
+                                color = colors.onPrimary,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.ExtraBold
+                            )
+                        }
+                    }
 
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
+                        Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         Surface(
-                            modifier = Modifier.weight(1f),
-                            color = colors.onPrimary.copy(alpha = 0.13f),
-                            shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp)
+                            Modifier.weight(1f),
+                            color = colors.onPrimary.copy(alpha = 0.12f),
+                            shape = androidx.compose.foundation.shape.RoundedCornerShape(18.dp)
                         ) {
-                            Column(Modifier.padding(13.dp)) {
+                            Column(
+                                Modifier.padding(14.dp),
+                                verticalArrangement = Arrangement.spacedBy(3.dp)
+                            ) {
                                 Text(
                                     "$remaining",
-                                    style = MaterialTheme.typography.headlineMedium,
                                     color = colors.onPrimary,
-                                    fontWeight = FontWeight.Bold
+                                    style = MaterialTheme.typography.headlineMedium,
+                                    fontWeight = FontWeight.ExtraBold
                                 )
                                 Text(
                                     "À relever",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = colors.onPrimary.copy(alpha = 0.85f)
+                                    color = colors.onPrimary.copy(alpha = 0.82f),
+                                    style = MaterialTheme.typography.labelMedium
                                 )
                             }
                         }
+
                         Surface(
-                            modifier = Modifier.weight(1f),
-                            color = colors.onPrimary.copy(alpha = 0.13f),
-                            shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp)
+                            Modifier.weight(1f),
+                            color = colors.onPrimary.copy(alpha = 0.12f),
+                            shape = androidx.compose.foundation.shape.RoundedCornerShape(18.dp)
                         ) {
-                            Column(Modifier.padding(13.dp)) {
+                            Column(
+                                Modifier.padding(14.dp),
+                                verticalArrangement = Arrangement.spacedBy(3.dp)
+                            ) {
                                 Text(
                                     "$completed",
-                                    style = MaterialTheme.typography.headlineMedium,
                                     color = colors.onPrimary,
-                                    fontWeight = FontWeight.Bold
+                                    style = MaterialTheme.typography.headlineMedium,
+                                    fontWeight = FontWeight.ExtraBold
                                 )
                                 Text(
                                     "Accomplis",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = colors.onPrimary.copy(alpha = 0.85f)
+                                    color = colors.onPrimary.copy(alpha = 0.82f),
+                                    style = MaterialTheme.typography.labelMedium
                                 )
                             }
                         }
                     }
 
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
                         Row(
                             Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Text("Progression", color = colors.onPrimary)
                             Text(
-                                "${(progress * 100).toInt()} %",
+                                "Progression globale",
+                                color = colors.onPrimary.copy(alpha = 0.9f),
+                                style = MaterialTheme.typography.labelMedium
+                            )
+                            Text(
+                                "$completed / ${exercises.size}",
                                 color = colors.onPrimary,
+                                style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.Bold
                             )
                         }
+
                         LinearProgressIndicator(
                             progress = progress,
-                            modifier = Modifier.fillMaxWidth(),
-                            color = colors.onPrimary,
-                            trackColor = colors.onPrimary.copy(alpha = 0.22f)
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(7.dp),
+                            color = KalynoLightBlue,
+                            trackColor = colors.onPrimary.copy(alpha = 0.18f)
                         )
                     }
                 }
@@ -487,70 +580,119 @@ fun GeneratedExercisesScreen() {
                         modifier = Modifier.fillMaxWidth(),
                         onClick = { openExercise(exercise) },
                         shape = androidx.compose.foundation.shape.RoundedCornerShape(22.dp),
-                        colors = CardDefaults.cardColors(containerColor = colors.surface),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+                        colors = CardDefaults.cardColors(
+                            containerColor = colors.surface
+                        ),
+                        elevation = CardDefaults.cardElevation(2.dp)
                     ) {
-                        Column(
-                            Modifier.padding(17.dp),
-                            verticalArrangement = Arrangement.spacedBy(11.dp)
-                        ) {
-                            Row(
-                                Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
+                        Row(Modifier.fillMaxWidth()) {
+
+                            Box(
+                                Modifier
+                                    .width(5.dp)
+                                    .height(150.dp)
+                                    .background(
+                                        if (done) colors.secondary
+                                        else colors.tertiary
+                                    )
+                            )
+
+                            Column(
+                                Modifier
+                                    .weight(1f)
+                                    .padding(
+                                        horizontal = 16.dp,
+                                        vertical = 15.dp
+                                    ),
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
-                                Text(
-                                    type,
-                                    color = colors.primary,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Surface(
-                                    color = if (done) colors.tertiaryContainer
-                                    else colors.secondaryContainer,
-                                    shape = androidx.compose.foundation.shape.RoundedCornerShape(50)
+                                Row(
+                                    Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Text(
-                                        if (done) "✓ Terminé" else "À faire",
-                                        Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-                                        color = if (done) colors.onTertiaryContainer
-                                        else colors.onSecondaryContainer,
+                                        type,
+                                        color = colors.primary,
                                         style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.SemiBold
+                                        fontWeight = FontWeight.ExtraBold
+                                    )
+
+                                    Surface(
+                                        color = if (done)
+                                            colors.secondaryContainer
+                                        else
+                                            colors.tertiaryContainer,
+                                        shape = androidx.compose.foundation.shape.RoundedCornerShape(50)
+                                    ) {
+                                        Text(
+                                            if (done) "✓ Terminé" else "À faire",
+                                            Modifier.padding(
+                                                horizontal = 10.dp,
+                                                vertical = 5.dp
+                                            ),
+                                            color = if (done)
+                                                colors.onSecondaryContainer
+                                            else
+                                                colors.onTertiaryContainer,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+
+                                Text(
+                                    exercise.optString("title")
+                                        .ifBlank { "Défi ${index + 1}" },
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = colors.onSurface
+                                )
+
+                                RichText(
+                                    html = exercise.optString("statement"),
+                                    color = colors.onSurfaceVariant,
+                                    fontSize = MaterialTheme.typography.bodyMedium.fontSize,
+                                    lineHeight = MaterialTheme.typography.bodyMedium.lineHeight
+                                )
+
+                                Row(
+                                    Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    if (level.isNotBlank()) {
+                                        Surface(
+                                            color = colors.surfaceVariant,
+                                            shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
+                                        ) {
+                                            Text(
+                                                level,
+                                                Modifier.padding(
+                                                    horizontal = 9.dp,
+                                                    vertical = 5.dp
+                                                ),
+                                                color = colors.onSurfaceVariant,
+                                                style = MaterialTheme.typography.labelSmall
+                                            )
+                                        }
+                                    } else {
+                                        Spacer(Modifier.width(1.dp))
+                                    }
+
+                                    Text(
+                                        if (done)
+                                            "Revoir le défi  →"
+                                        else
+                                            "Entrer dans le défi  →",
+                                        color = colors.primary,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        style = MaterialTheme.typography.labelLarge
                                     )
                                 }
                             }
-
-                            Text(
-                                exercise.optString("title").ifBlank { "Défi ${index + 1}" },
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = colors.onSurface
-                            )
-                            RichText(
-                                html = exercise.optString("statement"),
-                                color = colors.onSurfaceVariant,
-                                fontSize = MaterialTheme.typography.bodyMedium.fontSize,
-                                lineHeight = MaterialTheme.typography.bodyMedium.lineHeight
-                            )
-                            Row(
-                                Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    level,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = colors.onSurfaceVariant
-                                )
-                                Text(
-                                    if (done) "Revoir  →" else "Commencer  →",
-                                    color = colors.primary,
-                                    fontWeight = FontWeight.Bold,
-                                    style = MaterialTheme.typography.labelLarge
-                                )
-                            }
                         }
+                    }
                     }
                 }
             }
@@ -597,27 +739,61 @@ fun GeneratedExercisesScreen() {
 
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp),
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(22.dp),
                 colors = CardDefaults.cardColors(
-                    containerColor = colors.surfaceVariant.copy(alpha = 0.55f)
-                )
+                    containerColor = colors.surface
+                ),
+                elevation = CardDefaults.cardElevation(1.dp)
             ) {
-                Column(
-                    Modifier.padding(18.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text(
-                        "ÉNONCÉ",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = colors.primary,
-                        fontWeight = FontWeight.Bold
+                Row(Modifier.fillMaxWidth()) {
+
+                    Box(
+                        Modifier
+                            .width(5.dp)
+                            .height(112.dp)
+                            .background(KalynoLightBlue)
                     )
-                    RichText(
-                        html = exercise.optString("statement"),
-                        color = colors.onSurface,
-                        fontSize = MaterialTheme.typography.bodyLarge.fontSize,
-                        lineHeight = MaterialTheme.typography.bodyLarge.lineHeight
-                    )
+
+                    Column(
+                        Modifier
+                            .weight(1f)
+                            .padding(17.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Surface(
+                                color = colors.secondaryContainer,
+                                shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
+                            ) {
+                                Text(
+                                    "ÉNONCÉ",
+                                    Modifier.padding(
+                                        horizontal = 9.dp,
+                                        vertical = 5.dp
+                                    ),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = colors.onSecondaryContainer,
+                                    fontWeight = FontWeight.ExtraBold
+                                )
+                            }
+
+                            Text(
+                                "Lis attentivement",
+                                color = colors.onSurfaceVariant,
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        }
+
+                        RichText(
+                            html = exercise.optString("statement"),
+                            color = colors.onSurface,
+                            fontSize = MaterialTheme.typography.bodyLarge.fontSize,
+                            lineHeight = MaterialTheme.typography.bodyLarge.lineHeight
+                        )
+                    }
                 }
             }
 
@@ -779,131 +955,250 @@ fun GeneratedExercisesScreen() {
 
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = androidx.compose.foundation.shape.RoundedCornerShape(22.dp),
-                    colors = CardDefaults.cardColors(containerColor = colors.primaryContainer)
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(26.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = colors.surface
+                    ),
+                    elevation = CardDefaults.cardElevation(3.dp)
                 ) {
-                    Column(
-                        Modifier.padding(19.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Text(
-                            when (verdict) {
-                                "correct", "success", "passed" -> "Excellent travail !"
-                                "partial", "partially_correct" -> "Tu progresses, continue !"
-                                else -> "On apprend de chaque essai."
+                    Column(Modifier.fillMaxWidth()) {
+
+                        Surface(
+                            color = when (verdict) {
+                                "correct", "success", "passed" -> colors.secondary
+                                "partial", "partially_correct" -> KalynoYellow
+                                else -> colors.tertiary
                             },
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = colors.onPrimaryContainer
-                        )
-                        Text(
-                            "$score / 100",
-                            style = MaterialTheme.typography.headlineMedium,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = colors.onPrimaryContainer
-                        )
-                        RichText(
-                            html = correction.optString("feedback"),
-                            color = colors.onPrimaryContainer,
-                            fontSize = MaterialTheme.typography.bodyLarge.fontSize,
-                            lineHeight = MaterialTheme.typography.bodyLarge.lineHeight
-                        )
-
-                        reasoningAnalysis?.let { analysis ->
-                            val summary = analysis.optString("summary")
-                            val steps = analysis.optJSONArray("steps")
-                            val strengths = analysis.optJSONArray("strengths")
-                            val errors = analysis.optJSONArray("errors")
-                            val advice = analysis.optString("advice")
-
-                            HorizontalDivider(
-                                color = colors.onPrimaryContainer.copy(alpha = 0.2f)
+                            shape = androidx.compose.foundation.shape.RoundedCornerShape(
+                                topStart = 26.dp,
+                                topEnd = 26.dp
                             )
-
-                            Text(
-                                "ANALYSE DE TON RAISONNEMENT",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = colors.onPrimaryContainer
-                            )
-
-                            if (summary.isNotBlank()) {
-                                Text(
-                                    summary,
-                                    color = colors.onPrimaryContainer
-                                )
-                            }
-
-                            if (steps != null && steps.length() > 0) {
-                                Text(
-                                    "Étapes de ton raisonnement",
-                                    fontWeight = FontWeight.Bold,
-                                    color = colors.onPrimaryContainer
-                                )
-                                for (i in 0 until steps.length()) {
+                        ) {
+                            Row(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(
+                                        horizontal = 19.dp,
+                                        vertical = 18.dp
+                                    ),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(
+                                    Modifier.weight(1f),
+                                    verticalArrangement = Arrangement.spacedBy(5.dp)
+                                ) {
                                     Text(
-                                        "• ${steps.optString(i)}",
-                                        color = colors.onPrimaryContainer
+                                        "BILAN DE TON DÉFI",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Color.White.copy(alpha = 0.82f),
+                                        fontWeight = FontWeight.ExtraBold
+                                    )
+
+                                    Text(
+                                        when (verdict) {
+                                            "correct", "success", "passed" ->
+                                                "Excellent travail !"
+                                            "partial", "partially_correct" ->
+                                                "Tu progresses, continue !"
+                                            else ->
+                                                "On apprend de chaque essai."
+                                        },
+                                        style = MaterialTheme.typography.titleLarge,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = Color.White
                                     )
                                 }
-                            }
 
-                            if (strengths != null && strengths.length() > 0) {
-                                Text(
-                                    "Points forts",
-                                    fontWeight = FontWeight.Bold,
-                                    color = colors.onPrimaryContainer
-                                )
-                                for (i in 0 until strengths.length()) {
+                                Surface(
+                                    color = Color.White.copy(alpha = 0.17f),
+                                    shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp)
+                                ) {
                                     Text(
-                                        "✓ ${strengths.optString(i)}",
-                                        color = colors.onPrimaryContainer
+                                        "$score/100",
+                                        Modifier.padding(
+                                            horizontal = 13.dp,
+                                            vertical = 10.dp
+                                        ),
+                                        color = Color.White,
+                                        style = MaterialTheme.typography.titleLarge,
+                                        fontWeight = FontWeight.ExtraBold
                                     )
                                 }
-                            }
-
-                            if (errors != null && errors.length() > 0) {
-                                Text(
-                                    "Points à corriger",
-                                    fontWeight = FontWeight.Bold,
-                                    color = colors.onPrimaryContainer
-                                )
-                                for (i in 0 until errors.length()) {
-                                    Text(
-                                        "• ${errors.optString(i)}",
-                                        color = colors.onPrimaryContainer
-                                    )
-                                }
-                            }
-
-                            if (advice.isNotBlank()) {
-                                Text(
-                                    "Conseil pour progresser",
-                                    fontWeight = FontWeight.Bold,
-                                    color = colors.onPrimaryContainer
-                                )
-                                Text(
-                                    advice,
-                                    color = colors.onPrimaryContainer
-                                )
                             }
                         }
-                        if (details != null && details.optString("explanation").isNotBlank()) {
-                            HorizontalDivider(
-                                color = colors.onPrimaryContainer.copy(alpha = 0.2f)
-                            )
-                            Text(
-                                "À RETENIR",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = colors.onPrimaryContainer,
-                                fontWeight = FontWeight.Bold
-                            )
+
+                        Column(
+                            Modifier.padding(19.dp),
+                            verticalArrangement = Arrangement.spacedBy(13.dp)
+                        ) {
                             RichText(
-                                html = details.optString("explanation"),
-                                color = colors.onPrimaryContainer,
-                                fontSize = MaterialTheme.typography.bodyMedium.fontSize,
-                                lineHeight = MaterialTheme.typography.bodyMedium.lineHeight
+                                html = correction.optString("feedback"),
+                                color = colors.onSurface,
+                                fontSize = MaterialTheme.typography.bodyLarge.fontSize,
+                                lineHeight = MaterialTheme.typography.bodyLarge.lineHeight
                             )
+
+                            reasoningAnalysis?.let { analysis ->
+                                val summary = analysis.optString("summary")
+                                val steps = analysis.optJSONArray("steps")
+                                val strengths = analysis.optJSONArray("strengths")
+                                val errors = analysis.optJSONArray("errors")
+                                val advice = analysis.optString("advice")
+
+                                HorizontalDivider(color = colors.outlineVariant)
+
+                                Text(
+                                    "ANALYSE DE TON RAISONNEMENT",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = colors.tertiary
+                                )
+
+                                if (summary.isNotBlank()) {
+                                    Surface(
+                                        color = colors.tertiaryContainer.copy(alpha = 0.55f),
+                                        shape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp)
+                                    ) {
+                                        Text(
+                                            summary,
+                                            Modifier.padding(13.dp),
+                                            color = colors.onSurface,
+                                            style = MaterialTheme.typography.bodyMedium
+                                        )
+                                    }
+                                }
+
+                                if (steps != null && steps.length() > 0) {
+                                    Text(
+                                        "Étapes de ton raisonnement",
+                                        fontWeight = FontWeight.Bold,
+                                        color = colors.onSurface
+                                    )
+
+                                    for (i in 0 until steps.length()) {
+                                        Row(
+                                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                            verticalAlignment = Alignment.Top
+                                        ) {
+                                            Surface(
+                                                color = colors.primary,
+                                                shape = androidx.compose.foundation.shape.CircleShape
+                                            ) {
+                                                Text(
+                                                    "${i + 1}",
+                                                    Modifier.padding(
+                                                        horizontal = 8.dp,
+                                                        vertical = 4.dp
+                                                    ),
+                                                    color = Color.White,
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
+
+                                            Text(
+                                                steps.optString(i),
+                                                Modifier.weight(1f),
+                                                color = colors.onSurface
+                                            )
+                                        }
+                                    }
+                                }
+
+                                if (strengths != null && strengths.length() > 0) {
+                                    Surface(
+                                        color = colors.secondaryContainer.copy(alpha = 0.55f),
+                                        shape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp)
+                                    ) {
+                                        Column(
+                                            Modifier.padding(13.dp),
+                                            verticalArrangement = Arrangement.spacedBy(7.dp)
+                                        ) {
+                                            Text(
+                                                "POINTS FORTS",
+                                                color = colors.onSecondaryContainer,
+                                                style = MaterialTheme.typography.labelMedium,
+                                                fontWeight = FontWeight.ExtraBold
+                                            )
+
+                                            for (i in 0 until strengths.length()) {
+                                                Text(
+                                                    "✓  ${strengths.optString(i)}",
+                                                    color = colors.onSecondaryContainer
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+
+                                if (errors != null && errors.length() > 0) {
+                                    Surface(
+                                        color = colors.errorContainer.copy(alpha = 0.55f),
+                                        shape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp)
+                                    ) {
+                                        Column(
+                                            Modifier.padding(13.dp),
+                                            verticalArrangement = Arrangement.spacedBy(7.dp)
+                                        ) {
+                                            Text(
+                                                "POINTS À CORRIGER",
+                                                color = colors.onErrorContainer,
+                                                style = MaterialTheme.typography.labelMedium,
+                                                fontWeight = FontWeight.ExtraBold
+                                            )
+
+                                            for (i in 0 until errors.length()) {
+                                                Text(
+                                                    "•  ${errors.optString(i)}",
+                                                    color = colors.onErrorContainer
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+
+                                if (advice.isNotBlank()) {
+                                    Surface(
+                                        color = colors.surfaceVariant,
+                                        shape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp)
+                                    ) {
+                                        Column(
+                                            Modifier.padding(13.dp),
+                                            verticalArrangement = Arrangement.spacedBy(5.dp)
+                                        ) {
+                                            Text(
+                                                "PROCHAINE ÉTAPE",
+                                                color = colors.primary,
+                                                style = MaterialTheme.typography.labelMedium,
+                                                fontWeight = FontWeight.ExtraBold
+                                            )
+                                            Text(advice, color = colors.onSurface)
+                                        }
+                                    }
+                                }
+                            }
+
+                            if (
+                                details != null &&
+                                details.optString("explanation").isNotBlank()
+                            ) {
+                                HorizontalDivider(color = colors.outlineVariant)
+
+                                Text(
+                                    "À RETENIR",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = colors.primary,
+                                    fontWeight = FontWeight.ExtraBold
+                                )
+
+                                RichText(
+                                    html = details.optString("explanation"),
+                                    color = colors.onSurface,
+                                    fontSize = MaterialTheme.typography.bodyMedium.fontSize,
+                                    lineHeight = MaterialTheme.typography.bodyMedium.lineHeight
+                                )
+                            }
                         }
                     }
                 }
