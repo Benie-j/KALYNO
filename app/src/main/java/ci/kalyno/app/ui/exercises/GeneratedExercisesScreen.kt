@@ -133,6 +133,7 @@ fun GeneratedExercisesScreen() {
     var result by remember { mutableStateOf<JSONObject?>(null) }
     var selectedChoices by remember { mutableStateOf(setOf<Int>()) }
     var freeAnswer by remember { mutableStateOf("") }
+    var reasoningAnswer by remember { mutableStateOf("") }
     var tableAnswers by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     var filter by remember { mutableStateOf("all") }
 
@@ -189,6 +190,7 @@ fun GeneratedExercisesScreen() {
         result = null
         selectedChoices = emptySet()
         freeAnswer = ""
+        reasoningAnswer = ""
         tableAnswers = emptyMap()
         error = null
     }
@@ -206,7 +208,9 @@ fun GeneratedExercisesScreen() {
                     tableAnswers.forEach { (key, value) -> put(key, value) }
                 }
             )
-            else -> JSONObject().put("text", freeAnswer.trim())
+            else -> JSONObject()
+                .put("text", freeAnswer.trim())
+                .put("reasoning", reasoningAnswer.trim())
         }
 
         if ((kind == "qcm" || kind == "multiple_choice") && selectedChoices.isEmpty()) {
@@ -720,12 +724,24 @@ fun GeneratedExercisesScreen() {
 
                     else -> {
                         OutlinedTextField(
+                            value = reasoningAnswer,
+                            onValueChange = { reasoningAnswer = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            minLines = 3,
+                            label = { Text("Mon raisonnement (facultatif)") },
+                            placeholder = {
+                                Text("Explique comment tu as réfléchi...")
+                            },
+                            shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp)
+                        )
+
+                        OutlinedTextField(
                             value = freeAnswer,
                             onValueChange = { freeAnswer = it },
                             modifier = Modifier.fillMaxWidth(),
                             minLines = 5,
-                            label = { Text("Ta réponse") },
-                            placeholder = { Text("Écris ici…") },
+                            label = { Text("Ma réponse finale") },
+                            placeholder = { Text("Écris ta réponse ici…") },
                             shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp)
                         )
                     }
@@ -758,6 +774,8 @@ fun GeneratedExercisesScreen() {
                 val verdict = correction.optString("verdict").lowercase()
                 val score = correction.optInt("score")
                 val details = correction.optJSONObject("correction")
+                val reasoningAnalysis =
+                    details?.optJSONObject("reasoning_analysis")
 
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -790,6 +808,86 @@ fun GeneratedExercisesScreen() {
                             fontSize = MaterialTheme.typography.bodyLarge.fontSize,
                             lineHeight = MaterialTheme.typography.bodyLarge.lineHeight
                         )
+
+                        reasoningAnalysis?.let { analysis ->
+                            val summary = analysis.optString("summary")
+                            val steps = analysis.optJSONArray("steps")
+                            val strengths = analysis.optJSONArray("strengths")
+                            val errors = analysis.optJSONArray("errors")
+                            val advice = analysis.optString("advice")
+
+                            HorizontalDivider(
+                                color = colors.onPrimaryContainer.copy(alpha = 0.2f)
+                            )
+
+                            Text(
+                                "ANALYSE DE TON RAISONNEMENT",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = colors.onPrimaryContainer
+                            )
+
+                            if (summary.isNotBlank()) {
+                                Text(
+                                    summary,
+                                    color = colors.onPrimaryContainer
+                                )
+                            }
+
+                            if (steps != null && steps.length() > 0) {
+                                Text(
+                                    "Étapes de ton raisonnement",
+                                    fontWeight = FontWeight.Bold,
+                                    color = colors.onPrimaryContainer
+                                )
+                                for (i in 0 until steps.length()) {
+                                    Text(
+                                        "• ${steps.optString(i)}",
+                                        color = colors.onPrimaryContainer
+                                    )
+                                }
+                            }
+
+                            if (strengths != null && strengths.length() > 0) {
+                                Text(
+                                    "Points forts",
+                                    fontWeight = FontWeight.Bold,
+                                    color = colors.onPrimaryContainer
+                                )
+                                for (i in 0 until strengths.length()) {
+                                    Text(
+                                        "✓ ${strengths.optString(i)}",
+                                        color = colors.onPrimaryContainer
+                                    )
+                                }
+                            }
+
+                            if (errors != null && errors.length() > 0) {
+                                Text(
+                                    "Points à corriger",
+                                    fontWeight = FontWeight.Bold,
+                                    color = colors.onPrimaryContainer
+                                )
+                                for (i in 0 until errors.length()) {
+                                    Text(
+                                        "• ${errors.optString(i)}",
+                                        color = colors.onPrimaryContainer
+                                    )
+                                }
+                            }
+
+                            if (advice.isNotBlank()) {
+                                Text(
+                                    "Conseil pour progresser",
+                                    fontWeight = FontWeight.Bold,
+                                    color = colors.onPrimaryContainer
+                                )
+                                Text(
+                                    advice,
+                                    color = colors.onPrimaryContainer
+                                )
+                            }
+                        }
                         if (details != null && details.optString("explanation").isNotBlank()) {
                             HorizontalDivider(
                                 color = colors.onPrimaryContainer.copy(alpha = 0.2f)
