@@ -733,7 +733,7 @@ fun GeneratedExercisesScreen() {
             }
             Spacer(Modifier.height(8.dp))
         }
-    } else {
+     else {
         val exercise = selected!!
         val kind = exercise.optString("kind")
         val payload = exercise.optJSONObject("payload") ?: JSONObject()
@@ -1685,3 +1685,4 @@ fun GeneratedExercisesScreen() {
             Spacer(Modifier.height(10.dp))
         }
     }
+}
