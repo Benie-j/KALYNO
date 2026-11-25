@@ -65,6 +65,71 @@ private val FRAC_RE = Regex(
 )
 private val MATH_RE = Regex("""\$\$(.+?)\$\$|\$([^$]+?)\$""", RegexOption.DOT_MATCHES_ALL)
 private val TAG_RE = Regex("<[^>]*>")
+
+private val POWER_RE = Regex(
+    """(?<![A-Za-z0-9\\])(\([^()<>]{1,40}\)|[A-Za-z0-9]+)\s*\^\s*(\([^()<>]{1,20}\)|[+-]?\d+|[A-Za-z][A-Za-z0-9]*)"""
+)
+
+private fun renderPlainPowers(text: String): String =
+    POWER_RE.replace(text) { match ->
+        val base = match.groupValues[1].trim()
+        val exponent = match.groupValues[2].trim()
+
+        val texBase = if (base.startsWith("(") && base.endsWith(")")) {
+            "\\left(${base.substring(1, base.length - 1)}\\right)"
+        } else {
+            base
+        }
+
+        val texExponent = if (
+            exponent.startsWith("(") && exponent.endsWith(")")
+        ) {
+            "\\left(${exponent.substring(1, exponent.length - 1)}\\right)"
+        } else {
+            exponent
+        }
+
+        "\$" + texBase + "^{" + texExponent + "}" + "\$"
+    }
+
+private fun normalizePowerText(text: String): String {
+    val result = StringBuilder(text.length + 16)
+    var cursor = 0
+
+    for (match in MATH_RE.findAll(text)) {
+        result.append(renderPlainPowers(text.substring(cursor, match.range.first)))
+        result.append(match.value)
+        cursor = match.range.last + 1
+    }
+
+    result.append(renderPlainPowers(text.substring(cursor)))
+    return result.toString()
+}
+
+private fun normalizePowerNotation(html: String): String {
+    if (!html.contains('^')) return html
+
+    val result = StringBuilder(html.length + 16)
+    var cursor = 0
+
+    for (tag in TAG_RE.findAll(html)) {
+        if (tag.range.first > cursor) {
+            result.append(
+                normalizePowerText(html.substring(cursor, tag.range.first))
+            )
+        }
+
+        result.append(tag.value)
+        cursor = tag.range.last + 1
+    }
+
+    if (cursor < html.length) {
+        result.append(normalizePowerText(html.substring(cursor)))
+    }
+
+    return result.toString()
+}
+
 private val SPACES_RE = Regex("\\s+")
 private val COLOR_RE = Regex("""(?<![-\w])color\s*:\s*#([0-9a-fA-F]{3,6})""")
 private val BG_RE = Regex("""background-color\s*:\s*#([0-9a-fA-F]{3,6})""")
@@ -407,20 +472,23 @@ fun RichText(
     /** false = jamais de WebView KaTeX (cellules de tableau : on reste sur JLaTeXMath, plus léger). */
     allowKatex: Boolean = true
 ) {
-    // Tableaux : rendu natif (voir ui/explorer/tables). Sans <table>, rien ne change ci-dessous.
-    if (allowKatex && containsTable(html)) {
-        RichTextWithTables(html, color, fontSize, lineHeight, fontWeight, fontStyle)
+    // Normalise les puissances écrites avec ^ avant de choisir le moteur d'affichage.
+    val renderedHtml = remember(html) { normalizePowerNotation(html) }
+
+    // Tableaux : rendu natif (voir ui/explorer/tables).
+    if (allowKatex && containsTable(renderedHtml)) {
+        RichTextWithTables(renderedHtml, color, fontSize, lineHeight, fontWeight, fontStyle)
         return
     }
-    if (allowKatex && KATEX_ENABLED && html.contains('$') && katexAvailable()) {
-        KatexText(html, color, fontSize, lineHeight, fontWeight, fontStyle)
+    if (allowKatex && KATEX_ENABLED && renderedHtml.contains('$') && katexAvailable()) {
+        KatexText(renderedHtml, color, fontSize, lineHeight, fontWeight, fontStyle)
         return
     }
-    if (!html.contains('<') && !html.contains('$')) {
-        Text(text = html, color = color, fontSize = fontSize, lineHeight = lineHeight, fontWeight = fontWeight, fontStyle = fontStyle, textAlign = textAlign)
+    if (!renderedHtml.contains('<') && !renderedHtml.contains('$')) {
+        Text(text = renderedHtml, color = color, fontSize = fontSize, lineHeight = lineHeight, fontWeight = fontWeight, fontStyle = fontStyle, textAlign = textAlign)
         return
     }
-    val blocks = remember(html) { parseRich(html) }
+    val blocks = remember(renderedHtml) { parseRich(renderedHtml) }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         for (block in blocks) RichBlockView(block, color, fontSize, lineHeight, fontWeight, fontStyle, textAlign)
     }
