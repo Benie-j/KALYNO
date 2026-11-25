@@ -1414,6 +1414,7 @@ fun GeneratedExercisesScreen() {
                 )
 
             } else {
+             val correction = result ?: JSONObject()
                 val verdict = correction.optString("verdict").lowercase()
                 val score = correction.optInt("score")
                 val details = correction.optJSONObject("correction")
