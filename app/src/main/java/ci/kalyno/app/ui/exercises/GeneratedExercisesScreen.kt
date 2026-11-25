@@ -1,6 +1,7 @@
 package ci.kalyno.app.ui.exercises
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.ui.graphics.Color
 import ci.kalyno.app.ui.theme.KalynoLightBlue
 import ci.kalyno.app.ui.theme.KalynoYellow
@@ -1040,12 +1041,13 @@ fun GeneratedExercisesScreen() {
                                     val checked = i in selectedChoices
 
                                     Surface(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        onClick = {
-                                            selectedChoices =
-                                                if (checked) selectedChoices - i
-                                                else selectedChoices + i
-                                        },
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable {
+                                                selectedChoices =
+                                                    if (checked) selectedChoices - i
+                                                    else selectedChoices + i
+                                            },
                                         shape = androidx.compose.foundation.shape.RoundedCornerShape(17.dp),
                                         color = if (checked)
                                             colors.secondaryContainer
@@ -1683,4 +1685,3 @@ fun GeneratedExercisesScreen() {
             Spacer(Modifier.height(10.dp))
         }
     }
-}
