@@ -1,5 +1,22 @@
 package ci.kalyno.app.ui.exercises
 
+import ci.kalyno.app.ui.components.rememberCountUp
+import ci.kalyno.app.ui.components.entrance
+import ci.kalyno.app.ui.components.KalynoRing
+import ci.kalyno.app.ui.components.DriftingBlob
+import ci.kalyno.app.ui.components.ConfettiBurst
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.foundation.layout.offset
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.graphics.Color
@@ -296,6 +313,9 @@ fun GeneratedExercisesScreen() {
             }
         }
 
+        val shownRemaining = rememberCountUp(remaining, durationMillis = 900)
+        val shownCompleted = rememberCountUp(completed, durationMillis = 900)
+
         Column(
             modifier = Modifier.fillMaxSize()
                 .verticalScroll(rememberScrollState())
@@ -303,7 +323,7 @@ fun GeneratedExercisesScreen() {
             verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().entrance(0),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -351,13 +371,28 @@ fun GeneratedExercisesScreen() {
             }
 
             Card(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().entrance(1),
                 shape = androidx.compose.foundation.shape.RoundedCornerShape(28.dp),
                 colors = CardDefaults.cardColors(
                     containerColor = colors.primary
                 ),
                 elevation = CardDefaults.cardElevation(5.dp)
             ) {
+                Box {
+                DriftingBlob(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .offset(x = 50.dp, y = (-50).dp)
+                        .size(180.dp)
+                )
+                DriftingBlob(
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .offset(x = (-40).dp, y = 50.dp)
+                        .size(130.dp),
+                    color = Color.White.copy(alpha = 0.06f),
+                    durationMillis = 6800
+                )
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -402,20 +437,15 @@ fun GeneratedExercisesScreen() {
                             )
                         }
 
-                        Box(
-                            Modifier.size(72.dp),
-                            contentAlignment = Alignment.Center
+                        KalynoRing(
+                            progress = progress,
+                            diameter = 76.dp,
+                            strokeWidth = 7.dp,
+                            color = colors.onPrimary,
+                            track = colors.onPrimary.copy(alpha = 0.2f)
                         ) {
-                            CircularProgressIndicator(
-                                progress = progress,
-                                modifier = Modifier.fillMaxSize(),
-                                color = colors.onPrimary,
-                                trackColor = colors.onPrimary.copy(alpha = 0.2f),
-                                strokeWidth = 6.dp
-                            )
-
                             Text(
-                                "${(progress * 100).toInt()}%",
+                                "${rememberCountUp((progress * 100).toInt(), 1100)}%",
                                 color = colors.onPrimary,
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.ExtraBold
@@ -437,7 +467,7 @@ fun GeneratedExercisesScreen() {
                                 verticalArrangement = Arrangement.spacedBy(3.dp)
                             ) {
                                 Text(
-                                    "$remaining",
+                                    "$shownRemaining",
                                     color = colors.onPrimary,
                                     style = MaterialTheme.typography.headlineMedium,
                                     fontWeight = FontWeight.ExtraBold
@@ -460,7 +490,7 @@ fun GeneratedExercisesScreen() {
                                 verticalArrangement = Arrangement.spacedBy(3.dp)
                             ) {
                                 Text(
-                                    "$completed",
+                                    "$shownCompleted",
                                     color = colors.onPrimary,
                                     style = MaterialTheme.typography.headlineMedium,
                                     fontWeight = FontWeight.ExtraBold
@@ -492,8 +522,13 @@ fun GeneratedExercisesScreen() {
                             )
                         }
 
+                        val animatedProgress by animateFloatAsState(
+                            targetValue = progress,
+                            animationSpec = tween(1100, easing = FastOutSlowInEasing),
+                            label = "exercisesProgress"
+                        )
                         LinearProgressIndicator(
-                            progress = progress,
+                            progress = animatedProgress,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(7.dp),
@@ -502,9 +537,13 @@ fun GeneratedExercisesScreen() {
                         )
                     }
                 }
+                }
             }
 
-            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Column(
+                modifier = Modifier.entrance(2),
+                verticalArrangement = Arrangement.spacedBy(3.dp)
+            ) {
                 Text(
                     "À toi de jouer",
                     style = MaterialTheme.typography.titleLarge,
@@ -517,7 +556,10 @@ fun GeneratedExercisesScreen() {
                 )
             }
 
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                modifier = Modifier.entrance(3),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 FilterChip(
                     selected = filter == "all",
                     onClick = { filter = "all" },
@@ -612,7 +654,7 @@ fun GeneratedExercisesScreen() {
                     }
 
                     Card(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth().entrance(4 + index),
                         onClick = { openExercise(exercise) },
                         shape = androidx.compose.foundation.shape.RoundedCornerShape(22.dp),
                         colors = CardDefaults.cardColors(
@@ -763,6 +805,14 @@ fun GeneratedExercisesScreen() {
         }
 
 
+        val celebrateResult = result?.optString("verdict")?.lowercase() in
+            setOf("correct", "success", "passed")
+        val hapticFeedback = LocalHapticFeedback.current
+        LaunchedEffect(celebrateResult) {
+            if (celebrateResult) hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+        }
+
+        Box(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier.fillMaxSize()
                 .verticalScroll(rememberScrollState())
@@ -770,7 +820,7 @@ fun GeneratedExercisesScreen() {
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Card(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().entrance(0),
                 shape = androidx.compose.foundation.shape.RoundedCornerShape(26.dp),
                 colors = CardDefaults.cardColors(
                     containerColor = colors.primary
@@ -864,11 +914,16 @@ fun GeneratedExercisesScreen() {
                             )
                         }
 
-                        LinearProgressIndicator(
-                            progress = (
+                        val journeyProgress by animateFloatAsState(
+                            targetValue = (
                                 exercisePosition.toFloat() /
                                     exerciseTotal.toFloat()
                             ).coerceIn(0f, 1f),
+                            animationSpec = tween(900, easing = FastOutSlowInEasing),
+                            label = "journeyProgress"
+                        )
+                        LinearProgressIndicator(
+                            progress = journeyProgress,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(6.dp),
@@ -880,7 +935,7 @@ fun GeneratedExercisesScreen() {
             }
 
             Card(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().entrance(1),
                 shape = androidx.compose.foundation.shape.RoundedCornerShape(22.dp),
                 colors = CardDefaults.cardColors(
                     containerColor = colors.surface
@@ -942,7 +997,7 @@ fun GeneratedExercisesScreen() {
             if (result == null) {
 
                 Card(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().entrance(2),
                     shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
                     colors = CardDefaults.cardColors(
                         containerColor = colors.surface
@@ -1039,20 +1094,37 @@ fun GeneratedExercisesScreen() {
 
                                 for (i in 0 until choices.length()) {
                                     val checked = i in selectedChoices
+                                    val choiceScale by animateFloatAsState(
+                                        targetValue = if (checked) 1.015f else 1f,
+                                        animationSpec = spring(
+                                            dampingRatio = Spring.DampingRatioMediumBouncy,
+                                            stiffness = Spring.StiffnessMedium
+                                        ),
+                                        label = "choiceScale"
+                                    )
+                                    val choiceColor by animateColorAsState(
+                                        targetValue = if (checked)
+                                            colors.secondaryContainer
+                                        else
+                                            colors.surfaceVariant.copy(alpha = 0.35f),
+                                        animationSpec = tween(220),
+                                        label = "choiceColor"
+                                    )
 
                                     Surface(
                                         modifier = Modifier
                                             .fillMaxWidth()
+                                            .graphicsLayer {
+                                                scaleX = choiceScale
+                                                scaleY = choiceScale
+                                            }
                                             .clickable {
                                                 selectedChoices =
                                                     if (checked) selectedChoices - i
                                                     else selectedChoices + i
                                             },
                                         shape = androidx.compose.foundation.shape.RoundedCornerShape(17.dp),
-                                        color = if (checked)
-                                            colors.secondaryContainer
-                                        else
-                                            colors.surfaceVariant.copy(alpha = 0.35f),
+                                        color = choiceColor,
                                         border = androidx.compose.foundation.BorderStroke(
                                             if (checked) 1.5.dp else 1.dp,
                                             if (checked) colors.primary
@@ -1421,8 +1493,9 @@ fun GeneratedExercisesScreen() {
                 val reasoningAnalysis =
                     details?.optJSONObject("reasoning_analysis")
 
+                val shownScore = rememberCountUp(score, durationMillis = 1100)
                 Card(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().entrance(0),
                     shape = androidx.compose.foundation.shape.RoundedCornerShape(26.dp),
                     colors = CardDefaults.cardColors(
                         containerColor = colors.surface
@@ -1483,7 +1556,7 @@ fun GeneratedExercisesScreen() {
                                     shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp)
                                 ) {
                                     Text(
-                                        "$score/100",
+                                        "$shownScore/100",
                                         Modifier.padding(
                                             horizontal = 13.dp,
                                             vertical = 10.dp
@@ -1684,6 +1757,8 @@ fun GeneratedExercisesScreen() {
                 }
             }
             Spacer(Modifier.height(10.dp))
+        }
+            if (celebrateResult) ConfettiBurst()
         }
     }
 }
