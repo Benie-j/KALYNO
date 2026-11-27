@@ -62,7 +62,10 @@ import ci.kalyno.app.data.dashboard.ReviewSession
 import ci.kalyno.app.data.srs.ReviewRating
 import ci.kalyno.app.ui.components.KalynoCard
 import ci.kalyno.app.ui.components.KalynoPill
+import ci.kalyno.app.ui.components.CelebrationChip
+import ci.kalyno.app.ui.components.KalynoCelebration
 import ci.kalyno.app.ui.components.KalynoPrimaryButton
+import ci.kalyno.app.ui.dojo.DojoMessages
 import ci.kalyno.app.ui.components.StreakBadge
 import ci.kalyno.app.ui.components.rememberHaptic
 import ci.kalyno.app.ui.theme.KalynoAmberDeep
@@ -95,6 +98,7 @@ fun ReviewSessionScreen(
     val haptic = rememberHaptic()
     val context = LocalContext.current
     val dayStreak = remember { StreakStore(context.applicationContext).current() }
+    val streakAfter = remember { StreakStore(context.applicationContext).projectedAfterCompletion() }
 
     var index by rememberSaveable(session.id) { mutableIntStateOf(0) }
     var forgotten by rememberSaveable(session.id) { mutableIntStateOf(0) }
@@ -138,6 +142,8 @@ fun ReviewSessionScreen(
                     forgotten = forgotten,
                     hesitated = hesitated,
                     easy = easy,
+                    streakBefore = dayStreak,
+                    streakAfter = streakAfter,
                     onDone = { onClose(true) }
                 )
             } else {
@@ -736,53 +742,32 @@ private fun Finished(
     forgotten: Int,
     hesitated: Int,
     easy: Int,
+    streakBefore: Int,
+    streakAfter: Int,
     onDone: () -> Unit
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(24.dp),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text("🎉", fontSize = 64.sp)
-        Spacer(Modifier.height(12.dp))
-        Text(
-            text = "Session terminée !",
-            color = KalynoText,
-            fontSize = 28.sp,
-            fontWeight = FontWeight.ExtraBold,
-            textAlign = TextAlign.Center
-        )
-        Spacer(Modifier.height(8.dp))
-        Text(
-            text = if (total == 1) "1 carte révisée" else "$total cartes révisées",
-            color = KalynoMuted,
-            fontSize = 16.sp
-        )
-        Spacer(Modifier.height(24.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            SummaryChip("🔴", forgotten, KalynoDangerSoft, KalynoDanger)
-            SummaryChip("🟡", hesitated, KalynoAmberSoft, KalynoAmberDeep)
-            SummaryChip("🟢", easy, KalynoCorrectSoft, KalynoCorrectText)
-        }
-        Spacer(Modifier.height(32.dp))
-        KalynoPrimaryButton(label = "TERMINER", onClick = onDone)
-    }
-}
+    val kept = if (total > 0) (total - forgotten).toFloat() / total else 0f
+    val good = total > 0 && forgotten * 100 <= total * 40
+    val message = remember { if (good) DojoMessages.congrats() else DojoMessages.encourage() }
 
-@Composable
-private fun SummaryChip(emoji: String, count: Int, container: Color, content: Color) {
-    Text(
-        text = "$emoji $count",
-        color = content,
-        fontSize = 16.sp,
-        fontWeight = FontWeight.ExtraBold,
-        modifier = Modifier
-            .clip(CircleShape)
-            .background(container)
-            .padding(horizontal = 18.dp, vertical = 10.dp)
-    )
+    KalynoCelebration(
+        good = good,
+        title = "Session terminée !",
+        subtitle = if (total == 1) "1 carte révisée" else "$total cartes révisées",
+        message = message,
+        score = kept,
+        scoreCaption = "NOTIONS RETENUES",
+        streakBefore = streakBefore,
+        streakAfter = streakAfter,
+        buttonLabel = "TERMINER",
+        onDone = onDone
+    ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            CelebrationChip("oubliées", forgotten, KalynoDangerSoft, KalynoDanger, Modifier.weight(1f))
+            CelebrationChip("hésitées", hesitated, KalynoAmberSoft, KalynoAmberDeep, Modifier.weight(1f))
+            CelebrationChip("faciles", easy, KalynoCorrectSoft, KalynoCorrectText, Modifier.weight(1f))
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------

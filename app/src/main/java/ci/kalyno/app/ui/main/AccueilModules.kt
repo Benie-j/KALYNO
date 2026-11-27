@@ -21,6 +21,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -50,6 +51,9 @@ import ci.kalyno.app.data.dashboard.UrgentTopic
 import ci.kalyno.app.ui.components.KalynoCard
 import ci.kalyno.app.ui.components.KalynoPrimaryButton
 import ci.kalyno.app.ui.components.KalynoProgressBar
+import ci.kalyno.app.ui.components.KalynoRing
+import ci.kalyno.app.ui.components.rememberCountUp
+import ci.kalyno.app.ui.components.rememberPulse
 import ci.kalyno.app.ui.components.ShimmerBlock
 import ci.kalyno.app.ui.icons.KalynoSvgIcon
 import ci.kalyno.app.ui.progress.MasteredCardsSection
@@ -73,11 +77,15 @@ internal fun ModuleHeader(
     icon: String,
     title: String,
     tint: Color = KalynoBlue,
-    container: Color = KalynoBlueSoft
+    container: Color = KalynoBlueSoft,
+    animateIcon: Boolean = false
 ) {
+    // L'icône flotte doucement quand le module réclame l'attention de l'élève
+    val bob = rememberPulse(min = 0f, max = 1f, durationMillis = 1100)
     Row(verticalAlignment = Alignment.CenterVertically) {
         Box(
             modifier = Modifier
+                .graphicsLayer { translationY = if (animateIcon) -bob * 3.dp.toPx() else 0f }
                 .size(36.dp)
                 .clip(RoundedCornerShape(12.dp))
                 .background(container),
@@ -118,6 +126,7 @@ internal fun UrgentReviewModule(
     modifier: Modifier = Modifier
 ) {
     val urgent = total > 0
+    val shownTotal = rememberCountUp(total, durationMillis = 900)
     KalynoCard(
         modifier = modifier,
         onClick = if (urgent) onReview else null,
@@ -128,7 +137,8 @@ internal fun UrgentReviewModule(
             icon = "brain",
             title = "Révisions du Dojo",
             tint = if (urgent) KalynoRetryText else KalynoBlue,
-            container = if (urgent) Color.White else KalynoBlueSoft
+            container = if (urgent) Color.White else KalynoBlueSoft,
+            animateIcon = urgent
         )
         Spacer(Modifier.height(14.dp))
         when {
@@ -154,7 +164,7 @@ internal fun UrgentReviewModule(
             }
             else -> {
                 Text(
-                    text = total.toString(),
+                    text = shownTotal.toString(),
                     color = KalynoRetryText,
                     fontSize = 36.sp,
                     fontWeight = FontWeight.ExtraBold
@@ -205,7 +215,7 @@ internal fun UrgentReviewModule(
 internal fun ResumeModule(lesson: LastLessonUi, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val progress = lesson.progress.coerceIn(0f, 1f)
     KalynoCard(modifier = modifier, onClick = onClick) {
-        ModuleHeader(icon = "rocket", title = "Reprendre l'aventure")
+        ModuleHeader(icon = "rocket", title = "Reprendre l'aventure", animateIcon = true)
         Spacer(Modifier.height(14.dp))
         if (lesson.subjectName.isNotBlank()) {
             Text(
@@ -281,8 +291,9 @@ internal fun ProgressModule(
             }
         } else {
             if (masteredCount != null) {
+                val shownMastered = rememberCountUp(masteredCount, durationMillis = 900)
                 StatValue(
-                    value = masteredCount.toString(),
+                    value = shownMastered.toString(),
                     label = if (masteredCount == 1) "notion maîtrisée" else "notions maîtrisées"
                 )
             }
@@ -291,9 +302,30 @@ internal fun ProgressModule(
             }
             if (retentionScore != null) {
                 val score = retentionScore.coerceIn(0f, 1f)
-                StatValue(value = "${(score * 100).toInt()} %", label = "rétention estimée")
-                Spacer(Modifier.height(6.dp))
-                KalynoProgressBar(progress = score, height = 6.dp)
+                val shownPercent = rememberCountUp((score * 100).toInt(), durationMillis = 1100)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    KalynoRing(
+                        progress = score,
+                        diameter = 64.dp,
+                        strokeWidth = 7.dp
+                    ) {
+                        Text(
+                            text = "$shownPercent%",
+                            color = KalynoText,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.ExtraBold
+                        )
+                    }
+                    Spacer(Modifier.width(10.dp))
+                    Text(
+                        text = "rétention estimée",
+                        color = KalynoMuted,
+                        fontSize = 12.sp,
+                        lineHeight = 16.sp,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
             }
             Spacer(Modifier.height(10.dp))
             Spacer(Modifier.weight(1f))

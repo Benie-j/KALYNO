@@ -1,6 +1,15 @@
 package ci.kalyno.app.ui.main
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.ContentTransform
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -146,27 +155,11 @@ fun MainScreen(
             containerColor = KalynoBackground,
             snackbarHost = { ReportSnackbarHost(reportLayer) },
             bottomBar = {
-                NavigationBar(containerColor = Color.White) {
-                    TABS.forEachIndexed { index, item ->
-                        NavigationBarItem(
-                            selected = tab == index,
-                            onClick = { tab = index },
-                            icon = { KalynoSvgIcon(name = item.icon, size = 24.dp, tint = if (tab == index) KalynoBlue else KalynoMuted) },
-                            label = {
-                                Text(
-                                    item.label,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            },
-                            colors = NavigationBarItemDefaults.colors(
-                                selectedTextColor = KalynoBlue,
-                                unselectedTextColor = KalynoMuted,
-                                indicatorColor = KalynoBlueSoft
-                            )
-                        )
-                    }
-                }
+                KalynoBottomBar(
+                    items = TABS.map { BottomBarItem(it.icon, it.label) },
+                    selected = tab,
+                    onSelect = { tab = it }
+                )
             }
         ) { padding ->
             ReportSheetHost(reportLayer)
@@ -175,13 +168,20 @@ fun MainScreen(
                     .fillMaxSize()
                     .padding(padding)
             ) {
-                when (tab) {
+                AnimatedContent(
+                    targetState = tab,
+                    transitionSpec = { tabTransition(initialState, targetState) },
+                    label = "tabContent"
+                ) { current ->
+                when (current) {
                     0 -> AccueilScreen(
                         state = state,
                         onStartMission = viewModel::startMission,
                         onReviewUrgent = viewModel::startUrgentReview,
                         onRetry = viewModel::retry,
-                        onResumeLastLesson = { tab = 2 }, // ouvre l'onglet Explorer
+                        onResumeLastLesson = { tab = 3 }, // ouvre l'onglet Explorer
+                        nickname = nickname,
+                        onOpenExplorer = { tab = 3 },
                         onShuffleQuote = viewModel::shuffleQuote,
                         onToggleFavoriteQuote = viewModel::toggleFavorite,
                         onOpenProgress = { progressOpen = true }
@@ -221,7 +221,17 @@ fun MainScreen(
                         )
                     }
                 }
+                }
             }
         }
     }
+}
+
+/** Transition entre onglets : fondu + léger glissement dans le sens de la navigation. */
+private fun tabTransition(from: Int, to: Int): ContentTransform {
+    val dir = if (to > from) 1 else -1
+    return (fadeIn(tween(240, delayMillis = 50)) +
+        slideInHorizontally(tween(300, easing = FastOutSlowInEasing)) { full -> full / 12 * dir }) togetherWith
+        (fadeOut(tween(110)) +
+            slideOutHorizontally(tween(200, easing = FastOutSlowInEasing)) { full -> -full / 16 * dir })
 }

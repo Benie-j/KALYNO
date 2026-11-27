@@ -31,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -38,6 +39,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import ci.kalyno.app.data.LevelInfo
 import ci.kalyno.app.ui.components.KalynoErrorCard
+import ci.kalyno.app.ui.components.entrance
+import ci.kalyno.app.ui.components.rememberPulse
 import ci.kalyno.app.ui.components.ShimmerBlock
 import ci.kalyno.app.ui.icons.KalynoSvgIcon
 import ci.kalyno.app.ui.icons.iconAssetFor
@@ -92,15 +95,36 @@ fun HomeScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(top = 18.dp, bottom = 8.dp)
         ) {
+            // L'illustration flotte doucement : l'écran est vivant dès la première seconde
+            val float = rememberPulse(min = 0f, max = 1f, durationMillis = 2200)
             Image(
                 painter = painterResource(id = R.drawable.rentree_student),
                 contentDescription = "Illustration de la rentrée scolaire",
                 contentScale = ContentScale.Fit,
                 modifier = Modifier
+                    .entrance(0)
                     .fillMaxWidth()
-                    .height(270.dp)
+                    .height(250.dp)
+                    .graphicsLayer { translationY = -float * 8.dp.toPx() }
             )
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = "Prêt pour ton année ?",
+                color = KalynoText,
+                fontSize = 26.sp,
+                lineHeight = 30.sp,
+                fontWeight = FontWeight.ExtraBold,
+                modifier = Modifier.entrance(1)
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = "Choisis ta classe : on construit ton parcours, tu n'as plus qu'à avancer chaque jour.",
+                color = KalynoMuted,
+                fontSize = 14.sp,
+                lineHeight = 20.sp,
+                modifier = Modifier.entrance(2)
+            )
+            Spacer(Modifier.height(16.dp))
 
             when {
                 state.loading -> LevelSkeleton()
@@ -112,7 +136,9 @@ fun HomeScreen(
 
                 else -> state.groups.forEachIndexed { index, group ->
                     if (index > 0) Spacer(Modifier.height(16.dp))
-                    LevelGroupSection(group = group, onSelect = onLevelSelected)
+                    Column(modifier = Modifier.entrance(3 + index)) {
+                        LevelGroupSection(group = group, onSelect = onLevelSelected)
+                    }
                 }
             }
         }

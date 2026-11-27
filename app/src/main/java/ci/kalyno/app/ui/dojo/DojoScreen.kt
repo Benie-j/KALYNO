@@ -1,5 +1,15 @@
 package ci.kalyno.app.ui.dojo
 
+import ci.kalyno.app.ui.theme.KalynoCorrectText
+import ci.kalyno.app.ui.theme.KalynoCorrectSoft
+import ci.kalyno.app.ui.theme.KalynoCorrect
+import ci.kalyno.app.ui.components.rememberPulse
+import ci.kalyno.app.ui.components.rememberCountUp
+import ci.kalyno.app.ui.components.entrance
+import ci.kalyno.app.ui.components.KalynoRing
+import ci.kalyno.app.ui.components.DriftingBlob
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -59,6 +69,7 @@ fun DojoScreen(
     onRetry: () -> Unit,
     onStartFreeExercises: () -> Unit = {}
 ) {
+    val brainPulse = rememberPulse(min = 1f, max = 1.07f, durationMillis = 1400)
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -67,7 +78,7 @@ fun DojoScreen(
         verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().entrance(0),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
@@ -96,9 +107,23 @@ fun DojoScreen(
             )
 
             else -> {
-                UrgentHero(state = state, onReview = onReviewUrgent)
-                MissionBlock(state = state, onStart = onStartMission, onReview = onReviewUrgent)
-                if (state.freeTotal > 0) FreeExercisesBlock(state = state, onStart = onStartFreeExercises)
+                Box(Modifier.entrance(1)) {
+                    UrgentHero(state = state, onReview = onReviewUrgent)
+                }
+                Box(Modifier.entrance(2)) {
+                    DojoSectionLabel(step = 1, text = "MISSION DU JOUR")
+                }
+                Box(Modifier.entrance(3)) {
+                    MissionBlock(state = state, onStart = onStartMission, onReview = onReviewUrgent)
+                }
+                if (state.freeTotal > 0) {
+                    Box(Modifier.entrance(4)) {
+                        DojoSectionLabel(step = 2, text = "EXERCICES LIBRES")
+                    }
+                    Box(Modifier.entrance(5)) {
+                        FreeExercisesBlock(state = state, onStart = onStartFreeExercises)
+                    }
+                }
             }
         }
     }
@@ -110,14 +135,21 @@ fun DojoScreen(
 private fun UrgentHero(state: DashboardUiState, onReview: () -> Unit) {
     val shape = RoundedCornerShape(24.dp)
     val urgent = state.urgentTotal > 0
+    val shownUrgent = rememberCountUp(state.urgentTotal, durationMillis = 900)
 
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxWidth()
             .clip(shape)
             .background(Brush.linearGradient(listOf(KalynoBlue, KalynoTealDark)))
-            .padding(22.dp)
     ) {
+    DriftingBlob(
+        modifier = Modifier
+            .align(Alignment.TopEnd)
+            .offset(x = 50.dp, y = (-50).dp)
+            .size(170.dp)
+    )
+    Column(modifier = Modifier.padding(22.dp)) {
         KalynoPill(
             text = "🧠 ACTIVE RECALL",
             container = Color.White.copy(alpha = 0.18f),
@@ -127,7 +159,7 @@ private fun UrgentHero(state: DashboardUiState, onReview: () -> Unit) {
         Text(
             text = when {
                 urgent && state.urgentTotal == 1 -> "1 notion à sauver"
-                urgent -> "${state.urgentTotal} notions à sauver"
+                urgent -> "$shownUrgent notions à sauver"
                 state.loading -> "Analyse de tes révisions…"
                 else -> "Tout est à jour 🎉"
             },
@@ -183,6 +215,7 @@ private fun UrgentHero(state: DashboardUiState, onReview: () -> Unit) {
                 content = KalynoBlue
             )
         }
+    }
     }
 }
 
@@ -276,22 +309,37 @@ private fun MissionBlock(
             }
 
             state.missionStatus == MissionStatus.DONE_TODAY -> {
-                Text(
-                    text = "🎉 Mission accomplie !",
-                    color = KalynoText,
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.ExtraBold
-                )
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    text = "Reviens demain pour de nouvelles cartes.",
-                    color = KalynoMuted,
-                    fontSize = 14.sp
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    KalynoRing(
+                        progress = 1f,
+                        diameter = 64.dp,
+                        strokeWidth = 7.dp,
+                        color = KalynoCorrect,
+                        track = KalynoCorrectSoft
+                    ) {
+                        KalynoSvgIcon(name = "check-circle", size = 26.dp, tint = KalynoCorrectText)
+                    }
+                    Spacer(Modifier.width(14.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Mission accomplie !",
+                            color = KalynoText,
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.ExtraBold
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = "Reviens demain pour de nouvelles cartes.",
+                            color = KalynoMuted,
+                            fontSize = 14.sp
+                        )
+                    }
+                }
                 if (mission != null) {
                     Spacer(Modifier.height(14.dp))
                     KalynoProgressBar(progress = mission.progress)
                 }
+            }
             }
 
             else -> Text(

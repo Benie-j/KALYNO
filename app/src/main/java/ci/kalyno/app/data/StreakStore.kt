@@ -78,6 +78,13 @@ class StreakStore(context: Context) {
         StreakLogic.current(read(owner), StreakLogic.dayOf(System.currentTimeMillis()))
     }
 
+    /** Série telle qu'elle sera une fois la session du jour enregistrée, sans rien modifier (bilan de fin de session). */
+    fun projectedAfterCompletion(): Int = synchronized(LOCK) {
+        val owner = owner()
+        migrate(owner)
+        StreakLogic.recordCompletion(read(owner), StreakLogic.dayOf(System.currentTimeMillis())).streak
+    }
+
     // ---- Synchronisation cloud (propriétaire explicite : pas de mélange si le compte change en cours de route)
 
     internal fun stateFor(userId: String): StreakState = synchronized(LOCK) {

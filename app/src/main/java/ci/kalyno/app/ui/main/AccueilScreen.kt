@@ -4,6 +4,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -26,6 +27,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import java.time.LocalTime
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -33,18 +35,29 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ci.kalyno.app.data.dashboard.DailyQuote
 import ci.kalyno.app.data.dashboard.DashboardUiState
 import ci.kalyno.app.data.dashboard.LastLessonUi
+import ci.kalyno.app.ui.components.DriftingBlob
 import ci.kalyno.app.ui.components.KalynoErrorCard
+import ci.kalyno.app.ui.components.KalynoPrimaryButton
+import ci.kalyno.app.ui.components.KalynoProgressBar
+import ci.kalyno.app.ui.components.entrance
+import ci.kalyno.app.ui.components.rememberCountUp
+import ci.kalyno.app.ui.components.rememberPulse
 import ci.kalyno.app.ui.icons.KalynoSvgIcon
 import ci.kalyno.app.ui.theme.KalynoAmberDeep
 import ci.kalyno.app.ui.theme.KalynoAmberSoft
 import ci.kalyno.app.ui.theme.KalynoBackground
 import ci.kalyno.app.ui.theme.KalynoBlue
+import ci.kalyno.app.ui.theme.KalynoBlueSoft
+import ci.kalyno.app.ui.theme.KalynoOutline
+import ci.kalyno.app.ui.theme.KalynoMuted
 import ci.kalyno.app.ui.theme.KalynoTealDark
 import ci.kalyno.app.ui.theme.KalynoText
 import ci.kalyno.app.ui.theme.KalynoYellow
@@ -71,7 +84,9 @@ fun AccueilScreen(
     onResumeLastLesson: (LastLessonUi) -> Unit,
     onShuffleQuote: () -> Unit = {},
     onToggleFavoriteQuote: (DailyQuote) -> Unit = {},
-    onOpenProgress: () -> Unit = {}
+    onOpenProgress: () -> Unit = {},
+    nickname: String = "",
+    onOpenExplorer: () -> Unit = {}
 ) {
     BoxWithConstraints(
         modifier = Modifier
@@ -98,18 +113,30 @@ fun AccueilScreen(
                     .padding(horizontal = sidePadding, vertical = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(gap)
             ) {
-                HomeTopBar(streak = state.streak)
+                HomeTopBar(
+                    streak = state.streak,
+                    nickname = nickname.ifBlank { state.nickname },
+                    modifier = Modifier.entrance(0)
+                )
+
+                SessionHero(
+                    state = state,
+                    onReviewUrgent = onReviewUrgent,
+                    onResume = onResumeLastLesson,
+                    onExplore = onOpenExplorer,
+                    modifier = Modifier.entrance(1)
+                )
 
                 AnimatedVisibility(
                     visible = state.examDaysLeft != null,
                     enter = fadeIn() + expandVertically()
                 ) {
                     state.examDaysLeft?.let { days ->
-                        ExamHero(
+                        ExamStrip(
                             daysLeft = days,
                             label = state.examLabel,
                             coachLine = coachLine(state),
-                            wide = wide
+                            modifier = Modifier.entrance(2)
                         )
                     }
                 }
@@ -135,6 +162,7 @@ fun AccueilScreen(
                             val slot = Modifier
                                 .weight(1f)
                                 .fillMaxHeight()
+                                .entrance(3 + modules.indexOf(module))
                             when (module) {
                                 HomeModule.QUOTE -> QuoteModule(
                                     state = state,
@@ -175,119 +203,269 @@ fun AccueilScreen(
     }
 }
 
-// ---------- 1. Top bar épurée ----------
+// ---------- 1. En-tête : salutation + série ----------
+
+private fun greeting(): String {
+    val hour = LocalTime.now().hour
+    return when {
+        hour in 5..11 -> "Bonjour"
+        hour in 12..17 -> "Bon après-midi"
+        else -> "Bonsoir"
+    }
+}
 
 @Composable
-private fun HomeTopBar(streak: Int) {
+private fun HomeTopBar(streak: Int, nickname: String, modifier: Modifier = Modifier) {
     val streakLabel = if (streak <= 1) "Série de $streak jour" else "Série de $streak jours"
+    val shownStreak = rememberCountUp(streak, durationMillis = 900)
+    // La flamme respire quand une série est en cours ; immobile sinon
+    val pulse = rememberPulse(min = 1f, max = 1.16f, durationMillis = 800)
+    val flameScale = if (streak > 0) pulse else 1f
+
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Text(
-            text = "KALYNO",
-            color = KalynoText,
-            fontSize = 20.sp,
-            fontWeight = FontWeight.ExtraBold,
-            letterSpacing = 1.sp
-        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = "KALYNO",
+                color = KalynoBlue,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.ExtraBold,
+                letterSpacing = 2.sp
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = if (nickname.isBlank()) greeting() else "${greeting()}, $nickname",
+                color = KalynoText,
+                fontSize = 24.sp,
+                lineHeight = 28.sp,
+                fontWeight = FontWeight.ExtraBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        Spacer(Modifier.width(12.dp))
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
                 .semantics(mergeDescendants = true) { contentDescription = streakLabel }
                 .clip(CircleShape)
                 .background(KalynoAmberSoft)
-                .padding(horizontal = 14.dp, vertical = 8.dp)
+                .padding(horizontal = 14.dp, vertical = 9.dp)
         ) {
-            KalynoSvgIcon(name = "flame", size = 18.dp, tint = KalynoYellow)
+            Box(
+                modifier = Modifier.graphicsLayer {
+                    scaleX = flameScale
+                    scaleY = flameScale
+                }
+            ) {
+                KalynoSvgIcon(name = "flame", size = 20.dp, tint = KalynoYellow)
+            }
             Spacer(Modifier.width(6.dp))
             Text(
-                text = streak.toString(),
+                text = shownStreak.toString(),
                 color = KalynoAmberDeep,
-                fontSize = 15.sp,
+                fontSize = 17.sp,
                 fontWeight = FontWeight.ExtraBold
             )
         }
     }
 }
 
-// ---------- 2. Hero : compte à rebours (date et intitulé publiés par l'admin) ----------
+// ---------- 2. Hero : la session du jour (le déclencheur d'habitude) ----------
+
+/** Paliers de série qui donnent un but proche à atteindre. */
+private val STREAK_MILESTONES = listOf(3, 7, 14, 30, 60, 100, 200, 365)
 
 @Composable
-private fun ExamHero(daysLeft: Int, label: String?, coachLine: String?, wide: Boolean) {
-    val shape = RoundedCornerShape(24.dp)
+private fun SessionHero(
+    state: DashboardUiState,
+    onReviewUrgent: () -> Unit,
+    onResume: (LastLessonUi) -> Unit,
+    onExplore: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val urgent = state.urgentTotal
+    val lastLesson = state.lastLesson
+    val shownUrgent = rememberCountUp(urgent, durationMillis = 900)
+
+    val title: String
+    val subtitle: String
+    val cta: String
+    val action: () -> Unit
+    when {
+        urgent > 0 -> {
+            title = if (urgent == 1) "1 notion t'attend" else "$shownUrgent notions t'attendent"
+            subtitle = "Une session courte pour les ancrer durablement en mémoire."
+            cta = "Réviser maintenant"
+            action = onReviewUrgent
+        }
+        lastLesson != null -> {
+            title = "Tout est à jour"
+            subtitle = "Enchaîne avec « ${lastLesson.chapterTitle} »."
+            cta = "Reprendre l'aventure"
+            action = { onResume(lastLesson) }
+        }
+        else -> {
+            title = "Tout est à jour"
+            subtitle = "C'est le bon moment pour attaquer un nouveau chapitre."
+            cta = "Explorer les chapitres"
+            action = onExplore
+        }
+    }
+
+    val streak = state.streak
+    val nextMilestone = STREAK_MILESTONES.firstOrNull { it > streak }
+    val shape = RoundedCornerShape(28.dp)
+
     Box(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .clip(shape)
             .background(Brush.linearGradient(listOf(KalynoBlue, KalynoTealDark)))
     ) {
-        // Cercle décoratif discret (n'agrandit pas la bannière)
         Box(modifier = Modifier.matchParentSize()) {
-            Box(
+            DriftingBlob(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
-                    .offset(x = 48.dp, y = (-48).dp)
-                    .size(if (wide) 220.dp else 160.dp)
-                    .clip(CircleShape)
-                    .background(Color.White.copy(alpha = 0.08f))
+                    .offset(x = 56.dp, y = (-56).dp)
+                    .size(190.dp),
+                color = Color.White.copy(alpha = 0.09f)
+            )
+            DriftingBlob(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .offset(x = (-40).dp, y = 44.dp)
+                    .size(130.dp),
+                color = Color.White.copy(alpha = 0.06f),
+                durationMillis = 6800
             )
         }
-        Column(modifier = Modifier.padding(if (wide) 32.dp else 22.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                KalynoSvgIcon(name = "calendar", size = 16.dp, tint = Color.White.copy(alpha = 0.85f))
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    text = "COMPTE À REBOURS",
-                    color = Color.White.copy(alpha = 0.85f),
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    letterSpacing = 1.sp
-                )
-            }
-            Spacer(Modifier.height(10.dp))
+        Column(modifier = Modifier.padding(22.dp)) {
             Text(
-                text = if (daysLeft == 0) "Jour J" else "J-$daysLeft",
+                text = "TA SESSION DU JOUR",
+                color = Color.White.copy(alpha = 0.8f),
+                fontSize = 11.sp,
+                fontWeight = FontWeight.ExtraBold,
+                letterSpacing = 1.5.sp
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = title,
                 color = Color.White,
-                fontSize = if (wide) 56.sp else 44.sp,
+                fontSize = 28.sp,
+                lineHeight = 32.sp,
                 fontWeight = FontWeight.ExtraBold
             )
-            if (daysLeft > 0) {
-                Text(
-                    text = "avant les épreuves",
-                    color = Color.White.copy(alpha = 0.9f),
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Medium
-                )
-            }
-            if (!label.isNullOrBlank()) {
-                Text(
-                    text = label,
-                    color = Color.White,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.ExtraBold
-                )
-            }
-            if (!coachLine.isNullOrBlank()) {
-                Spacer(Modifier.height(14.dp))
-                Row(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(Color.White.copy(alpha = 0.14f))
-                        .padding(horizontal = 14.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    KalynoSvgIcon(name = "message-circle", size = 16.dp, tint = KalynoYellow)
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        text = coachLine,
-                        color = Color.White,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        lineHeight = 18.sp
-                    )
+            Spacer(Modifier.height(6.dp))
+            Text(
+                text = subtitle,
+                color = Color.White.copy(alpha = 0.9f),
+                fontSize = 14.sp,
+                lineHeight = 20.sp,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(Modifier.height(18.dp))
+            KalynoPrimaryButton(
+                label = cta,
+                onClick = action,
+                height = 52.dp,
+                container = Color.White,
+                content = KalynoBlue
+            )
+
+            // Série : un objectif proche donne envie de ne pas la casser
+            Spacer(Modifier.height(18.dp))
+            val streakLine = when {
+                streak <= 0 -> "Lance ta série aujourd'hui : un jour, puis un autre."
+                nextMilestone == null -> "$streak jours d'affilée : tu es une légende."
+                else -> {
+                    val left = (nextMilestone ?: streak) - streak
+                    val unit = if (left == 1) "jour" else "jours"
+                    "Série de $streak : encore $left $unit pour atteindre $nextMilestone."
                 }
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                KalynoSvgIcon(name = "flame", size = 16.dp, tint = KalynoYellow)
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = streakLine,
+                    color = Color.White,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    lineHeight = 18.sp
+                )
+            }
+            if (nextMilestone != null && streak > 0) {
+                Spacer(Modifier.height(8.dp))
+                KalynoProgressBar(
+                    progress = streak.toFloat() / nextMilestone.toFloat(),
+                    height = 6.dp,
+                    color = KalynoYellow,
+                    track = Color.White.copy(alpha = 0.22f)
+                )
+            }
+        }
+    }
+}
+
+// ---------- 3. Compte à rebours (date et intitulé publiés par l'admin) ----------
+
+@Composable
+private fun ExamStrip(
+    daysLeft: Int,
+    label: String?,
+    coachLine: String?,
+    modifier: Modifier = Modifier
+) {
+    val shown = rememberCountUp(daysLeft, durationMillis = 1000)
+    val shape = RoundedCornerShape(24.dp)
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(Color.White)
+            .border(1.dp, KalynoOutline, shape)
+            .padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier
+                .clip(RoundedCornerShape(18.dp))
+                .background(KalynoBlueSoft)
+                .padding(horizontal = 16.dp, vertical = 12.dp)
+        ) {
+            Text(
+                text = if (daysLeft == 0) "Jour J" else "J-$shown",
+                color = KalynoBlue,
+                fontSize = 26.sp,
+                fontWeight = FontWeight.ExtraBold
+            )
+        }
+        Spacer(Modifier.width(14.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = if (!label.isNullOrBlank()) label else "avant les épreuves",
+                color = KalynoText,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.ExtraBold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            if (!coachLine.isNullOrBlank()) {
+                Spacer(Modifier.height(3.dp))
+                Text(
+                    text = coachLine,
+                    color = KalynoMuted,
+                    fontSize = 12.sp,
+                    lineHeight = 17.sp,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
         }
     }

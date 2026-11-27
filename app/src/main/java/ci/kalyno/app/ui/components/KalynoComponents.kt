@@ -148,13 +148,29 @@ fun KalynoPrimaryButton(
     content: Color = Color.White
 ) {
     val haptic = rememberHaptic()
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val pressScale by animateFloatAsState(
+        targetValue = if (pressed && enabled) 0.96f else 1f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "buttonScale"
+    )
     Button(
         onClick = {
             haptic()
             onClick()
         },
         enabled = enabled,
-        modifier = modifier.height(height),
+        interactionSource = interaction,
+        modifier = modifier
+            .height(height)
+            .graphicsLayer {
+                scaleX = pressScale
+                scaleY = pressScale
+            },
         shape = RoundedCornerShape(16.dp),
         colors = ButtonDefaults.buttonColors(
             containerColor = container,

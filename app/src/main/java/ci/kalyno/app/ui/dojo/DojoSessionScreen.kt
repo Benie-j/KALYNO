@@ -76,6 +76,8 @@ import ci.kalyno.app.data.dojo.TableOutcome
 import ci.kalyno.app.ui.components.KalynoCard
 import ci.kalyno.app.ui.components.MathText
 import ci.kalyno.app.ui.components.KalynoPill
+import ci.kalyno.app.ui.components.CelebrationChip
+import ci.kalyno.app.ui.components.KalynoCelebration
 import ci.kalyno.app.ui.components.KalynoPrimaryButton
 import ci.kalyno.app.ui.components.StreakBadge
 import ci.kalyno.app.ui.components.rememberHaptic
@@ -124,6 +126,7 @@ fun DojoSessionScreen(
     val haptic = rememberHaptic()
     val context = LocalContext.current
     val dayStreak = remember { StreakStore(context.applicationContext).current() }
+    val streakAfter = remember { StreakStore(context.applicationContext).projectedAfterCompletion() }
     val scope = rememberCoroutineScope()
     var calculatorOpen by remember { mutableStateOf(false) }
     var closing by remember { mutableStateOf(false) }
@@ -191,6 +194,8 @@ fun DojoSessionScreen(
                 FinishedPane(
                     total = state.total,
                     correct = state.correctCount,
+                    streakBefore = dayStreak,
+                    streakAfter = streakAfter,
                     onDone = { close(true) }
                 )
             } else if (exercise != null) {
@@ -486,68 +491,32 @@ internal fun tableDetail(grade: TableGrade): String? {
 // ---------------------------------------------------------------------------
 
 @Composable
-private fun FinishedPane(total: Int, correct: Int, onDone: () -> Unit) {
+private fun FinishedPane(
+    total: Int,
+    correct: Int,
+    streakBefore: Int,
+    streakAfter: Int,
+    onDone: () -> Unit
+) {
     val good = total > 0 && correct * 100 >= total * 60
     val message = remember { if (good) DojoMessages.congrats() else DojoMessages.encourage() }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(24.dp),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally
+    KalynoCelebration(
+        good = good,
+        title = "Session terminée !",
+        subtitle = "$correct / $total bonnes réponses",
+        message = message,
+        score = if (total > 0) correct.toFloat() / total else 0f,
+        scoreCaption = "RÉUSSITE",
+        streakBefore = streakBefore,
+        streakAfter = streakAfter,
+        buttonLabel = "TERMINER",
+        onDone = onDone
     ) {
-        Icon(
-            imageVector = if (good) Icons.Rounded.EmojiEvents else Icons.Rounded.FitnessCenter,
-            contentDescription = null,
-            tint = QuizColors.Primary,
-            modifier = Modifier.size(64.dp)
-        )
-        Spacer(Modifier.height(12.dp))
-        Text(
-            text = "Session terminée !",
-            color = KalynoText,
-            fontSize = 28.sp,
-            fontWeight = FontWeight.ExtraBold,
-            textAlign = TextAlign.Center
-        )
-        Spacer(Modifier.height(8.dp))
-        Text(
-            text = "$correct / $total bonnes réponses",
-            color = KalynoMuted,
-            fontSize = 16.sp
-        )
-        Spacer(Modifier.height(16.dp))
-        Text(
-            text = message,
-            color = KalynoText,
-            fontSize = 15.sp,
-            lineHeight = 22.sp,
-            fontWeight = FontWeight.Bold,
-            textAlign = TextAlign.Center
-        )
-        Spacer(Modifier.height(24.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            SummaryChip(Icons.Rounded.Check, "$correct", QuizColors.CorrectBg, QuizColors.CorrectText)
-            SummaryChip(Icons.Rounded.Close, "${total - correct}", QuizColors.WrongBg, QuizColors.WrongText)
+            CelebrationChip("justes", correct, QuizColors.CorrectBg, QuizColors.CorrectText, Modifier.weight(1f))
+            CelebrationChip("à revoir", total - correct, QuizColors.WrongBg, QuizColors.WrongText, Modifier.weight(1f))
         }
-        Spacer(Modifier.height(32.dp))
-        KalynoPrimaryButton(label = "TERMINER", onClick = onDone)
-    }
-}
-
-@Composable
-private fun SummaryChip(icon: ImageVector, text: String, container: Color, content: Color) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .clip(CircleShape)
-            .background(container)
-            .padding(horizontal = 16.dp, vertical = 9.dp)
-    ) {
-        Icon(icon, contentDescription = null, tint = content, modifier = Modifier.size(18.dp))
-        Spacer(Modifier.width(6.dp))
-        Text(text = text, color = content, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold)
     }
 }
 
