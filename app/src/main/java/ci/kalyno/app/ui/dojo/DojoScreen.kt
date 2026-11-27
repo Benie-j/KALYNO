@@ -12,6 +12,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -19,6 +20,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -225,6 +227,16 @@ private fun UrgentHero(state: DashboardUiState, onReview: () -> Unit) {
  * cette carte est prête à l'afficher dès qu'il sera publié, mais ne l'invente pas.
  */
 @Composable
+private fun DojoSectionLabel(step: Int, text: String) {
+    Text(
+        text = "$step. $text",
+        color = KalynoMuted,
+        fontSize = 12.sp,
+        fontWeight = FontWeight.Bold
+    )
+}
+
+@Composable
 private fun ExerciseHeaderStats(questionCount: Int, estimatedMinutes: Int?) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         KalynoSvgIcon(name = "layers", size = 15.dp, tint = KalynoMuted)
@@ -339,7 +351,6 @@ private fun MissionBlock(
                     Spacer(Modifier.height(14.dp))
                     KalynoProgressBar(progress = mission.progress)
                 }
-            }
             }
 
             else -> Text(
