@@ -75,21 +75,24 @@ fun LessonScreen(
     isCompleted: Boolean,
     onComplete: () -> Unit,
     onBack: () -> Unit,
-    onStartQuestions: () -> Unit
+    onStartQuestions: () -> Unit,
+    /** Non nul : affiche UNE séance (ses blocs seuls) ; `isCompleted` / `onComplete` concernent alors cette séance. */
+    sessionId: String? = null,
+    questionCount: Int = chapter.questionCount
 ) {
     val listState = rememberLazyListState()
     val report = rememberReportLayerState()
     val scope = rememberCoroutineScope()
     // Séances chronologiques (Séance 1, 2…) puis leurs blocs ; les anciennes leçons restent une simple pile de blocs.
-    val rows = remember(chapter) { buildLessonRows(chapter) }
-    val hasComplement = !chapter.complement.isNullOrBlank()
+    val rows = remember(chapter, sessionId) { if (sessionId == null) buildLessonRows(chapter) else buildSessionRows(chapter, sessionId) }
+    val hasComplement = sessionId == null && !chapter.complement.isNullOrBlank()
     val revealed = remember(chapter.id) { HashSet<String>() }
 
     // Index 0 = hero ; chaque ligne occupe index (i + 1) ; cette correspondance doit rester
     // synchronisée avec l'ordre des `item { }` du LazyColumn plus bas.
     // Avec des séances : une puce par séance. Sans séance : une puce par bloc titré (comportement historique).
     val jumpTargets = remember(rows) {
-        val hasSessions = rows.any { it is LessonRow.Header }
+        val hasSessions = sessionId == null && rows.any { it is LessonRow.Header }
         buildList {
             add(JumpTarget(0, "Début"))
             rows.forEachIndexed { i, row ->
@@ -230,17 +233,17 @@ fun LessonScreen(
                 if (rows.isNotEmpty() || hasComplement) {
                     item(key = "finish") {
                         RevealOnAppear(id = "finish", index = rows.size + 2, revealed = revealed, bottomSpace = 12.dp) {
-                            LessonFinishBar(isCompleted = isCompleted, onComplete = onComplete)
+                            LessonFinishBar(isCompleted = isCompleted, onComplete = onComplete, unitLabel = if (sessionId == null) "leçon" else "séance")
                         }
                     }
                 }
 
                 // Les questions ne se débloquent qu'une fois la leçon terminée
-                if (chapter.questionCount > 0 && isCompleted) {
+                if (questionCount > 0 && isCompleted) {
                     item(key = "cta") {
                         RevealOnAppear(id = "cta", index = rows.size + 3, revealed = revealed, bottomSpace = 0.dp) {
                             KalynoPrimaryButton(
-                                label = "DÉMARRER LES ${chapter.questionCount} QUESTIONS",
+                                label = "DÉMARRER LES $questionCount QUESTIONS",
                                 onClick = onStartQuestions
                             )
                         }
@@ -257,7 +260,8 @@ fun LessonScreen(
  * La validation est volontaire (aucune détection de scroll) et irréversible côté élève.
  */
 @Composable
-private fun LessonFinishBar(isCompleted: Boolean, onComplete: () -> Unit) {
+private fun LessonFinishBar(isCompleted: Boolean, onComplete: () -> Unit, unitLabel: String = "leçon") {
+    val isSession = unitLabel == "séance"
     if (isCompleted) {
         Row(
             modifier = Modifier
@@ -270,7 +274,7 @@ private fun LessonFinishBar(isCompleted: Boolean, onComplete: () -> Unit) {
             KalynoSvgIcon(name = "check-circle", size = 20.dp, tint = KalynoCorrectText)
             Spacer(Modifier.width(10.dp))
             Text(
-                text = "Leçon terminée · ses exercices sont débloqués dans le Dojo",
+                text = if (isSession) "Séance terminée · ses exercices sont débloqués dans le Dojo" else "Leçon terminée · ses exercices sont débloqués dans le Dojo",
                 color = KalynoCorrectText,
                 fontSize = 14.sp,
                 lineHeight = 19.sp,
@@ -279,9 +283,9 @@ private fun LessonFinishBar(isCompleted: Boolean, onComplete: () -> Unit) {
         }
     } else {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            KalynoPrimaryButton(label = "TERMINER · J'AI LU CETTE LEÇON", onClick = onComplete)
+            KalynoPrimaryButton(label = "TERMINER · J'AI LU CETTE ${unitLabel.uppercase()}", onClick = onComplete)
             Text(
-                text = "Appuie quand tu as fini de lire pour débloquer les exercices dans le Dojo.",
+                text = if (isSession) "Appuie quand tu as fini de lire pour débloquer les exercices de cette séance dans le Dojo." else "Appuie quand tu as fini de lire pour débloquer les exercices dans le Dojo.",
                 color = KalynoMuted,
                 fontSize = 12.sp,
                 lineHeight = 17.sp,

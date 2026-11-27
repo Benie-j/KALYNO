@@ -16,6 +16,7 @@ import ci.kalyno.app.data.dashboard.KalynoDatabase
 import ci.kalyno.app.data.dashboard.ReviewItem
 import ci.kalyno.app.data.dashboard.StudentId
 import ci.kalyno.app.data.lessons.LessonProgressRepository
+import ci.kalyno.app.data.lessons.SessionProgressRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -128,6 +129,10 @@ data class ExplorerUiState(
     val openLessonId: String? = null,
     /** Leçons que l'élève a validées avec « Terminer » (Room) : seules leurs questions sont jouables. */
     val completedLessonIds: Set<String> = emptySet(),
+    /** Séances que l'élève a validées (Room) : seuls leurs exercices sont jouables. */
+    val completedSessionIds: Set<String> = emptySet(),
+    /** Séance ouverte dans la leçon (null = liste des séances). */
+    val openSessionId: String? = null,
     /** Bannière « à la une » publiée par l'admin (null = rien à afficher). */
     val banner: ExplorerBanner? = null,
     /** Toutes les annonces « à la une » actives, dans l'ordre de l'admin. */
@@ -150,6 +155,12 @@ data class ExplorerUiState(
         chapters.filter { it.subjectId == disciplineId }
 
     fun isCompleted(lessonId: String): Boolean = lessonId in completedLessonIds
+
+    fun isSessionCompleted(sessionId: String): Boolean = sessionId in completedSessionIds
+
+    /** Exercices que l'élève a le droit de jouer dans cette leçon (leçon terminée, ou séances terminées). */
+    fun unlockedItems(chapter: ExplorerChapter): List<ReviewItem> =
+        unlockedItemsOf(chapter, completedLessonIds, completedSessionIds)
 
     val visibleChapters: List<ExplorerChapter>
         get() {
@@ -193,6 +204,8 @@ class ExplorerViewModel(app: Application) : AndroidViewModel(app) {
     private val prefs = AppPrefs(app)
     private val studentId = StudentId.get(app)
     private val lessonProgress = LessonProgressRepository.get(app)
+    private val sessionProgress = SessionProgressRepository.get(app)
+    private var sessionCompletionJob: Job? = null
 
     private val _state = MutableStateFlow(ExplorerUiState())
     val state: StateFlow<ExplorerUiState> = _state.asStateFlow()
@@ -208,12 +221,12 @@ class ExplorerViewModel(app: Application) : AndroidViewModel(app) {
     init {
         viewModelScope.launch {
             combine(
-                _state.map { it.chapters to it.completedLessonIds }.distinctUntilChanged(),
+                _state.map { Triple(it.chapters, it.completedLessonIds, it.completedSessionIds) }.distinctUntilChanged(),
                 forYouTick
             ) { content, _ -> content }
-                .collectLatest { (chapters, completed) ->
+                .collectLatest { (chapters, completed, completedSessions) ->
                     val picks = try {
-                        withContext(Dispatchers.IO) { computeForYou(chapters, completed) }
+                        withContext(Dispatchers.IO) { computeForYou(chapters, completed, completedSessions) }
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
@@ -234,6 +247,7 @@ class ExplorerViewModel(app: Application) : AndroidViewModel(app) {
         _state.value = ExplorerUiState()
         observeTree(level)
         observeCompletion()
+        observeSessionCompletion()
         refresh(silent = false)
     }
 
@@ -261,12 +275,48 @@ class ExplorerViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Séances terminées lues dans Room : les boutons et les exercices se mettent à jour seuls. */
+    private fun observeSessionCompletion() {
+        sessionCompletionJob?.cancel()
+        sessionCompletionJob = viewModelScope.launch {
+            sessionProgress.observeCompleted(studentId).collect { ids ->
+                _state.update { it.copy(completedSessionIds = ids) }
+            }
+        }
+    }
+
+    fun onSessionClick(sessionId: String) {
+        _state.update { it.copy(openSessionId = sessionId) }
+    }
+
+    /** Clic sur « Terminer » d'une séance : seule cette séance est validée (idempotent), seuls ses exercices se débloquent. */
+    fun onSessionCompleted(sessionId: String) {
+        if (_state.value.isSessionCompleted(sessionId)) return
+        viewModelScope.launch {
+            try {
+                sessionProgress.markCompleted(studentId, sessionId)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Écriture perdue : le bouton reste actif, l'élève peut réessayer
+            }
+        }
+    }
+
     /**
      * Leçons à réviser, classées par urgence FSRS (voir [ForYouPlanner]).
      * Seules comptent les leçons terminées (règle du Dojo) dont au moins une carte est due.
      */
-    private suspend fun computeForYou(chapters: List<ExplorerChapter>, completed: Set<String>): List<ForYouPick> {
-        val playable = chapters.filter { it.id in completed && it.questionCount > 0 }
+    private suspend fun computeForYou(
+        chapters: List<ExplorerChapter>,
+        completed: Set<String>,
+        completedSessions: Set<String>
+    ): List<ForYouPick> {
+        // Exercices jouables : leçon terminée (historique) ou séances terminées
+        val playable = chapters.mapNotNull { ch ->
+            val unlocked = unlockedItemsOf(ch, completed, completedSessions)
+            if (unlocked.isEmpty()) null else ch.copy(items = unlocked)
+        }
         if (playable.isEmpty()) return emptyList()
 
         val now = System.currentTimeMillis()
@@ -327,13 +377,18 @@ class ExplorerViewModel(app: Application) : AndroidViewModel(app) {
             progress = chapter.progress
         )
         prefs.markLessonOpened(chapter.id)
-        _state.update { it.copy(openLessonId = chapter.id) }
+        _state.update { it.copy(openLessonId = chapter.id, openSessionId = null) }
     }
 
     /** Gère le retour système / flèche. Renvoie false si on est déjà sur l'accueil Explorer. */
     fun onBack(): Boolean {
         val st = _state.value
         return when {
+            st.openSessionId != null -> {
+                // Retour de l'écran d'une séance vers la liste des séances de la leçon
+                _state.update { it.copy(openSessionId = null) }
+                true
+            }
             st.openLessonId != null -> {
                 _state.update { it.copy(openLessonId = null) }
                 true
@@ -412,7 +467,12 @@ class ExplorerViewModel(app: Application) : AndroidViewModel(app) {
     private fun sanitized(st: ExplorerUiState): ExplorerUiState {
         var next = st
         if (next.openLessonId != null && next.chapters.none { it.id == next.openLessonId }) {
-            next = next.copy(openLessonId = null)
+            next = next.copy(openLessonId = null, openSessionId = null)
+        }
+        // Séance masquée ou supprimée par l'admin pendant la lecture : retour à la liste des séances
+        if (next.openSessionId != null) {
+            val lesson = next.chapters.firstOrNull { it.id == next.openLessonId }
+            if (lesson == null || lesson.availableSessions().none { it.id == next.openSessionId }) next = next.copy(openSessionId = null)
         }
         if (next.openDisciplineId != null && next.disciplines.none { it.id == next.openDisciplineId }) {
             next = next.copy(openDisciplineId = null, pressedDisciplineId = null)
