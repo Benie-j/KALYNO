@@ -131,9 +131,11 @@ fun ExplorerScreen(
 
     // Les questions d'une leçon ne sont jouables qu'après « Terminer » ; sinon on ouvre la leçon à lire
     val start: (ExplorerChapter) -> Unit = { chapter ->
+        // Exercices jouables : toute la leçon si elle est terminée, sinon ceux des séances terminées
+        val unlocked = ui.unlockedItems(chapter)
         when {
+            unlocked.isNotEmpty() -> onStartChapter(chapter.title, unlocked)
             !ui.isCompleted(chapter.id) -> viewModel.onLessonClick(chapter)
-            chapter.items.isNotEmpty() -> onStartChapter(chapter.title, chapter.items)
             else -> Unit
         }
     }
@@ -175,13 +177,41 @@ fun ExplorerScreen(
             is ExplorerRoute.LessonDetail -> {
                 val lesson = ui.chapters.firstOrNull { it.id == route.lessonId }
                 if (lesson != null) {
-                    LessonScreen(
-                        chapter = lesson,
-                        isCompleted = ui.isCompleted(lesson.id),
-                        onComplete = { viewModel.onLessonCompleted(lesson.id) },
-                        onBack = { viewModel.onBack() },
-                        onStartQuestions = { start(lesson) }
-                    )
+                    val visibleSessions = lesson.availableSessions()
+                    val openSession = visibleSessions.firstOrNull { it.id == ui.openSessionId }
+                    when {
+                        // Leçon sans séance publiée : fonctionnement historique inchangé
+                        visibleSessions.isEmpty() -> LessonScreen(
+                            chapter = lesson,
+                            isCompleted = ui.isCompleted(lesson.id),
+                            onComplete = { viewModel.onLessonCompleted(lesson.id) },
+                            onBack = { viewModel.onBack() },
+                            onStartQuestions = { start(lesson) }
+                        )
+                        // Une séance : ses blocs seuls, son propre « Terminer »
+                        openSession != null -> {
+                            val sessionItems = lesson.itemsOfSession(openSession.id)
+                            LessonScreen(
+                                chapter = lesson,
+                                isCompleted = ui.isSessionCompleted(openSession.id),
+                                onComplete = { viewModel.onSessionCompleted(openSession.id) },
+                                onBack = { viewModel.onBack() },
+                                onStartQuestions = { onStartChapter(lesson.title, sessionItems) },
+                                sessionId = openSession.id,
+                                questionCount = sessionItems.size
+                            )
+                        }
+                        // Liste des séances publiées de la leçon
+                        else -> LessonSessionListScreen(
+                            chapter = lesson,
+                            sessions = visibleSessions,
+                            completedIds = ui.completedSessionIds,
+                            unlockedCount = ui.unlockedItems(lesson).size,
+                            onOpenSession = { viewModel.onSessionClick(it) },
+                            onStartQuestions = { start(lesson) },
+                            onBack = { viewModel.onBack() }
+                        )
+                    }
                 }
             }
         }

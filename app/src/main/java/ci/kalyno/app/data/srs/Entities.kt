@@ -48,7 +48,9 @@ data class FlashcardEntity(
     // -- Réponse de référence rédigée par l'admin : affichée comme bonne réponse en saisie libre (null = on retombe sur `reponse`) --
     val adminReference: String? = null,
     // -- Leçon (chapitre publié) dont la carte est issue : le Dojo ne propose la carte que si cette leçon est terminée --
-    val lessonId: String? = null
+    val lessonId: String? = null,
+    // -- Séance de la leçon dont la carte est issue (via son bloc) : déblocage ciblé ; null = carte sans séance --
+    val sessionId: String? = null
 )
 
 /**

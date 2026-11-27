@@ -42,7 +42,8 @@ data class LearningCapsule(
 )
 
 /** Séance d'une leçon (Séance 1, Séance 2…) : étape chronologique regroupant plusieurs blocs. */
-data class LearningSession(val id: String, val title: String)
+/** [isAvailable] = false : séance masquée aux élèves par l'admin (true si la colonne n'existe pas encore). */
+data class LearningSession(val id: String, val title: String, val isAvailable: Boolean = true)
 
 data class LearningChapter(
     val id: String,
@@ -374,15 +375,34 @@ class SupabaseLearningRepository {
     @Volatile
     private var sessionsSupported = true
 
+    /** Faux dès qu'on sait que `lesson_sessions` n'a pas (encore) la colonne `is_available`. */
+    @Volatile
+    private var sessionAvailabilitySupported = true
+
+    private fun loadSessionRows(chapterId: String): JSONArray {
+        val filter = "&chapter_id=eq.${enc(chapterId)}&order=position.asc"
+        if (sessionAvailabilitySupported) {
+            try {
+                return getArray("lesson_sessions?select=id,title,position,is_available$filter")
+            } catch (e: IOException) {
+                if (e.message?.startsWith("Supabase HTTP 400") == true) sessionAvailabilitySupported = false else throw e
+            }
+        }
+        return getArray("lesson_sessions?select=id,title,position$filter")
+    }
+
     private fun loadSessions(chapterId: String): List<LearningSession> {
         if (!sessionsSupported) return emptyList()
         return try {
-            val rows = getArray(
-                "lesson_sessions?select=id,title,position&chapter_id=eq.${enc(chapterId)}&order=position.asc"
-            )
+            val rows = loadSessionRows(chapterId)
             List(rows.length()) { i ->
                 val row = rows.getJSONObject(i)
-                LearningSession(id = row.getString("id"), title = row.optString("title", "").trim())
+                LearningSession(
+                    id = row.getString("id"),
+                    title = row.optString("title", "").trim(),
+                    // Colonne absente ou nulle : séance considérée disponible (comportement historique)
+                    isAvailable = if (row.isNull("is_available")) true else row.optBoolean("is_available", true)
+                )
             }
         } catch (e: IOException) {
             val message = e.message.orEmpty()

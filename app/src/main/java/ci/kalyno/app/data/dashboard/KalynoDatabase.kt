@@ -17,6 +17,8 @@ import ci.kalyno.app.data.faq.FaqDao
 import ci.kalyno.app.data.faq.FaqEntity
 import ci.kalyno.app.data.lessons.LessonProgressDao
 import ci.kalyno.app.data.lessons.LessonProgressEntity
+import ci.kalyno.app.data.lessons.SessionProgressDao
+import ci.kalyno.app.data.lessons.SessionProgressEntity
 import ci.kalyno.app.data.progress.AttemptDao
 import ci.kalyno.app.data.progress.DojoAttemptEntity
 import ci.kalyno.app.data.reports.ReportDao
@@ -40,11 +42,12 @@ import ci.kalyno.app.data.srs.SubjectEntity
         QuoteFavoriteEntity::class,
         BadgeUnlockEntity::class,
         LessonProgressEntity::class,
+        SessionProgressEntity::class,
         DojoAttemptEntity::class,
         ReportEntity::class,
         FaqEntity::class
     ],
-    version = 14,
+    version = 15,
     exportSchema = false
 )
 abstract class KalynoDatabase : RoomDatabase() {
@@ -54,6 +57,7 @@ abstract class KalynoDatabase : RoomDatabase() {
     abstract fun quoteFavoriteDao(): QuoteFavoriteDao
     abstract fun badgeDao(): BadgeDao
     abstract fun lessonProgressDao(): LessonProgressDao
+    abstract fun sessionProgressDao(): SessionProgressDao
     abstract fun attemptDao(): AttemptDao
     abstract fun reportDao(): ReportDao
     abstract fun faqDao(): FaqDao
@@ -288,13 +292,28 @@ abstract class KalynoDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * Séances : progression par séance (nouvelle table) et séance d'origine de chaque carte (nouvelle colonne,
+         * remplie à la prochaine synchronisation du catalogue). Rien n'est supprimé ni réécrit.
+         */
+        private val MIGRATION_14_15 = object : Migration(14, 15) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE flashcards ADD COLUMN sessionId TEXT")
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `session_progress` (`studentId` TEXT NOT NULL, `sessionId` TEXT NOT NULL, " +
+                        "`completedAt` INTEGER NOT NULL, PRIMARY KEY(`studentId`, `sessionId`))"
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_session_progress_studentId` ON `session_progress` (`studentId`)")
+            }
+        }
+
         fun get(context: Context): KalynoDatabase =
             instance ?: synchronized(this) {
                 instance ?: Room.databaseBuilder(
                     context.applicationContext,
                     KalynoDatabase::class.java,
                     "kalyno.db"
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14)
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15)
                     .build().also { instance = it }
             }
     }

@@ -1,0 +1,12 @@
+KALYNO — séances et blocs : mode d'emploi
+
+1) Copier dans ~ : patch_admin.py, patch_android.py, appliquer_seances.sh
+2) bash ~/appliquer_seances.sh   (crée la branche feature/seances-blocs dans chaque dépôt)
+3) Compiler l'app (workflow GitHub Actions habituel) AVANT de fusionner.
+
+Retour arrière (dépôts) : git checkout main && git branch -D feature/seances-blocs
+Retour arrière (fichiers non commités) : git checkout -- . && git clean -fd src app/src/main/java/ci/kalyno/app/data/lessons/SessionProgress.kt app/src/main/java/ci/kalyno/app/ui/explorer/SessionNavigation.kt
+
+Supabase : aucune migration ajoutée. À vérifier (lecture seule) :
+ - type de lesson_session_progress.completed_at (timestamptz ou bigint : l'app gère les deux)
+ - politiques RLS : un élève lit/insère ses propres lignes (user_id = auth.uid()) ; lecture des séances is_available = true

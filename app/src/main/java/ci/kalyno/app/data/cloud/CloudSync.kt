@@ -13,6 +13,7 @@ import ci.kalyno.app.data.srs.CardProgressEntity
 import ci.kalyno.app.data.srs.ReviewLogEntity
 import ci.kalyno.app.data.srs.ReviewRating
 import ci.kalyno.app.data.lessons.LessonProgressEntity
+import ci.kalyno.app.data.lessons.SessionProgressEntity
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
@@ -40,6 +41,7 @@ class CloudSync(context: Context) {
     private val prefs = AppPrefs(appContext)
     private val dao = KalynoDatabase.get(appContext).dashboardDao()
     private val lessonDao = KalynoDatabase.get(appContext).lessonProgressDao()
+    private val sessionDao = KalynoDatabase.get(appContext).sessionProgressDao()
 
     /** Profil du compte, ou null s'il n'existe pas encore. */
     suspend fun fetchProfile(): RemoteProfile? = withContext(Dispatchers.IO) {
@@ -103,9 +105,11 @@ class CloudSync(context: Context) {
         }
 
         step("leçons reçues") { pullLessons(studentId, userId, token) }
+        step("séances reçues") { pullSessions(studentId, userId, token) }
         step("cartes reçues") { pull(studentId, userId, token) }
         step("cartes envoyées") { push(studentId, userId, token) }
         step("leçons envoyées") { pushLessons(studentId, userId, token) }
+        step("séances envoyées") { pushSessions(studentId, userId, token) }
         step("historique reçu") { pullLogs(studentId, userId, token) }
         step("historique envoyé") { pushLogs(studentId, userId, token) }
 
@@ -516,6 +520,86 @@ class CloudSync(context: Context) {
         pushedLessonsSignature = signature
     }
 
+    /**
+     * Séances terminées (table `lesson_session_progress`). `user_id` est l'UUID du compte Supabase (store.userId()),
+     * jamais l'identifiant local de l'élève. Fusion : on ajoute seulement les séances absentes en local.
+     */
+    private suspend fun pullSessions(studentId: String, userId: String, token: String) {
+        val rows = try {
+            JSONArray(
+                SupabaseRest.request(
+                    "GET",
+                    "lesson_session_progress?user_id=eq.$userId&select=session_id,completed_at&limit=$LESSON_LIMIT",
+                    token
+                )
+            )
+        } catch (e: IOException) {
+            if (isMissingSchema(e)) {
+                Log.w(TAG, "Table lesson_session_progress absente côté Supabase : séances non restaurées")
+                return
+            }
+            throw e
+        }
+        for (i in 0 until rows.length()) {
+            val r = rows.getJSONObject(i)
+            sessionDao.insertIfAbsent(
+                SessionProgressEntity(
+                    studentId = studentId,
+                    sessionId = r.getString("session_id"),
+                    completedAt = parseCompletedAt(r.opt("completed_at"))
+                )
+            )
+        }
+    }
+
+    /** `completed_at` peut être un horodatage ISO (timestamptz) ou un nombre (epoch ms) selon le schéma. */
+    private fun parseCompletedAt(value: Any?): Long = when (value) {
+        is Number -> value.toLong()
+        is String -> runCatching { java.time.OffsetDateTime.parse(value).toInstant().toEpochMilli() }
+            .getOrElse { value.toLongOrNull() ?: System.currentTimeMillis() }
+        else -> System.currentTimeMillis()
+    }
+
+    /** Envoie les séances terminées (idempotent : « ignore-duplicates » sur la clé primaire, aucun doublon). */
+    private suspend fun pushSessions(studentId: String, userId: String, token: String) {
+        val done = sessionDao.completedRows(studentId)
+        if (done.isEmpty()) return
+        val signature = done.map { it.sessionId }.sorted().hashCode()
+        if (signature == pushedSessionsSignature) return
+
+        try {
+            done.chunked(200).forEach { chunk -> postSessionRows(chunk, userId, token) }
+        } catch (e: IOException) {
+            if (isMissingSchema(e)) {
+                Log.w(TAG, "Table lesson_session_progress absente côté Supabase : séances non envoyées")
+                return
+            }
+            throw e
+        }
+        pushedSessionsSignature = signature
+    }
+
+    private fun postSessionRows(rows: List<SessionProgressEntity>, userId: String, token: String) {
+        fun send(asIso: Boolean) {
+            val body = JSONArray()
+            rows.forEach { r ->
+                body.put(
+                    JSONObject()
+                        .put("user_id", userId)
+                        .put("session_id", r.sessionId)
+                        .put("completed_at", if (asIso) java.time.Instant.ofEpochMilli(r.completedAt).toString() else r.completedAt)
+                )
+            }
+            SupabaseRest.request("POST", "lesson_session_progress", token, body.toString(), IGNORE_DUPLICATES)
+        }
+        try {
+            send(asIso = true)
+        } catch (e: IOException) {
+            // Colonne numérique plutôt que timestamptz : on retente avec des millisecondes
+            if (e.message?.startsWith("Supabase HTTP 400") == true) send(asIso = false) else throw e
+        }
+    }
+
     /** Vrai quand Supabase répond « table ou colonne inconnue » (SQL de mise à jour pas encore lancé). */
     private fun isMissingSchema(e: Exception): Boolean {
         val m = e.message.orEmpty()
@@ -557,6 +641,9 @@ class CloudSync(context: Context) {
 
         @Volatile
         var pushedLessonsSignature = 0
+
+        @Volatile
+        var pushedSessionsSignature = 0
 
         /** Passent à faux si Supabase ne connaît pas encore les colonnes FSRS étendues (repli sur l'ancien format). */
         @Volatile

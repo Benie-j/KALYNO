@@ -396,6 +396,8 @@ class DashboardRepository(context: Context) {
         )
         val cards = subjects.flatMap { s ->
             s.chapters.flatMap { ch ->
+                // Séance de chaque bloc : une carte appartient à la séance de son bloc (null = sans bloc ou sans séance)
+                val sessionOfCapsule = ch.capsules.associate { it.id to it.sessionId }
                 ch.cards.mapNotNull { c ->
                     val answer = answerOf(c)
                     if (c.front.isBlank() || answer.isNullOrBlank()) null
@@ -412,7 +414,8 @@ class DashboardRepository(context: Context) {
                             .joinToString(","),
                         explanation = c.explanation,
                         adminReference = c.adminReference,
-                        lessonId = ch.id
+                        lessonId = ch.id,
+                        sessionId = c.capsuleId?.let { sessionOfCapsule[it] }
                     )
                 }
             }
