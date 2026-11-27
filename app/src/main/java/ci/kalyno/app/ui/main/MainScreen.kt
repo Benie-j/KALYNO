@@ -64,7 +64,7 @@ private data class TabItem(val icon: String, val label: String)
 private val TABS = listOf(
     TabItem("home", "Accueil"),
     TabItem("brain", "Dojo"),
-    TabItem("clipboard-list", "Exercices IA"),
+    TabItem("exercise-spark", "Exercices IA"),
     TabItem("book-open", "Explorer"),
     TabItem("sparkles", "Kalyno"),
     TabItem("user-round", "Profil")
