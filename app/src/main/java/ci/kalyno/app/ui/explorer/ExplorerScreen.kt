@@ -2,12 +2,14 @@ package ci.kalyno.app.ui.explorer
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.ScrollState
@@ -55,6 +57,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -64,6 +67,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import ci.kalyno.app.data.Levels
+import ci.kalyno.app.data.StreakStore
 import ci.kalyno.app.data.dashboard.ReviewItem
 import ci.kalyno.app.ui.components.KalynoCard
 import ci.kalyno.app.ui.components.KalynoIconEmptyState
@@ -73,6 +77,7 @@ import ci.kalyno.app.ui.components.KalynoPrimaryButton
 import ci.kalyno.app.ui.components.KalynoProgressBar
 import ci.kalyno.app.ui.components.SectionHeader
 import ci.kalyno.app.ui.components.ShimmerBlock
+import ci.kalyno.app.ui.components.entrance
 import ci.kalyno.app.ui.components.rememberHaptic
 import ci.kalyno.app.ui.icons.KalynoSvgIcon
 import ci.kalyno.app.ui.icons.iconAssetFor
@@ -89,11 +94,6 @@ import kotlinx.coroutines.delay
 
 /** Rafraîchissement silencieux tant que l'onglet est visible (contenu publié en direct par l'admin). */
 private const val AUTO_REFRESH_MS = 120_000L
-
-private val PATH_ICONS = listOf("book-open", "brain", "rocket", "dumbbell", "radio-tower", "flame")
-
-// Ombre portée ultra-légère des mini-cartes Discipline
-private val ChipShadow = Color(0x140F172A)
 
 // ===========================================================================
 // ROUTEUR EXPLORER : Accueil -> Liste des leçons -> Leçon
@@ -238,7 +238,7 @@ fun ExplorerScreen(
 }
 
 // ===========================================================================
-// ACCUEIL EXPLORER (épuré : Disciplines -> recherche -> filtres -> contenu)
+// ACCUEIL EXPLORER v3 : Mission du jour -> Disciplines -> Recherche -> Onglets -> Contenu
 // ===========================================================================
 
 @Composable
@@ -251,36 +251,91 @@ private fun ExplorerHome(
     onOpenLesson: (ExplorerChapter) -> Unit,
     onOpenLeaderboard: () -> Unit
 ) {
+    val context = LocalContext.current
+    // Lue à chaque retour sur l'accueil Explorer : reflète la série réelle du compte
+    val streak = remember { StreakStore(context.applicationContext).current() }
+    val searching = ui.query.isNotBlank()
+
+    val overallProgress = remember(ui.chapters) {
+        val total = ui.chapters.sumOf { it.questionCount }
+        if (total == 0) 0f else ui.chapters.sumOf { it.discovered }.toFloat() / total
+    }
+    val progressByDiscipline = remember(ui.chapters) {
+        ui.chapters.groupBy { it.subjectId }.mapValues { (_, list) ->
+            val total = list.sumOf { it.questionCount }
+            if (total == 0) 0f else list.sumOf { it.discovered }.toFloat() / total
+        }
+    }
+    val picks = ui.forYou.orEmpty()
+    val dueTotal = picks.sumOf { it.dueCount }
+    val continueChapter = remember(ui.chapters) {
+        ui.chapters.firstOrNull { it.discovered > 0 && !it.isFinished() }
+            ?: ui.chapters.firstOrNull { !it.isFinished() }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .statusBarsPadding()
             .verticalScroll(scroll)
-            .padding(top = 12.dp, bottom = 20.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+            .padding(top = 12.dp, bottom = 28.dp)
     ) {
-        HeroBannerCarousel(banners = ui.banners, chapters = ui.chapters, onOpenLesson = onOpenLesson)
+        ExplorerTopBar(onOpenLeaderboard = onOpenLeaderboard, modifier = Modifier.entrance(index = 0))
+        Spacer(Modifier.height(16.dp))
 
-        DisciplinesSection(
-            disciplines = ui.disciplines,
-            pressedId = ui.pressedDisciplineId,
-            loading = ui.loading && ui.disciplines.isEmpty(),
-            onClick = viewModel::onDisciplineClick
-        )
+        // Mission du jour : masquée pendant une recherche pour laisser la place aux résultats
+        AnimatedVisibility(visible = !searching && ui.chapters.isNotEmpty()) {
+            DailyMissionHero(
+                streak = streak,
+                progress = overallProgress,
+                dueCount = dueTotal,
+                topPick = picks.firstOrNull(),
+                continueChapter = continueChapter,
+                onReview = { onStart(it.reviewChapter) },
+                onContinue = onOpenLesson,
+                modifier = Modifier.padding(bottom = 18.dp).entrance(index = 1)
+            )
+        }
+
+        AnimatedVisibility(visible = !searching && ui.banners.isNotEmpty()) {
+            HeroBannerCarousel(
+                banners = ui.banners,
+                chapters = ui.chapters,
+                onOpenLesson = onOpenLesson,
+                modifier = Modifier.padding(bottom = 18.dp)
+            )
+        }
+
+        AnimatedVisibility(visible = !searching && (ui.loading || ui.disciplines.isNotEmpty())) {
+            DisciplineCarousel(
+                disciplines = ui.disciplines,
+                progressById = progressByDiscipline,
+                pressedId = ui.pressedDisciplineId,
+                loading = ui.loading && ui.disciplines.isEmpty(),
+                onClick = viewModel::onDisciplineClick,
+                modifier = Modifier.padding(bottom = 18.dp).entrance(index = 2)
+            )
+        }
 
         SearchField(
             value = ui.query,
             onValueChange = viewModel::onQueryChange,
-            modifier = Modifier.padding(horizontal = 16.dp)
+            modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 14.dp).entrance(index = 3)
         )
 
-        FilterChips(selected = ui.filter, onSelect = viewModel::onFilterChange)
+        AnimatedVisibility(visible = !searching) {
+            ExplorerSegmented(
+                selected = ui.filter,
+                onSelect = viewModel::onFilterChange,
+                modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 18.dp).entrance(index = 4)
+            )
+        }
 
         if (ui.offline) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
-                    .padding(horizontal = 16.dp)
+                    .padding(start = 16.dp, end = 16.dp, bottom = 14.dp)
                     .clip(CircleShape)
                     .background(KalynoAmberSoft)
                     .padding(horizontal = 14.dp, vertical = 8.dp)
@@ -326,135 +381,46 @@ private fun ExplorerHome(
                 text = "Essaie un autre mot-clé ou une autre matière, ça va sortir."
             )
 
-            else -> when (ui.filter) {
-                ExplorerFilter.FOR_YOU -> {
-                    val visibleIds = visible.map { it.id }.toSet()
-                    ForYouSection(
-                        picks = ui.forYou?.filter { it.chapter.id in visibleIds },
-                        onStart = onStart,
-                        onOpen = onOpenLesson
-                    )
-                    NewPathsSection(chapters = visible, onOpen = onOpenLesson)
-                }
+            searching -> SearchResultsBlock(chapters = visible, onStart = onStart, onOpen = onOpenLesson)
 
-                ExplorerFilter.CHALLENGES -> ChallengesSection(
-                    chapters = visible,
-                    onStart = onStart,
-                    onOpen = onOpenLesson
-                )
+            else -> AnimatedContent(
+                targetState = ui.filter,
+                transitionSpec = {
+                    (fadeIn(tween(240)) + slideInVertically(tween(280)) { it / 24 }) togetherWith
+                        fadeOut(tween(120))
+                },
+                label = "explorerFilter"
+            ) { filter ->
+                Column(verticalArrangement = Arrangement.spacedBy(22.dp)) {
+                    when (filter) {
+                        ExplorerFilter.FOR_YOU -> {
+                            val visibleIds = visible.map { it.id }.toSet()
+                            ForYouBlock(
+                                picks = ui.forYou?.filter { it.chapter.id in visibleIds },
+                                onStart = onStart,
+                                onOpen = onOpenLesson
+                            )
+                            FreshBlock(chapters = visible, onOpen = onOpenLesson)
+                        }
 
-                ExplorerFilter.PATHS -> PathsSection(chapters = visible, onOpen = onOpenLesson)
+                        ExplorerFilter.CHALLENGES -> ChallengesBlock(
+                            chapters = visible,
+                            onStart = onStart,
+                            onOpen = onOpenLesson
+                        )
 
-                ExplorerFilter.COMMUNITY -> Unit
-            }
-        }
-    }
-}
+                        ExplorerFilter.PATHS -> PathsBlock(chapters = visible, onOpen = onOpenLesson)
 
-// ===========================================================================
-// SECTION "DISCIPLINES" (défilement horizontal)
-// ===========================================================================
-
-/**
- * Titre "Disciplines" (#0F172A) + LazyRow de mini-cartes, une par matière publiée par l'admin.
- * [pressedId] = discipline touchée : sa carte passe instantanément en Vert Pétrole.
- */
-@Composable
-private fun DisciplinesSection(
-    disciplines: List<Discipline>,
-    pressedId: String?,
-    loading: Boolean,
-    onClick: (String) -> Unit
-) {
-    // Rien à montrer (pas de discipline publiée) : on masque toute la section
-    if (!loading && disciplines.isEmpty()) return
-
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        SectionHeader(
-            title = "Disciplines",
-            subtitle = "Choisis une matière pour voir ses leçons",
-            modifier = Modifier.padding(horizontal = 16.dp)
-        )
-
-        if (loading) {
-            Row(
-                modifier = Modifier.padding(horizontal = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                repeat(3) {
-                    ShimmerBlock(
-                        modifier = Modifier.width(96.dp).height(36.dp),
-                        shape = RoundedCornerShape(14.dp)
-                    )
-                }
-            }
-        } else {
-            LazyRow(
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 2.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(disciplines, key = { it.id }) { discipline ->
-                    DisciplineChip(
-                        discipline = discipline,
-                        selected = discipline.id == pressedId,
-                        onClick = { onClick(discipline.id) }
-                    )
+                        ExplorerFilter.COMMUNITY -> Unit
+                    }
                 }
             }
         }
     }
 }
 
-/** Mini-carte : blanc pur + bordure #E2E8F0 + ombre légère ; sélectionnée = #0F766E + texte blanc. */
-@Composable
-private fun DisciplineChip(discipline: Discipline, selected: Boolean, onClick: () -> Unit) {
-    val haptic = rememberHaptic()
-    val shape = RoundedCornerShape(14.dp)
-
-    // Transition courte (120 ms) : le retour visuel est perçu comme instantané
-    val container by animateColorAsState(
-        targetValue = if (selected) KalynoBlue else Color.White,
-        animationSpec = tween(120),
-        label = "disciplineContainer"
-    )
-    val content by animateColorAsState(
-        targetValue = if (selected) Color.White else KalynoText,
-        animationSpec = tween(120),
-        label = "disciplineContent"
-    )
-    val border by animateColorAsState(
-        targetValue = if (selected) KalynoBlue else KalynoOutline,
-        animationSpec = tween(120),
-        label = "disciplineBorder"
-    )
-
-    Row(
-        modifier = Modifier
-            .shadow(1.dp, shape, ambientColor = ChipShadow, spotColor = ChipShadow)
-            .background(container, shape)
-            .border(1.dp, border, shape)
-            .clip(shape)
-            .clickable {
-                haptic()
-                onClick()
-            }
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp)
-    ) {
-        KalynoSvgIcon(name = iconAssetFor(discipline.iconKey), size = 16.dp, tint = content)
-        Text(
-            text = discipline.name,
-            color = content,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.ExtraBold,
-            maxLines = 1
-        )
-    }
-}
-
 // ===========================================================================
-// RECHERCHE / FILTRES
+// RECHERCHE
 // ===========================================================================
 
 @Composable
@@ -467,10 +433,10 @@ private fun SearchField(
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
-        modifier = modifier.fillMaxWidth().height(46.dp),
+        modifier = modifier.fillMaxWidth().height(52.dp),
         singleLine = true,
         textStyle = androidx.compose.ui.text.TextStyle(fontSize = 14.sp),
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(18.dp),
         placeholder = { Text("Rechercher un cours, une matière…", color = KalynoMuted, fontSize = 14.sp) },
         leadingIcon = { KalynoSvgIcon(name = "search", size = 18.dp, tint = KalynoMuted) },
         trailingIcon = {
@@ -499,380 +465,10 @@ private fun SearchField(
     )
 }
 
-@Composable
-private fun FilterChips(selected: ExplorerFilter, onSelect: (ExplorerFilter) -> Unit) {
-    val haptic = rememberHaptic()
-    LazyRow(
-        contentPadding = PaddingValues(horizontal = 16.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        items(ExplorerFilter.entries.filter { it != ExplorerFilter.COMMUNITY }, key = { it.name }) { filter ->
-            val isSelected = filter == selected
-            val container by animateColorAsState(
-                targetValue = if (isSelected) KalynoBlue else Color.White,
-                label = "chipContainer"
-            )
-            val content by animateColorAsState(
-                targetValue = if (isSelected) Color.White else KalynoMuted,
-                label = "chipContent"
-            )
-            Text(
-                text = filter.label,
-                color = content,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.ExtraBold,
-                modifier = Modifier
-                    .clip(CircleShape)
-                    .background(container)
-                    .border(1.dp, if (isSelected) KalynoBlue else KalynoOutline, CircleShape)
-                    .clickable {
-                        haptic()
-                        onSelect(filter)
-                    }
-                    .padding(horizontal = 14.dp, vertical = 7.dp)
-            )
-        }
-    }
-}
-
 // ===========================================================================
-// SECTIONS
+// COMMUNAUTÉ (conservée ; accessible via le trophée de l'en-tête)
 // ===========================================================================
 
-@Composable
-private fun ForYouSection(
-    picks: List<ForYouPick>?,
-    onStart: (ExplorerChapter) -> Unit,
-    onOpen: (ExplorerChapter) -> Unit
-) {
-    // Pas encore calculé : on n'affiche rien plutôt qu'un faux « rien à réviser »
-    if (picks == null) return
-
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        SectionHeader(
-            title = "Pour toi",
-            subtitle = "À réviser maintenant, choisi selon ta mémoire",
-            modifier = Modifier.padding(horizontal = 16.dp)
-        )
-        if (picks.isEmpty()) {
-            Text(
-                text = "Rien à réviser pour l'instant. Termine une leçon puis fais son exercice : " +
-                    "tes premières révisions apparaîtront ici.",
-                color = KalynoMuted,
-                fontSize = 14.sp,
-                modifier = Modifier.padding(horizontal = 16.dp)
-            )
-        } else {
-            LazyRow(
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 2.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                items(picks, key = { it.chapter.id }) { pick ->
-                    Column(modifier = Modifier.width(248.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            KalynoPill(
-                                text = if (pick.dueCount == 1) "1 à réviser" else "${pick.dueCount} à réviser",
-                                container = KalynoAmberSoft,
-                                content = KalynoAmberDeep,
-                                fontSize = 11
-                            )
-                            if (pick.relearnCount > 0) {
-                                KalynoPill(text = "À consolider", fontSize = 11)
-                            }
-                        }
-                        CourseCard(
-                            chapter = pick.chapter,
-                            // La révision ne contient que les cartes dues, pas toute la leçon
-                            onStart = { onStart(pick.reviewChapter) },
-                            onOpen = { onOpen(pick.chapter) },
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun NewPathsSection(chapters: List<ExplorerChapter>, onOpen: (ExplorerChapter) -> Unit) {
-    val latest = remember(chapters) { chapters.takeLast(6).reversed() }
-    if (latest.isEmpty()) return
-
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        SectionHeader(
-            title = "Nouveaux parcours",
-            subtitle = "Publiés en direct",
-            modifier = Modifier.padding(horizontal = 16.dp)
-        )
-        LazyRow(
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 2.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            items(latest, key = { it.id }) { chapter ->
-                PathCard(
-                    chapter = chapter,
-                    onClick = { onOpen(chapter) },
-                    modifier = Modifier.width(176.dp).heightIn(min = 150.dp)
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun ChallengesSection(
-    chapters: List<ExplorerChapter>,
-    onStart: (ExplorerChapter) -> Unit,
-    onOpen: (ExplorerChapter) -> Unit
-) {
-    // Une rangée par discipline (ordre de l'admin), avec ses leçons dans l'ordre de l'admin
-    val groups = remember(chapters) {
-        chapters.filter { it.questionCount > 0 }.groupBy { it.subjectId }.values.toList()
-    }
-
-    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        SectionHeader(
-            title = "Défis",
-            subtitle = "Teste-toi discipline par discipline",
-            modifier = Modifier.padding(horizontal = 16.dp)
-        )
-        if (groups.isEmpty()) {
-            Text(
-                text = "Aucun défi disponible pour le moment.",
-                color = KalynoMuted,
-                fontSize = 14.sp,
-                modifier = Modifier.padding(horizontal = 16.dp)
-            )
-        }
-        groups.forEach { lessons ->
-            val first = lessons.first()
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(horizontal = 16.dp)
-                ) {
-                    KalynoSvgIcon(name = first.subjectIconKey ?: "book-open", size = 18.dp)
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        text = first.subjectName,
-                        color = KalynoText,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        modifier = Modifier.weight(1f)
-                    )
-                    KalynoPill(text = if (lessons.size == 1) "1 défi" else "${lessons.size} défis", fontSize = 11)
-                }
-                LazyRow(
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 2.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    items(lessons, key = { it.id }) { chapter ->
-                        CourseCard(
-                            chapter = chapter,
-                            onStart = { onStart(chapter) },
-                            onOpen = { onOpen(chapter) },
-                            modifier = Modifier.width(248.dp)
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun PathsSection(chapters: List<ExplorerChapter>, onOpen: (ExplorerChapter) -> Unit) {
-    val bySubject = remember(chapters) { chapters.groupBy { it.subjectId }.values.toList() }
-
-    Column(
-        modifier = Modifier.padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
-    ) {
-        bySubject.forEach { list ->
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                SectionHeader(title = list.first().subjectName)
-                PathGrid(chapters = list, onOpen = onOpen)
-            }
-        }
-    }
-}
-
-// ===========================================================================
-// CARTES
-// ===========================================================================
-
-/**
- * Carte de défi/leçon : deux actions clairement séparées visuellement —
- * "Lire le cours" (théorie, lien secondaire) et "Démarrer l'exercice" (bouton principal).
- * Toucher la carte elle-même équivaut à "Lire le cours" (grande zone de touche).
- */
-@Composable
-private fun CourseCard(
-    chapter: ExplorerChapter,
-    onStart: () -> Unit,
-    onOpen: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    KalynoCard(
-        modifier = modifier,
-        onClick = onOpen,
-        shape = RoundedCornerShape(16.dp),
-        contentPadding = 14.dp
-    ) {
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            KalynoPill(
-                text = chapter.subjectName,
-                modifier = Modifier.weight(1f, fill = false)
-            )
-            SmartTagPill(chapter.tag)
-        }
-        Spacer(Modifier.height(8.dp))
-        Text(
-            text = chapter.title,
-            color = KalynoText,
-            fontSize = 16.sp,
-            lineHeight = 21.sp,
-            fontWeight = FontWeight.ExtraBold,
-            minLines = 2,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis
-        )
-        Spacer(Modifier.height(10.dp))
-        KalynoProgressBar(progress = chapter.progress, height = 6.dp)
-        Spacer(Modifier.height(5.dp))
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                KalynoSvgIcon(name = "layers", size = 13.dp, tint = KalynoMuted)
-                Spacer(Modifier.width(4.dp))
-                Text(
-                    text = questionsLabel(chapter.questionCount),
-                    color = KalynoMuted,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium
-                )
-                Spacer(Modifier.width(10.dp))
-                KalynoSvgIcon(name = "clock", size = 13.dp, tint = KalynoMuted)
-                Spacer(Modifier.width(4.dp))
-                Text(
-                    text = "${chapter.minutes} min",
-                    color = KalynoMuted,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium
-                )
-            }
-            Text(
-                text = "${(chapter.progress * 100).toInt()}%",
-                color = KalynoBlue,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.ExtraBold
-            )
-        }
-        Spacer(Modifier.height(8.dp))
-
-        // ----- Action secondaire : lire la théorie -----
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(12.dp))
-                .clickable(onClick = onOpen)
-                .padding(vertical = 7.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            KalynoSvgIcon(name = "book-open", size = 16.dp, tint = KalynoBlue)
-            Spacer(Modifier.width(8.dp))
-            Text(
-                text = "Lire le cours",
-                color = KalynoBlue,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.weight(1f)
-            )
-            KalynoSvgIcon(name = "chevron-right", size = 14.dp, tint = KalynoBlue)
-        }
-        Spacer(Modifier.height(2.dp))
-
-        // ----- Action principale : lancer l'exercice -----
-        KalynoPrimaryButton(
-            label = "DÉMARRER L'EXERCICE",
-            onClick = onStart,
-            enabled = chapter.questionCount > 0,
-            height = 42.dp
-        )
-    }
-}
-
-/** Grille 2 colonnes (sans lazy : on est déjà dans un scroll vertical). */
-@Composable
-private fun PathGrid(
-    chapters: List<ExplorerChapter>,
-    onOpen: (ExplorerChapter) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        chapters.chunked(2).forEach { pair ->
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                pair.forEach { chapter ->
-                    PathCard(
-                        chapter = chapter,
-                        onClick = { onOpen(chapter) },
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-                if (pair.size == 1) Spacer(Modifier.weight(1f))
-            }
-        }
-    }
-}
-
-@Composable
-private fun PathCard(chapter: ExplorerChapter, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    val index = (chapter.id.hashCode() and Int.MAX_VALUE) % PATH_ICONS.size
-    val warm = index % 2 == 1
-    val tileColor = if (warm) KalynoAmberSoft else KalynoBlueSoft
-    val tint = if (warm) KalynoYellow else KalynoBlue
-
-    KalynoCard(
-        modifier = modifier,
-        onClick = onClick,
-        shape = RoundedCornerShape(16.dp),
-        contentPadding = 12.dp
-    ) {
-        Box(
-            modifier = Modifier
-                .size(38.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(tileColor),
-            contentAlignment = Alignment.Center
-        ) {
-            KalynoSvgIcon(name = PATH_ICONS[index], size = 22.dp, tint = tint)
-        }
-        Spacer(Modifier.height(8.dp))
-        Text(
-            text = chapter.title,
-            color = KalynoText,
-            fontSize = 14.sp,
-            lineHeight = 18.sp,
-            fontWeight = FontWeight.ExtraBold,
-            minLines = 2,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis
-        )
-        Spacer(Modifier.height(3.dp))
-        Text(
-            text = if (chapter.questionCount > 0) questionsLabel(chapter.questionCount) else "Leçons",
-            color = KalynoMuted,
-            fontSize = 12.sp
-        )
-        if (!chapter.tag.isNullOrBlank()) {
-            Spacer(Modifier.height(6.dp))
-            SmartTagPill(chapter.tag)
-        }
-    }
-}
 
 /** Bannière "Tournoi Inter-Classes" : mini-graphique de progression par matière + accès classement. */
 @Composable
@@ -977,40 +573,3 @@ private fun CommunityBanner(
     }
 }
 
-// ===========================================================================
-// SQUELETTE DE CHARGEMENT
-// ===========================================================================
-
-@Composable
-private fun ExplorerSkeleton() {
-    Column(
-        modifier = Modifier.padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        ShimmerBlock(Modifier.width(180.dp).height(20.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            repeat(2) {
-                ShimmerBlock(
-                    modifier = Modifier.weight(1f).height(150.dp),
-                    shape = RoundedCornerShape(16.dp)
-                )
-            }
-        }
-        ShimmerBlock(Modifier.width(160.dp).height(20.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            repeat(2) {
-                ShimmerBlock(
-                    modifier = Modifier.weight(1f).height(96.dp),
-                    shape = RoundedCornerShape(16.dp)
-                )
-            }
-        }
-        ShimmerBlock(
-            modifier = Modifier.fillMaxWidth().height(150.dp),
-            shape = RoundedCornerShape(24.dp)
-        )
-    }
-}
-
-private fun questionsLabel(count: Int): String =
-    if (count == 1) "1 Question" else "$count Questions"
