@@ -217,7 +217,10 @@ fun MainScreen(
                             onOpenMyReports = { myReportsOpen = true },
                             unreadReplies = unreadReplies,
                             onOpenTerms = { context.openLinkOrSoon(ProfileLinks.TERMS_URL) },
-                            onOpenPrivacy = { context.openLinkOrSoon(ProfileLinks.PRIVACY_URL) }
+                            onOpenPrivacy = { context.openLinkOrSoon(ProfileLinks.PRIVACY_URL) },
+                            retentionScore = state.retentionScore,
+                            masteredCount = state.masteredCount,
+                            onOpenProgress = { progressOpen = true }
                         )
                     }
                 }

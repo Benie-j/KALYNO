@@ -16,7 +16,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -59,6 +60,7 @@ import androidx.compose.ui.unit.sp
 import ci.kalyno.app.data.Levels
 import ci.kalyno.app.ui.components.KalynoPill
 import ci.kalyno.app.ui.components.KalynoPrimaryButton
+import ci.kalyno.app.ui.components.entrance
 import ci.kalyno.app.ui.components.rememberHaptic
 import ci.kalyno.app.ui.theme.KalynoAmberDeep
 import ci.kalyno.app.ui.theme.KalynoAmberSoft
@@ -107,128 +109,134 @@ fun ProfileScreen(
     onOpenMyReports: () -> Unit,
     unreadReplies: Int,
     onOpenTerms: () -> Unit,
-    onOpenPrivacy: () -> Unit
+    onOpenPrivacy: () -> Unit,
+    retentionScore: Float? = null,
+    masteredCount: Int? = null,
+    onOpenProgress: (() -> Unit)? = null
 ) {
     var showLogoutDialog by rememberSaveable { mutableStateOf(false) }
     var showNicknameDialog by rememberSaveable { mutableStateOf(false) }
     val isConnected = userEmail != null
 
-    LazyColumn(
+    Column(
         modifier = Modifier
             .fillMaxSize()
             .background(KalynoBackground)
-            .statusBarsPadding(),
-        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 32.dp),
-        verticalArrangement = Arrangement.spacedBy(22.dp)
+            .statusBarsPadding()
+            .verticalScroll(rememberScrollState())
+            .padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 32.dp),
+        verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
-        // ----- A. En-tête du profil -----
-        item {
-            ProfileHeader(
-                nickname = nickname,
-                classLabel = Levels.label(levelId),
-                streak = streak,
-                onEditNickname = { showNicknameDialog = true }
+        // ----- A. Carte héros : avatar, pseudo, classe, statut du compte -----
+        ProfileHero(
+            nickname = nickname,
+            classLabel = Levels.label(levelId),
+            isConnected = isConnected,
+            retentionScore = retentionScore,
+            onEditNickname = { showNicknameDialog = true },
+            modifier = Modifier.entrance(index = 0)
+        )
+
+        // ----- B. Les chiffres qui comptent + objectif de série -----
+        ProfileStatsRow(
+            streak = streak,
+            masteredCount = masteredCount,
+            retentionScore = retentionScore,
+            modifier = Modifier.entrance(index = 1)
+        )
+        StreakMilestoneCard(streak = streak, modifier = Modifier.entrance(index = 2))
+        if (onOpenProgress != null) {
+            ProgressLinkCard(onClick = onOpenProgress, modifier = Modifier.entrance(index = 3))
+        }
+
+        // ----- C. Mon compte -----
+        SettingsGroup(title = "MON COMPTE", modifier = Modifier.entrance(index = 4)) {
+            SettingsItem(
+                icon = Icons.Default.School,
+                title = "Changer de classe",
+                subtitle = Levels.label(levelId),
+                iconBackground = KalynoBlueSoft,
+                onClick = onChangeLevel
+            )
+            CloudStatusItem(userEmail = userEmail, onLoginClick = onLoginClick)
+        }
+
+        // ----- D. Aide & assistance -----
+        SettingsGroup(title = "AIDE & ASSISTANCE", modifier = Modifier.entrance(index = 5)) {
+            SettingsItem(
+                icon = Icons.Default.Lightbulb,
+                title = "Centre d'aide & FAQ",
+                subtitle = "Comprendre l'Active Recall et le SRS",
+                iconBackground = KalynoBlueSoft,
+                onClick = onOpenHelp
+            )
+            SettingsItem(
+                icon = Icons.Default.ChatBubbleOutline,
+                title = "Contacter l'assistance",
+                subtitle = "Échange avec l'équipe KALYNO",
+                iconBackground = SkyBubble,
+                onClick = onContactSupport
+            )
+            SettingsItem(
+                icon = Icons.Default.BugReport,
+                title = "Signaler un bug ou un contenu",
+                subtitle = "Une erreur dans un cours ? Dis-le-nous",
+                iconBackground = KalynoAmberSoft,
+                iconTint = KalynoAmberDeep,
+                onClick = onReportIssue
+            )
+            SettingsItem(
+                icon = Icons.Default.Flag,
+                title = "Mes signalements",
+                subtitle = if (unreadReplies > 0) {
+                    if (unreadReplies == 1) "1 nouvelle réponse de l'équipe" else "$unreadReplies nouvelles réponses de l'équipe"
+                } else {
+                    "Suis ce que tu as signalé"
+                },
+                iconBackground = KalynoAmberSoft,
+                iconTint = KalynoAmberDeep,
+                onClick = onOpenMyReports,
+                trailing = if (unreadReplies > 0) ({ ReportUnreadBadge(unreadReplies) }) else null,
+                showDivider = false
             )
         }
 
-        // ----- B. Mon compte -----
-        item {
-            SettingsGroup(title = "MON COMPTE") {
-                SettingsItem(
-                    icon = Icons.Default.School,
-                    title = "Changer de classe",
-                    subtitle = Levels.label(levelId),
-                    iconBackground = KalynoBlueSoft,
-                    onClick = onChangeLevel
-                )
-                CloudStatusItem(userEmail = userEmail, onLoginClick = onLoginClick)
-            }
-        }
-
-        // ----- C. Aide & assistance -----
-        item {
-            SettingsGroup(title = "AIDE & ASSISTANCE") {
-                SettingsItem(
-                    icon = Icons.Default.Lightbulb,
-                    title = "Centre d'aide & FAQ",
-                    subtitle = "Comprendre l'Active Recall et le SRS",
-                    iconBackground = KalynoBlueSoft,
-                    onClick = onOpenHelp
-                )
-                SettingsItem(
-                    icon = Icons.Default.ChatBubbleOutline,
-                    title = "Contacter l'assistance",
-                    subtitle = "Échange avec l'équipe KALYNO",
-                    iconBackground = SkyBubble,
-                    onClick = onContactSupport
-                )
-                SettingsItem(
-                    icon = Icons.Default.BugReport,
-                    title = "Signaler un bug ou un contenu",
-                    subtitle = "Une erreur dans un cours ? Dis-le-nous",
-                    iconBackground = KalynoAmberSoft,
-                    iconTint = KalynoAmberDeep,
-                    onClick = onReportIssue
-                )
-                SettingsItem(
-                    icon = Icons.Default.Flag,
-                    title = "Mes signalements",
-                    subtitle = if (unreadReplies > 0) {
-                        if (unreadReplies == 1) "1 nouvelle réponse de l'équipe" else "$unreadReplies nouvelles réponses de l'équipe"
-                    } else {
-                        "Suis ce que tu as signalé"
-                    },
-                    iconBackground = KalynoAmberSoft,
-                    iconTint = KalynoAmberDeep,
-                    onClick = onOpenMyReports,
-                    trailing = if (unreadReplies > 0) ({ ReportUnreadBadge(unreadReplies) }) else null,
-                    showDivider = false
-                )
-            }
-        }
-
-        // ----- D. Légal -----
-        item {
-            SettingsGroup(title = "LÉGAL") {
-                SettingsItem(
-                    icon = Icons.Default.Description,
-                    title = "Conditions Générales d'Utilisation",
-                    iconBackground = SlateBubble,
-                    iconTint = KalynoMuted,
-                    onClick = onOpenTerms
-                )
-                SettingsItem(
-                    icon = Icons.Default.Lock,
-                    title = "Politique de confidentialité",
-                    iconBackground = SlateBubble,
-                    iconTint = KalynoMuted,
-                    onClick = onOpenPrivacy,
-                    showDivider = false
-                )
-            }
+        // ----- E. Légal -----
+        SettingsGroup(title = "LÉGAL", modifier = Modifier.entrance(index = 6)) {
+            SettingsItem(
+                icon = Icons.Default.Description,
+                title = "Conditions Générales d'Utilisation",
+                iconBackground = SlateBubble,
+                iconTint = KalynoMuted,
+                onClick = onOpenTerms
+            )
+            SettingsItem(
+                icon = Icons.Default.Lock,
+                title = "Politique de confidentialité",
+                iconBackground = SlateBubble,
+                iconTint = KalynoMuted,
+                onClick = onOpenPrivacy,
+                showDivider = false
+            )
         }
 
         // ----- Version de l'application (discrète, lue dans le build) -----
-        item {
-            val version = LocalContext.current.appVersionName()
-            if (version.isNotBlank()) {
-                Text(
-                    text = "Version $version",
-                    color = KalynoMuted.copy(alpha = 0.7f),
-                    fontSize = 11.sp,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
-                )
-            }
+        val version = LocalContext.current.appVersionName()
+        if (version.isNotBlank()) {
+            Text(
+                text = "Version $version",
+                color = KalynoMuted.copy(alpha = 0.7f),
+                fontSize = 11.sp,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
         }
 
-        // ----- E. Déconnexion (ou connexion pour un invité) -----
-        item {
-            if (isConnected) {
-                LogoutButton(label = "Se déconnecter", onClick = { showLogoutDialog = true })
-            } else {
-                KalynoPrimaryButton(label = "SE CONNECTER", onClick = onLoginClick)
-            }
+        // ----- F. Déconnexion (ou connexion pour un invité) -----
+        if (isConnected) {
+            LogoutButton(label = "Se déconnecter", onClick = { showLogoutDialog = true })
+        } else {
+            KalynoPrimaryButton(label = "SE CONNECTER", onClick = onLoginClick)
         }
     }
 
@@ -308,115 +316,6 @@ private fun CloudStatusItem(userEmail: String?, onLoginClick: () -> Unit) {
             iconTint = KalynoMuted,
             onClick = onLoginClick,
             showDivider = false
-        )
-    }
-}
-
-// ===========================================================================
-// EN-TÊTE
-// ===========================================================================
-
-@Composable
-private fun ProfileHeader(
-    nickname: String,
-    classLabel: String,
-    streak: Int,
-    onEditNickname: () -> Unit
-) {
-    val haptic = rememberHaptic()
-    SettingsCard {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 26.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            // Avatar : bordure Vert Pétrole + fond teinté + initiale
-            Box(
-                modifier = Modifier
-                    .size(92.dp)
-                    .border(3.dp, KalynoBlue, CircleShape)
-                    .padding(5.dp)
-                    .clip(CircleShape)
-                    .background(KalynoBlueSoft),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = nickname.trim().take(1).uppercase().ifEmpty { "K" },
-                    color = KalynoBlue,
-                    fontSize = 36.sp,
-                    fontWeight = FontWeight.ExtraBold
-                )
-            }
-
-            Spacer(Modifier.height(14.dp))
-
-            // Pseudo + crayon : toute la ligne est cliquable
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(12.dp))
-                    .clickable(role = Role.Button, onClickLabel = "Modifier mon pseudo") {
-                        haptic()
-                        onEditNickname()
-                    }
-                    .padding(horizontal = 10.dp, vertical = 6.dp)
-            ) {
-                Text(
-                    text = nickname.ifBlank { "Élève" },
-                    color = KalynoText,
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    textAlign = TextAlign.Center,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f, fill = false)
-                )
-                Spacer(Modifier.width(8.dp))
-                Icon(
-                    imageVector = Icons.Default.Edit,
-                    contentDescription = null,
-                    tint = KalynoBlue,
-                    modifier = Modifier.size(18.dp)
-                )
-            }
-
-            Spacer(Modifier.height(6.dp))
-            KalynoPill(text = classLabel, fontSize = 13)
-            Spacer(Modifier.height(14.dp))
-            StreakChip(streak)
-        }
-    }
-}
-
-/** Badge de série : flamme vectorielle + accent orange chaleureux. */
-@Composable
-private fun StreakChip(streak: Int) {
-    val label = when (streak) {
-        0 -> "Lance ta série aujourd'hui"
-        1 -> "1 jour de série"
-        else -> "$streak jours de série"
-    }
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .clip(CircleShape)
-            .background(KalynoAmberSoft)
-            .border(1.dp, KalynoYellow, CircleShape)
-            .padding(horizontal = 14.dp, vertical = 8.dp)
-    ) {
-        Icon(
-            imageVector = Icons.Default.LocalFireDepartment,
-            contentDescription = null,
-            tint = KalynoAmberDeep,
-            modifier = Modifier.size(18.dp)
-        )
-        Spacer(Modifier.width(6.dp))
-        Text(
-            text = label,
-            color = KalynoAmberDeep,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.ExtraBold
         )
     }
 }
