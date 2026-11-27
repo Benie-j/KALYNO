@@ -74,6 +74,7 @@ class LearningContentCache(context: Context) {
                                             put(JSONObject().apply {
                                                 put("id", se.id)
                                                 put("title", se.title)
+                                                put("isAvailable", se.isAvailable)
                                             })
                                         }
                                     })
@@ -147,7 +148,7 @@ class LearningContentCache(context: Context) {
             complement = if (ch.isNull("complement")) null else ch.optString("complement").takeIf { it.isNotBlank() },
             sessions = List(sessionsJson.length()) { n ->
                 val se = sessionsJson.getJSONObject(n)
-                LearningSession(id = se.getString("id"), title = se.optString("title", ""))
+                LearningSession(id = se.getString("id"), title = se.optString("title", ""), isAvailable = se.optBoolean("isAvailable", true))
             },
             capsules = List(capsules.length()) { k ->
                 val cap = capsules.getJSONObject(k)

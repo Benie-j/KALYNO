@@ -32,6 +32,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ci.kalyno.app.data.LearningCapsule
+import ci.kalyno.app.data.LearningSession
+import ci.kalyno.app.data.dashboard.ReviewItem
 import ci.kalyno.app.ui.components.KalynoCard
 import ci.kalyno.app.ui.icons.KalynoSvgIcon
 import ci.kalyno.app.ui.theme.KalynoBlue
@@ -63,6 +65,39 @@ sealed interface LessonRow {
     }
 }
 
+/** Séances visibles par l'élève : publiées (`is_available`) ET contenant au moins un bloc. */
+fun ExplorerChapter.availableSessions(): List<LearningSession> =
+    sessions.filter { s -> s.isAvailable && capsules.any { it.sessionId == s.id } }
+
+/** Exercices rattachés à une séance (carte -> bloc -> séance). */
+fun ExplorerChapter.itemsOfSession(sessionId: String): List<ReviewItem> {
+    val cardIds = capsules.filter { it.sessionId == sessionId }.flatMap { c -> c.cards.map { it.id } }.toHashSet()
+    return items.filter { it.cardId in cardIds }
+}
+
+/**
+ * Exercices jouables : tous si la leçon est terminée (règle historique, leçons sans séances),
+ * sinon uniquement ceux des séances terminées.
+ */
+fun unlockedItemsOf(chapter: ExplorerChapter, completedLessons: Set<String>, completedSessions: Set<String>): List<ReviewItem> {
+    if (chapter.id in completedLessons) return chapter.items
+    if (completedSessions.isEmpty()) return emptyList()
+    return completedSessions.flatMap { chapter.itemsOfSession(it) }.distinctBy { it.cardId }
+}
+
+/** Lignes d'UNE séance : son en-tête puis ses blocs, rien d'autre. */
+fun buildSessionRows(chapter: ExplorerChapter, sessionId: String): List<LessonRow> {
+    val visible = chapter.availableSessions()
+    val index = visible.indexOfFirst { it.id == sessionId }
+    if (index < 0) return emptyList()
+    val blocks = chapter.capsules.filter { it.sessionId == sessionId }.map { it.toLessonBlock() }
+    val group = SessionGroup(index + 1, visible[index].title.takeIf { it.isNotBlank() }, blocks)
+    return buildList {
+        add(LessonRow.Header(group, key = "session-${group.number}"))
+        blocks.forEach { add(LessonRow.Block(it)) }
+    }
+}
+
 /** Regroupe les blocs de la leçon par séance, dans l'ordre chronologique défini par l'admin. */
 fun groupLessonBlocks(chapter: ExplorerChapter): List<SessionGroup> {
     val knownIds = chapter.sessions.map { it.id }.toSet()
@@ -71,18 +106,15 @@ fun groupLessonBlocks(chapter: ExplorerChapter): List<SessionGroup> {
 
     return buildList {
         if (loose.isNotEmpty()) add(SessionGroup(null, null, loose.map { it.toLessonBlock() }))
-        chapter.sessions.forEachIndexed { index, session ->
-            val capsules = bySession[session.id].orEmpty()
-            // Une séance encore vide n'est pas montrée à l'élève
-            if (capsules.isNotEmpty()) {
-                add(
-                    SessionGroup(
-                        number = index + 1,
-                        title = session.title.takeIf { it.isNotBlank() },
-                        blocks = capsules.map { it.toLessonBlock() }
-                    )
+        // Séances masquées ou vides : jamais montrées ; la numérotation suit les séances visibles
+        chapter.availableSessions().forEachIndexed { index, session ->
+            add(
+                SessionGroup(
+                    number = index + 1,
+                    title = session.title.takeIf { it.isNotBlank() },
+                    blocks = bySession[session.id].orEmpty().map { it.toLessonBlock() }
                 )
-            }
+            )
         }
     }
 }
