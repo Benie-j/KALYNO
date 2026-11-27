@@ -1,0 +1,2611 @@
+diff --git a/app/src/main/java/ci/kalyno/app/data/StreakStore.kt b/app/src/main/java/ci/kalyno/app/data/StreakStore.kt
+index 1e4eb26..e5fb058 100644
+--- a/app/src/main/java/ci/kalyno/app/data/StreakStore.kt
++++ b/app/src/main/java/ci/kalyno/app/data/StreakStore.kt
+@@ -78,6 +78,13 @@ class StreakStore(context: Context) {
+         StreakLogic.current(read(owner), StreakLogic.dayOf(System.currentTimeMillis()))
+     }
+ 
++    /** Série telle qu'elle sera une fois la session du jour enregistrée, sans rien modifier (bilan de fin de session). */
++    fun projectedAfterCompletion(): Int = synchronized(LOCK) {
++        val owner = owner()
++        migrate(owner)
++        StreakLogic.recordCompletion(read(owner), StreakLogic.dayOf(System.currentTimeMillis())).streak
++    }
++
+     // ---- Synchronisation cloud (propriétaire explicite : pas de mélange si le compte change en cours de route)
+ 
+     internal fun stateFor(userId: String): StreakState = synchronized(LOCK) {
+diff --git a/app/src/main/java/ci/kalyno/app/ui/auth/KalynoAuthScreen.kt b/app/src/main/java/ci/kalyno/app/ui/auth/KalynoAuthScreen.kt
+index de22e02..f44c288 100644
+--- a/app/src/main/java/ci/kalyno/app/ui/auth/KalynoAuthScreen.kt
++++ b/app/src/main/java/ci/kalyno/app/ui/auth/KalynoAuthScreen.kt
+@@ -1,5 +1,14 @@
+ package ci.kalyno.app.ui.auth
+ 
++import ci.kalyno.app.ui.theme.KalynoTealDark
++import ci.kalyno.app.ui.theme.KalynoBlueSoft
++import ci.kalyno.app.ui.icons.KalynoSvgIcon
++import ci.kalyno.app.ui.components.rememberPulse
++import ci.kalyno.app.ui.components.entrance
++import ci.kalyno.app.ui.components.DriftingBlob
++import androidx.compose.ui.graphics.graphicsLayer
++import androidx.compose.ui.graphics.Brush
++import androidx.compose.foundation.layout.offset
+ import androidx.compose.foundation.BorderStroke
+ import androidx.compose.foundation.background
+ import androidx.compose.foundation.border
+@@ -94,10 +103,32 @@ fun KalynoAuthScreen(
+     isLoading: Boolean = false,
+     errorMessage: String? = null
+ ) {
+-    Column(
++    Box(
+         modifier = modifier
+             .fillMaxSize()
+             .background(KalynoBackground)
++    ) {
++    // Décor : deux halos teintés qui dérivent lentement derrière le contenu
++    DriftingBlob(
++        modifier = Modifier
++            .align(Alignment.TopEnd)
++            .offset(x = 70.dp, y = (-70).dp)
++            .size(260.dp),
++        color = KalynoBlueSoft,
++        drift = 18.dp
++    )
++    DriftingBlob(
++        modifier = Modifier
++            .align(Alignment.BottomStart)
++            .offset(x = (-80).dp, y = 80.dp)
++            .size(220.dp),
++        color = KalynoBlueSoft.copy(alpha = 0.7f),
++        drift = 16.dp,
++        durationMillis = 6400
++    )
++    Column(
++        modifier = Modifier
++            .fillMaxSize()
+             .safeDrawingPadding()
+             .imePadding()
+             .padding(horizontal = 24.dp)
+@@ -130,19 +161,25 @@ fun KalynoAuthScreen(
+                     Spacer(Modifier.height(40.dp))
+ 
+                     if (emailStage == EmailStage.ENTER_CODE) {
+-                        CodeStep(
+-                            email = pendingEmail,
+-                            isLoading = isLoading,
+-                            errorMessage = errorMessage,
+-                            onVerify = onVerifyCode,
+-                            onChangeEmail = onCancelEmailFlow
+-                        )
++                        Column(modifier = Modifier.entrance(2)) {
++                            CodeStep(
++                                email = pendingEmail,
++                                isLoading = isLoading,
++                                errorMessage = errorMessage,
++                                onVerify = onVerifyCode,
++                                onChangeEmail = onCancelEmailFlow
++                            )
++                        }
+                     } else {
+-                        GoogleSignInButton(isLoading = isLoading, onClick = onGoogleClick)
++                        Box(modifier = Modifier.entrance(2)) {
++                            GoogleSignInButton(isLoading = isLoading, onClick = onGoogleClick)
++                        }
+                         Spacer(Modifier.height(24.dp))
+-                        OrDivider()
++                        Box(modifier = Modifier.entrance(3)) { OrDivider() }
+                         Spacer(Modifier.height(24.dp))
+-                        EmailField(isLoading = isLoading, onSubmit = onSendEmail)
++                        Box(modifier = Modifier.entrance(4)) {
++                            EmailField(isLoading = isLoading, onSubmit = onSendEmail)
++                        }
+                         ErrorText(errorMessage)
+                     }
+                 }
+@@ -151,18 +188,36 @@ fun KalynoAuthScreen(
+ 
+         LegalFooter(onTermsClick = onTermsClick, onPrivacyClick = onPrivacyClick)
+     }
++    }
+ }
+ 
+ // ------------------------------------------------------------------ En-tête
+ 
+ @Composable
+ private fun AuthHeader() {
++    val breathe = rememberPulse(min = 1f, max = 1.06f, durationMillis = 1800)
++    Box(
++        modifier = Modifier
++            .entrance(0)
++            .graphicsLayer {
++                scaleX = breathe
++                scaleY = breathe
++            }
++            .size(84.dp)
++            .clip(RoundedCornerShape(26.dp))
++            .background(Brush.linearGradient(listOf(KalynoBlue, KalynoTealDark))),
++        contentAlignment = Alignment.Center
++    ) {
++        KalynoSvgIcon(name = "graduation-cap", size = 44.dp, tint = Color.White)
++    }
++    Spacer(Modifier.height(18.dp))
+     Text(
+         text = "KALYNO",
+         color = KalynoBlue,
+         fontSize = 40.sp,
+         fontWeight = FontWeight.ExtraBold,
+-        letterSpacing = 4.sp
++        letterSpacing = 4.sp,
++        modifier = Modifier.entrance(1)
+     )
+     Spacer(Modifier.height(14.dp))
+     Text(
+@@ -171,7 +226,8 @@ private fun AuthHeader() {
+         fontSize = 17.sp,
+         lineHeight = 24.sp,
+         fontWeight = FontWeight.Medium,
+-        textAlign = TextAlign.Center
++        textAlign = TextAlign.Center,
++        modifier = Modifier.entrance(2)
+     )
+ }
+ 
+diff --git a/app/src/main/java/ci/kalyno/app/ui/components/KalynoCelebration.kt b/app/src/main/java/ci/kalyno/app/ui/components/KalynoCelebration.kt
+new file mode 100644
+index 0000000..936c137
+--- /dev/null
++++ b/app/src/main/java/ci/kalyno/app/ui/components/KalynoCelebration.kt
+@@ -0,0 +1,369 @@
++package ci.kalyno.app.ui.components
++
++import androidx.compose.animation.core.Animatable
++import androidx.compose.animation.core.FastOutSlowInEasing
++import androidx.compose.animation.core.LinearEasing
++import androidx.compose.animation.core.Spring
++import androidx.compose.animation.core.spring
++import androidx.compose.animation.core.tween
++import androidx.compose.foundation.Canvas
++import androidx.compose.foundation.background
++import androidx.compose.foundation.layout.Arrangement
++import androidx.compose.foundation.layout.Box
++import androidx.compose.foundation.layout.BoxWithConstraints
++import androidx.compose.foundation.layout.Column
++import androidx.compose.foundation.layout.Row
++import androidx.compose.foundation.layout.Spacer
++import androidx.compose.foundation.layout.fillMaxSize
++import androidx.compose.foundation.layout.fillMaxWidth
++import androidx.compose.foundation.layout.height
++import androidx.compose.foundation.layout.heightIn
++import androidx.compose.foundation.layout.padding
++import androidx.compose.foundation.layout.size
++import androidx.compose.foundation.layout.width
++import androidx.compose.foundation.rememberScrollState
++import androidx.compose.foundation.shape.CircleShape
++import androidx.compose.foundation.shape.RoundedCornerShape
++import androidx.compose.foundation.verticalScroll
++import androidx.compose.material3.Text
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.LaunchedEffect
++import androidx.compose.runtime.remember
++import androidx.compose.ui.Alignment
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.draw.clip
++import androidx.compose.ui.geometry.Offset
++import androidx.compose.ui.geometry.Size
++import androidx.compose.ui.graphics.Color
++import androidx.compose.ui.graphics.drawscope.rotate
++import androidx.compose.ui.graphics.graphicsLayer
++import androidx.compose.ui.hapticfeedback.HapticFeedbackType
++import androidx.compose.ui.platform.LocalHapticFeedback
++import androidx.compose.ui.text.font.FontWeight
++import androidx.compose.ui.text.style.TextAlign
++import androidx.compose.ui.unit.dp
++import androidx.compose.ui.unit.sp
++import ci.kalyno.app.ui.icons.KalynoSvgIcon
++import ci.kalyno.app.ui.theme.KalynoAmberDeep
++import ci.kalyno.app.ui.theme.KalynoAmberSoft
++import ci.kalyno.app.ui.theme.KalynoBlue
++import ci.kalyno.app.ui.theme.KalynoBlueSoft
++import ci.kalyno.app.ui.theme.KalynoGreen
++import ci.kalyno.app.ui.theme.KalynoLightBlue
++import ci.kalyno.app.ui.theme.KalynoMuted
++import ci.kalyno.app.ui.theme.KalynoPurple
++import ci.kalyno.app.ui.theme.KalynoText
++import ci.kalyno.app.ui.theme.KalynoYellow
++import kotlinx.coroutines.delay
++import kotlin.math.cos
++import kotlin.math.roundToInt
++import kotlin.math.sin
++import kotlin.random.Random
++
++// ---------------------------------------------------------------------------
++// Confettis : une explosion unique, aux couleurs de la marque, qui retombe en fondu.
++// ---------------------------------------------------------------------------
++
++private class ConfettiPiece(
++    val vx: Float,
++    val vy: Float,
++    val dim: Float,
++    val rotation: Float,
++    val spin: Float,
++    val color: Color,
++    val round: Boolean
++)
++
++private val ConfettiPalette = listOf(KalynoBlue, KalynoLightBlue, KalynoYellow, KalynoGreen, KalynoPurple)
++
++@Composable
++fun ConfettiBurst(
++    modifier: Modifier = Modifier,
++    count: Int = 80,
++    durationMillis: Int = 2800
++) {
++    val pieces = remember {
++        val random = Random(42)
++        List(count) {
++            // Direction : éventail vers le haut (de -160° à -20°)
++            val angle = Math.toRadians((-160.0 + random.nextDouble() * 140.0))
++            val speed = 0.55f + random.nextFloat() * 0.9f
++            ConfettiPiece(
++                vx = (cos(angle) * speed).toFloat(),
++                vy = (sin(angle) * speed).toFloat(),
++                dim = 6f + random.nextFloat() * 8f,
++                rotation = random.nextFloat() * 360f,
++                spin = (random.nextFloat() - 0.5f) * 900f,
++                color = ConfettiPalette[random.nextInt(ConfettiPalette.size)],
++                round = random.nextBoolean()
++            )
++        }
++    }
++    val time = remember { Animatable(0f) }
++    LaunchedEffect(Unit) {
++        time.animateTo(1f, tween(durationMillis = durationMillis, easing = LinearEasing))
++    }
++
++    Canvas(modifier = modifier.fillMaxSize()) {
++        val p = time.value
++        if (p < 1f) {
++            val seconds = p * 2.4f
++            val originX = size.width * 0.5f
++            val originY = size.height * 0.30f
++            val gravity = size.height * 1.5f
++            val fade = 1f - ((p - 0.65f) / 0.35f).coerceIn(0f, 1f)
++            pieces.forEach { piece ->
++                val x = originX + piece.vx * size.width * seconds
++                val y = originY + piece.vy * size.width * seconds + 0.5f * gravity * seconds * seconds
++                val color = piece.color.copy(alpha = fade)
++                if (piece.round) {
++                    drawCircle(color = color, radius = piece.dim / 2f, center = Offset(x, y))
++                } else {
++                    rotate(degrees = piece.rotation + piece.spin * seconds, pivot = Offset(x, y)) {
++                        drawRect(
++                            color = color,
++                            topLeft = Offset(x - piece.dim / 2f, y - piece.dim / 3f),
++                            size = Size(piece.dim, piece.dim * 0.66f)
++                        )
++                    }
++                }
++            }
++        }
++    }
++}
++
++// ---------------------------------------------------------------------------
++// Écran de célébration (fin de session Dojo et révisions)
++// ---------------------------------------------------------------------------
++
++/**
++ * Bilan de fin de session.
++ *
++ * - [score] (0..1) remplit l'anneau, avec le pourcentage qui monte ; [scoreCaption] le légende.
++ * - [good] déclenche les confettis et la vibration de victoire.
++ * - [streakBefore] -> [streakAfter] : la série est montrée telle qu'elle sera enregistrée à la fermeture ;
++ *   si elle progresse, le compteur s'incrémente sous les yeux de l'élève.
++ * - [chips] : le détail (justes / à revoir…), fourni par chaque écran.
++ */
++@Composable
++fun KalynoCelebration(
++    good: Boolean,
++    title: String,
++    subtitle: String,
++    message: String?,
++    score: Float,
++    scoreCaption: String,
++    streakBefore: Int,
++    streakAfter: Int,
++    buttonLabel: String,
++    onDone: () -> Unit,
++    modifier: Modifier = Modifier,
++    chips: @Composable () -> Unit = {}
++) {
++    val haptic = LocalHapticFeedback.current
++    LaunchedEffect(Unit) {
++        if (good) haptic.performHapticFeedback(HapticFeedbackType.LongPress)
++    }
++
++    // Le badge « pop » avec un ressort élastique
++    val pop = remember { Animatable(0f) }
++    LaunchedEffect(Unit) {
++        delay(250)
++        pop.animateTo(
++            1f,
++            spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessLow)
++        )
++    }
++
++    Box(modifier = modifier.fillMaxSize()) {
++        if (good) ConfettiBurst()
++
++        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
++            val viewport = maxHeight
++            Column(
++                modifier = Modifier
++                    .fillMaxWidth()
++                    .verticalScroll(rememberScrollState())
++                    .heightIn(min = viewport)
++                    .padding(horizontal = 24.dp, vertical = 24.dp),
++                verticalArrangement = Arrangement.Center,
++                horizontalAlignment = Alignment.CenterHorizontally
++            ) {
++                val shownPercent = rememberCountUp((score.coerceIn(0f, 1f) * 100).roundToInt(), 1200)
++
++                KalynoRing(
++                    progress = score,
++                    diameter = 156.dp,
++                    strokeWidth = 13.dp,
++                    color = if (good) KalynoBlue else KalynoYellow,
++                    track = if (good) KalynoBlueSoft else KalynoAmberSoft
++                ) {
++                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
++                        Box(
++                            modifier = Modifier
++                                .graphicsLayer {
++                                    scaleX = pop.value
++                                    scaleY = pop.value
++                                }
++                        ) {
++                            KalynoSvgIcon(
++                                name = if (good) "trophy" else "dumbbell",
++                                size = 30.dp,
++                                tint = if (good) KalynoBlue else KalynoAmberDeep
++                            )
++                        }
++                        Spacer(Modifier.height(2.dp))
++                        Text(
++                            text = "$shownPercent %",
++                            color = KalynoText,
++                            fontSize = 30.sp,
++                            fontWeight = FontWeight.ExtraBold
++                        )
++                    }
++                }
++                Spacer(Modifier.height(6.dp))
++                Text(
++                    text = scoreCaption,
++                    color = KalynoMuted,
++                    fontSize = 12.sp,
++                    fontWeight = FontWeight.Bold,
++                    letterSpacing = 0.5.sp,
++                    modifier = Modifier.entrance(1)
++                )
++
++                Spacer(Modifier.height(18.dp))
++                Text(
++                    text = title,
++                    color = KalynoText,
++                    fontSize = 28.sp,
++                    fontWeight = FontWeight.ExtraBold,
++                    textAlign = TextAlign.Center,
++                    modifier = Modifier.entrance(2)
++                )
++                Spacer(Modifier.height(6.dp))
++                Text(
++                    text = subtitle,
++                    color = KalynoMuted,
++                    fontSize = 16.sp,
++                    textAlign = TextAlign.Center,
++                    modifier = Modifier.entrance(3)
++                )
++                if (!message.isNullOrBlank()) {
++                    Spacer(Modifier.height(12.dp))
++                    Text(
++                        text = message,
++                        color = KalynoText,
++                        fontSize = 15.sp,
++                        lineHeight = 22.sp,
++                        fontWeight = FontWeight.Bold,
++                        textAlign = TextAlign.Center,
++                        modifier = Modifier.entrance(4)
++                    )
++                }
++
++                if (streakAfter > 0) {
++                    Spacer(Modifier.height(20.dp))
++                    StreakResult(
++                        before = streakBefore,
++                        after = streakAfter,
++                        modifier = Modifier.entrance(5)
++                    )
++                }
++
++                Spacer(Modifier.height(20.dp))
++                Box(modifier = Modifier.entrance(6)) { chips() }
++
++                Spacer(Modifier.height(28.dp))
++                KalynoPrimaryButton(
++                    label = buttonLabel,
++                    onClick = onDone,
++                    modifier = Modifier
++                        .entrance(7)
++                        .fillMaxWidth()
++                )
++            }
++        }
++    }
++}
++
++/** Carte de série : le compteur passe de l'ancienne à la nouvelle valeur, la flamme respire. */
++@Composable
++private fun StreakResult(before: Int, after: Int, modifier: Modifier = Modifier) {
++    val grew = after > before
++    val shown = remember { Animatable(before.toFloat()) }
++    LaunchedEffect(before, after) {
++        if (grew) {
++            delay(1100)
++            shown.animateTo(after.toFloat(), tween(700, easing = FastOutSlowInEasing))
++        } else {
++            shown.snapTo(after.toFloat())
++        }
++    }
++    val flame = rememberPulse(min = 1f, max = 1.18f, durationMillis = 750)
++    val days = shown.value.roundToInt()
++
++    Row(
++        modifier = modifier
++            .clip(CircleShape)
++            .background(KalynoAmberSoft)
++            .padding(horizontal = 20.dp, vertical = 12.dp),
++        verticalAlignment = Alignment.CenterVertically
++    ) {
++        Box(
++            modifier = Modifier.graphicsLayer {
++                scaleX = flame
++                scaleY = flame
++            }
++        ) {
++            KalynoSvgIcon(name = "flame", size = 24.dp, tint = KalynoYellow)
++        }
++        Spacer(Modifier.width(10.dp))
++        Column {
++            Text(
++                text = if (days <= 1) "$days jour d'affilée" else "$days jours d'affilée",
++                color = KalynoAmberDeep,
++                fontSize = 16.sp,
++                fontWeight = FontWeight.ExtraBold
++            )
++            Text(
++                text = if (grew) "Série prolongée, bien joué !" else "Série maintenue",
++                color = KalynoAmberDeep,
++                fontSize = 12.sp,
++                fontWeight = FontWeight.SemiBold
++            )
++        }
++    }
++}
++
++/** Tuile de statistique (grand chiffre + libellé) ; à placer dans une Row avec Modifier.weight(1f). */
++@Composable
++fun CelebrationChip(
++    label: String,
++    count: Int,
++    container: Color,
++    content: Color,
++    modifier: Modifier = Modifier
++) {
++    val shown = rememberCountUp(count, durationMillis = 900)
++    Column(
++        modifier = modifier
++            .clip(RoundedCornerShape(18.dp))
++            .background(container)
++            .padding(horizontal = 10.dp, vertical = 12.dp),
++        horizontalAlignment = Alignment.CenterHorizontally
++    ) {
++        Text(
++            text = shown.toString(),
++            color = content,
++            fontSize = 24.sp,
++            fontWeight = FontWeight.ExtraBold
++        )
++        Text(
++            text = label,
++            color = content,
++            fontSize = 11.sp,
++            fontWeight = FontWeight.Bold,
++            maxLines = 1
++        )
++    }
++}
+diff --git a/app/src/main/java/ci/kalyno/app/ui/components/KalynoComponents.kt b/app/src/main/java/ci/kalyno/app/ui/components/KalynoComponents.kt
+index 9f3f4a9..b817b30 100644
+--- a/app/src/main/java/ci/kalyno/app/ui/components/KalynoComponents.kt
++++ b/app/src/main/java/ci/kalyno/app/ui/components/KalynoComponents.kt
+@@ -148,13 +148,29 @@ fun KalynoPrimaryButton(
+     content: Color = Color.White
+ ) {
+     val haptic = rememberHaptic()
++    val interaction = remember { MutableInteractionSource() }
++    val pressed by interaction.collectIsPressedAsState()
++    val pressScale by animateFloatAsState(
++        targetValue = if (pressed && enabled) 0.96f else 1f,
++        animationSpec = spring(
++            dampingRatio = Spring.DampingRatioMediumBouncy,
++            stiffness = Spring.StiffnessMedium
++        ),
++        label = "buttonScale"
++    )
+     Button(
+         onClick = {
+             haptic()
+             onClick()
+         },
+         enabled = enabled,
+-        modifier = modifier.height(height),
++        interactionSource = interaction,
++        modifier = modifier
++            .height(height)
++            .graphicsLayer {
++                scaleX = pressScale
++                scaleY = pressScale
++            },
+         shape = RoundedCornerShape(16.dp),
+         colors = ButtonDefaults.buttonColors(
+             containerColor = container,
+diff --git a/app/src/main/java/ci/kalyno/app/ui/components/KalynoMotion.kt b/app/src/main/java/ci/kalyno/app/ui/components/KalynoMotion.kt
+new file mode 100644
+index 0000000..5ae358c
+--- /dev/null
++++ b/app/src/main/java/ci/kalyno/app/ui/components/KalynoMotion.kt
+@@ -0,0 +1,189 @@
++package ci.kalyno.app.ui.components
++
++import androidx.compose.animation.core.Animatable
++import androidx.compose.animation.core.FastOutSlowInEasing
++import androidx.compose.animation.core.RepeatMode
++import androidx.compose.animation.core.animateFloat
++import androidx.compose.animation.core.infiniteRepeatable
++import androidx.compose.animation.core.rememberInfiniteTransition
++import androidx.compose.animation.core.tween
++import androidx.compose.foundation.Canvas
++import androidx.compose.foundation.background
++import androidx.compose.foundation.layout.Box
++import androidx.compose.foundation.layout.BoxScope
++import androidx.compose.foundation.layout.fillMaxSize
++import androidx.compose.foundation.layout.offset
++import androidx.compose.foundation.layout.size
++import androidx.compose.foundation.shape.CircleShape
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.LaunchedEffect
++import androidx.compose.runtime.getValue
++import androidx.compose.runtime.remember
++import androidx.compose.ui.Alignment
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.composed
++import androidx.compose.ui.draw.clip
++import androidx.compose.ui.geometry.Offset
++import androidx.compose.ui.geometry.Size
++import androidx.compose.ui.graphics.Color
++import androidx.compose.ui.graphics.StrokeCap
++import androidx.compose.ui.graphics.drawscope.Stroke
++import androidx.compose.ui.graphics.graphicsLayer
++import androidx.compose.ui.platform.LocalDensity
++import androidx.compose.ui.unit.Dp
++import androidx.compose.ui.unit.IntOffset
++import androidx.compose.ui.unit.dp
++import ci.kalyno.app.ui.theme.KalynoBlue
++import ci.kalyno.app.ui.theme.KalynoBlueSoft
++import kotlinx.coroutines.delay
++import kotlin.math.roundToInt
++
++// ---------------------------------------------------------------------------
++// Boîte à outils d'animations de KALYNO.
++// Règle d'or : le mouvement guide l'œil et récompense l'élève, il ne ralentit jamais.
++// Tout est joué une seule fois à l'apparition (pas de relecture en défilant).
++// ---------------------------------------------------------------------------
++
++/**
++ * Apparition en cascade : fondu + glissement vers le haut + léger zoom.
++ * [index] décale le départ ([stepMillis] par rang, plafonné à 600 ms).
++ * À n'utiliser que hors LazyColumn (sinon rejoué à chaque défilement).
++ */
++fun Modifier.entrance(
++    index: Int = 0,
++    stepMillis: Int = 70,
++    distance: Dp = 22.dp
++): Modifier = composed {
++    val progress = remember { Animatable(0f) }
++    LaunchedEffect(Unit) {
++        delay((index * stepMillis).toLong().coerceAtMost(600L))
++        progress.animateTo(1f, tween(durationMillis = 520, easing = FastOutSlowInEasing))
++    }
++    val distancePx = with(LocalDensity.current) { distance.toPx() }
++    graphicsLayer {
++        val p = progress.value
++        alpha = p
++        translationY = (1f - p) * distancePx
++        val s = 0.96f + 0.04f * p
++        scaleX = s
++        scaleY = s
++    }
++}
++
++/** Compteur qui monte de 0 jusqu'à [target] (et se réajuste en douceur si la valeur change). */
++@Composable
++fun rememberCountUp(target: Int, durationMillis: Int = 1000): Int {
++    val anim = remember { Animatable(0f) }
++    LaunchedEffect(target) {
++        anim.animateTo(
++            targetValue = target.toFloat(),
++            animationSpec = tween(durationMillis = durationMillis, easing = FastOutSlowInEasing)
++        )
++    }
++    return anim.value.roundToInt()
++}
++
++/** Valeur qui oscille en boucle entre [min] et [max] (flamme qui respire, icône qui flotte). */
++@Composable
++fun rememberPulse(
++    min: Float = 1f,
++    max: Float = 1.12f,
++    durationMillis: Int = 900
++): Float {
++    val transition = rememberInfiniteTransition(label = "pulse")
++    val value by transition.animateFloat(
++        initialValue = min,
++        targetValue = max,
++        animationSpec = infiniteRepeatable(
++            animation = tween(durationMillis = durationMillis, easing = FastOutSlowInEasing),
++            repeatMode = RepeatMode.Reverse
++        ),
++        label = "pulseValue"
++    )
++    return value
++}
++
++/** Anneau de progression animé (0..1), avec un contenu centré (pourcentage, icône…). */
++@Composable
++fun KalynoRing(
++    progress: Float,
++    modifier: Modifier = Modifier,
++    diameter: Dp = 88.dp,
++    strokeWidth: Dp = 9.dp,
++    color: Color = KalynoBlue,
++    track: Color = KalynoBlueSoft,
++    content: @Composable BoxScope.() -> Unit = {}
++) {
++    val anim = remember { Animatable(0f) }
++    LaunchedEffect(progress) {
++        anim.animateTo(
++            targetValue = progress.coerceIn(0f, 1f),
++            animationSpec = tween(durationMillis = 1100, easing = FastOutSlowInEasing)
++        )
++    }
++    Box(modifier = modifier.size(diameter), contentAlignment = Alignment.Center) {
++        Canvas(modifier = Modifier.fillMaxSize()) {
++            val stroke = strokeWidth.toPx()
++            val inset = stroke / 2f
++            val arcSize = Size(this.size.width - stroke, this.size.height - stroke)
++            val topLeft = Offset(inset, inset)
++            drawArc(
++                color = track,
++                startAngle = 0f,
++                sweepAngle = 360f,
++                useCenter = false,
++                topLeft = topLeft,
++                size = arcSize,
++                style = Stroke(width = stroke, cap = StrokeCap.Round)
++            )
++            if (anim.value > 0.001f) {
++                drawArc(
++                    color = color,
++                    startAngle = -90f,
++                    sweepAngle = 360f * anim.value,
++                    useCenter = false,
++                    topLeft = topLeft,
++                    size = arcSize,
++                    style = Stroke(width = stroke, cap = StrokeCap.Round)
++                )
++            }
++        }
++        content()
++    }
++}
++
++/** Cercle décoratif qui dérive doucement (fonds de bannières). */
++@Composable
++fun DriftingBlob(
++    modifier: Modifier = Modifier,
++    color: Color = Color.White.copy(alpha = 0.08f),
++    drift: Dp = 14.dp,
++    durationMillis: Int = 5200
++) {
++    val transition = rememberInfiniteTransition(label = "drift")
++    val dx by transition.animateFloat(
++        initialValue = -1f,
++        targetValue = 1f,
++        animationSpec = infiniteRepeatable(
++            animation = tween(durationMillis = durationMillis, easing = FastOutSlowInEasing),
++            repeatMode = RepeatMode.Reverse
++        ),
++        label = "driftX"
++    )
++    val dy by transition.animateFloat(
++        initialValue = 1f,
++        targetValue = -1f,
++        animationSpec = infiniteRepeatable(
++            animation = tween(durationMillis = (durationMillis * 1.3f).toInt(), easing = FastOutSlowInEasing),
++            repeatMode = RepeatMode.Reverse
++        ),
++        label = "driftY"
++    )
++    val driftPx = with(LocalDensity.current) { drift.toPx() }
++    Box(
++        modifier = modifier
++            .offset { IntOffset((dx * driftPx).roundToInt(), (dy * driftPx).roundToInt()) }
++            .clip(CircleShape)
++            .background(color)
++    )
++}
+diff --git a/app/src/main/java/ci/kalyno/app/ui/dojo/DojoScreen.kt b/app/src/main/java/ci/kalyno/app/ui/dojo/DojoScreen.kt
+index e966458..6720431 100644
+--- a/app/src/main/java/ci/kalyno/app/ui/dojo/DojoScreen.kt
++++ b/app/src/main/java/ci/kalyno/app/ui/dojo/DojoScreen.kt
+@@ -1,5 +1,15 @@
+ package ci.kalyno.app.ui.dojo
+ 
++import ci.kalyno.app.ui.theme.KalynoCorrectText
++import ci.kalyno.app.ui.theme.KalynoCorrectSoft
++import ci.kalyno.app.ui.theme.KalynoCorrect
++import ci.kalyno.app.ui.components.rememberPulse
++import ci.kalyno.app.ui.components.rememberCountUp
++import ci.kalyno.app.ui.components.entrance
++import ci.kalyno.app.ui.components.KalynoRing
++import ci.kalyno.app.ui.components.DriftingBlob
++import androidx.compose.ui.graphics.graphicsLayer
++import androidx.compose.foundation.layout.offset
+ import androidx.compose.foundation.background
+ import androidx.compose.foundation.layout.size
+ import androidx.compose.foundation.layout.Box
+@@ -61,6 +71,7 @@ fun DojoScreen(
+     onRetry: () -> Unit,
+     onStartFreeExercises: () -> Unit = {}
+ ) {
++    val brainPulse = rememberPulse(min = 1f, max = 1.07f, durationMillis = 1400)
+     Column(
+         modifier = Modifier
+             .fillMaxSize()
+@@ -69,13 +80,17 @@ fun DojoScreen(
+         verticalArrangement = Arrangement.spacedBy(18.dp)
+     ) {
+         Row(
+-            modifier = Modifier.fillMaxWidth(),
++            modifier = Modifier.fillMaxWidth().entrance(0),
+             verticalAlignment = Alignment.CenterVertically,
+             horizontalArrangement = Arrangement.SpaceBetween
+         ) {
+             Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                 Box(
+                     modifier = Modifier
++                        .graphicsLayer {
++                            scaleX = brainPulse
++                            scaleY = brainPulse
++                        }
+                         .size(46.dp)
+                         .clip(RoundedCornerShape(16.dp))
+                         .background(Brush.linearGradient(listOf(KalynoBlue, KalynoTealDark))),
+@@ -110,12 +125,16 @@ fun DojoScreen(
+             )
+ 
+             else -> {
+-                UrgentHero(state = state, onReview = onReviewUrgent)
+-                DojoSectionLabel(step = 1, text = "MISSION DU JOUR")
+-                MissionBlock(state = state, onStart = onStartMission, onReview = onReviewUrgent)
++                Box(Modifier.entrance(1)) { UrgentHero(state = state, onReview = onReviewUrgent) }
++                Box(Modifier.entrance(2)) { DojoSectionLabel(step = 1, text = "MISSION DU JOUR") }
++                Box(Modifier.entrance(3)) {
++                    MissionBlock(state = state, onStart = onStartMission, onReview = onReviewUrgent)
++                }
+                 if (state.freeTotal > 0) {
+-                    DojoSectionLabel(step = 2, text = "EXERCICES LIBRES")
+-                    FreeExercisesBlock(state = state, onStart = onStartFreeExercises)
++                    Box(Modifier.entrance(4)) { DojoSectionLabel(step = 2, text = "EXERCICES LIBRES") }
++                    Box(Modifier.entrance(5)) {
++                        FreeExercisesBlock(state = state, onStart = onStartFreeExercises)
++                    }
+                 }
+             }
+         }
+@@ -143,14 +162,21 @@ private fun DojoSectionLabel(step: Int, text: String) {
+ private fun UrgentHero(state: DashboardUiState, onReview: () -> Unit) {
+     val shape = RoundedCornerShape(24.dp)
+     val urgent = state.urgentTotal > 0
++    val shownUrgent = rememberCountUp(state.urgentTotal, durationMillis = 900)
+ 
+-    Column(
++    Box(
+         modifier = Modifier
+             .fillMaxWidth()
+             .clip(shape)
+             .background(Brush.linearGradient(listOf(KalynoBlue, KalynoTealDark)))
+-            .padding(22.dp)
+     ) {
++    DriftingBlob(
++        modifier = Modifier
++            .align(Alignment.TopEnd)
++            .offset(x = 50.dp, y = (-50).dp)
++            .size(170.dp)
++    )
++    Column(modifier = Modifier.padding(22.dp)) {
+         KalynoPill(
+             text = "ACTIVE RECALL",
+             container = Color.White.copy(alpha = 0.18f),
+@@ -160,7 +186,7 @@ private fun UrgentHero(state: DashboardUiState, onReview: () -> Unit) {
+         Text(
+             text = when {
+                 urgent && state.urgentTotal == 1 -> "1 notion à sauver"
+-                urgent -> "${state.urgentTotal} notions à sauver"
++                urgent -> "$shownUrgent notions à sauver"
+                 state.loading -> "Analyse de tes révisions…"
+                 else -> "Tout est à jour"
+             },
+@@ -217,6 +243,7 @@ private fun UrgentHero(state: DashboardUiState, onReview: () -> Unit) {
+             )
+         }
+     }
++    }
+ }
+ 
+ /**
+@@ -309,18 +336,32 @@ private fun MissionBlock(
+             }
+ 
+             state.missionStatus == MissionStatus.DONE_TODAY -> {
+-                Text(
+-                    text = "Mission accomplie !",
+-                    color = KalynoText,
+-                    fontSize = 20.sp,
+-                    fontWeight = FontWeight.ExtraBold
+-                )
+-                Spacer(Modifier.height(6.dp))
+-                Text(
+-                    text = "Reviens demain pour de nouvelles cartes.",
+-                    color = KalynoMuted,
+-                    fontSize = 14.sp
+-                )
++                Row(verticalAlignment = Alignment.CenterVertically) {
++                    KalynoRing(
++                        progress = 1f,
++                        diameter = 64.dp,
++                        strokeWidth = 7.dp,
++                        color = KalynoCorrect,
++                        track = KalynoCorrectSoft
++                    ) {
++                        KalynoSvgIcon(name = "check-circle", size = 26.dp, tint = KalynoCorrectText)
++                    }
++                    Spacer(Modifier.width(14.dp))
++                    Column(modifier = Modifier.weight(1f)) {
++                        Text(
++                            text = "Mission accomplie !",
++                            color = KalynoText,
++                            fontSize = 20.sp,
++                            fontWeight = FontWeight.ExtraBold
++                        )
++                        Spacer(Modifier.height(4.dp))
++                        Text(
++                            text = "Reviens demain pour de nouvelles cartes.",
++                            color = KalynoMuted,
++                            fontSize = 14.sp
++                        )
++                    }
++                }
+                 if (mission != null) {
+                     Spacer(Modifier.height(14.dp))
+                     KalynoProgressBar(progress = mission.progress)
+diff --git a/app/src/main/java/ci/kalyno/app/ui/dojo/DojoSessionScreen.kt b/app/src/main/java/ci/kalyno/app/ui/dojo/DojoSessionScreen.kt
+index a4ce199..c919636 100644
+--- a/app/src/main/java/ci/kalyno/app/ui/dojo/DojoSessionScreen.kt
++++ b/app/src/main/java/ci/kalyno/app/ui/dojo/DojoSessionScreen.kt
+@@ -76,6 +76,8 @@ import ci.kalyno.app.data.dojo.TableOutcome
+ import ci.kalyno.app.ui.components.KalynoCard
+ import ci.kalyno.app.ui.components.MathText
+ import ci.kalyno.app.ui.components.KalynoPill
++import ci.kalyno.app.ui.components.CelebrationChip
++import ci.kalyno.app.ui.components.KalynoCelebration
+ import ci.kalyno.app.ui.components.KalynoPrimaryButton
+ import ci.kalyno.app.ui.components.StreakBadge
+ import ci.kalyno.app.ui.components.rememberHaptic
+@@ -124,6 +126,7 @@ fun DojoSessionScreen(
+     val haptic = rememberHaptic()
+     val context = LocalContext.current
+     val dayStreak = remember { StreakStore(context.applicationContext).current() }
++    val streakAfter = remember { StreakStore(context.applicationContext).projectedAfterCompletion() }
+     val scope = rememberCoroutineScope()
+     var calculatorOpen by remember { mutableStateOf(false) }
+     var closing by remember { mutableStateOf(false) }
+@@ -191,6 +194,8 @@ fun DojoSessionScreen(
+                 FinishedPane(
+                     total = state.total,
+                     correct = state.correctCount,
++                    streakBefore = dayStreak,
++                    streakAfter = streakAfter,
+                     onDone = { close(true) }
+                 )
+             } else if (exercise != null) {
+@@ -486,68 +491,32 @@ internal fun tableDetail(grade: TableGrade): String? {
+ // ---------------------------------------------------------------------------
+ 
+ @Composable
+-private fun FinishedPane(total: Int, correct: Int, onDone: () -> Unit) {
++private fun FinishedPane(
++    total: Int,
++    correct: Int,
++    streakBefore: Int,
++    streakAfter: Int,
++    onDone: () -> Unit
++) {
+     val good = total > 0 && correct * 100 >= total * 60
+     val message = remember { if (good) DojoMessages.congrats() else DojoMessages.encourage() }
+ 
+-    Column(
+-        modifier = Modifier
+-            .fillMaxSize()
+-            .padding(24.dp),
+-        verticalArrangement = Arrangement.Center,
+-        horizontalAlignment = Alignment.CenterHorizontally
++    KalynoCelebration(
++        good = good,
++        title = "Session terminée !",
++        subtitle = "$correct / $total bonnes réponses",
++        message = message,
++        score = if (total > 0) correct.toFloat() / total else 0f,
++        scoreCaption = "RÉUSSITE",
++        streakBefore = streakBefore,
++        streakAfter = streakAfter,
++        buttonLabel = "TERMINER",
++        onDone = onDone
+     ) {
+-        Icon(
+-            imageVector = if (good) Icons.Rounded.EmojiEvents else Icons.Rounded.FitnessCenter,
+-            contentDescription = null,
+-            tint = QuizColors.Primary,
+-            modifier = Modifier.size(64.dp)
+-        )
+-        Spacer(Modifier.height(12.dp))
+-        Text(
+-            text = "Session terminée !",
+-            color = KalynoText,
+-            fontSize = 28.sp,
+-            fontWeight = FontWeight.ExtraBold,
+-            textAlign = TextAlign.Center
+-        )
+-        Spacer(Modifier.height(8.dp))
+-        Text(
+-            text = "$correct / $total bonnes réponses",
+-            color = KalynoMuted,
+-            fontSize = 16.sp
+-        )
+-        Spacer(Modifier.height(16.dp))
+-        Text(
+-            text = message,
+-            color = KalynoText,
+-            fontSize = 15.sp,
+-            lineHeight = 22.sp,
+-            fontWeight = FontWeight.Bold,
+-            textAlign = TextAlign.Center
+-        )
+-        Spacer(Modifier.height(24.dp))
+         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+-            SummaryChip(Icons.Rounded.Check, "$correct", QuizColors.CorrectBg, QuizColors.CorrectText)
+-            SummaryChip(Icons.Rounded.Close, "${total - correct}", QuizColors.WrongBg, QuizColors.WrongText)
++            CelebrationChip("justes", correct, QuizColors.CorrectBg, QuizColors.CorrectText, Modifier.weight(1f))
++            CelebrationChip("à revoir", total - correct, QuizColors.WrongBg, QuizColors.WrongText, Modifier.weight(1f))
+         }
+-        Spacer(Modifier.height(32.dp))
+-        KalynoPrimaryButton(label = "TERMINER", onClick = onDone)
+-    }
+-}
+-
+-@Composable
+-private fun SummaryChip(icon: ImageVector, text: String, container: Color, content: Color) {
+-    Row(
+-        verticalAlignment = Alignment.CenterVertically,
+-        modifier = Modifier
+-            .clip(CircleShape)
+-            .background(container)
+-            .padding(horizontal = 16.dp, vertical = 9.dp)
+-    ) {
+-        Icon(icon, contentDescription = null, tint = content, modifier = Modifier.size(18.dp))
+-        Spacer(Modifier.width(6.dp))
+-        Text(text = text, color = content, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold)
+     }
+ }
+ 
+diff --git a/app/src/main/java/ci/kalyno/app/ui/exercises/GeneratedExercisesScreen.kt b/app/src/main/java/ci/kalyno/app/ui/exercises/GeneratedExercisesScreen.kt
+index b46c1fe..2696ab2 100644
+--- a/app/src/main/java/ci/kalyno/app/ui/exercises/GeneratedExercisesScreen.kt
++++ b/app/src/main/java/ci/kalyno/app/ui/exercises/GeneratedExercisesScreen.kt
+@@ -1,5 +1,22 @@
+ package ci.kalyno.app.ui.exercises
+ 
++import ci.kalyno.app.ui.components.ConfettiBurst
++import androidx.compose.runtime.LaunchedEffect
++import androidx.compose.ui.platform.LocalHapticFeedback
++import androidx.compose.ui.hapticfeedback.HapticFeedbackType
++import androidx.compose.ui.graphics.graphicsLayer
++import androidx.compose.animation.core.spring
++import androidx.compose.animation.core.Spring
++import androidx.compose.animation.animateColorAsState
++import ci.kalyno.app.ui.components.rememberCountUp
++import ci.kalyno.app.ui.components.entrance
++import ci.kalyno.app.ui.components.KalynoRing
++import ci.kalyno.app.ui.components.DriftingBlob
++import androidx.compose.runtime.getValue
++import androidx.compose.foundation.layout.offset
++import androidx.compose.animation.core.tween
++import androidx.compose.animation.core.animateFloatAsState
++import androidx.compose.animation.core.FastOutSlowInEasing
+ import androidx.compose.foundation.background
+ import androidx.compose.foundation.clickable
+ import androidx.compose.ui.graphics.Color
+@@ -296,6 +313,9 @@ fun GeneratedExercisesScreen() {
+             }
+         }
+ 
++        val shownRemaining = rememberCountUp(remaining, durationMillis = 900)
++        val shownCompleted = rememberCountUp(completed, durationMillis = 900)
++
+         Column(
+             modifier = Modifier.fillMaxSize()
+                 .verticalScroll(rememberScrollState())
+@@ -303,7 +323,7 @@ fun GeneratedExercisesScreen() {
+             verticalArrangement = Arrangement.spacedBy(18.dp)
+         ) {
+             Row(
+-                modifier = Modifier.fillMaxWidth(),
++                modifier = Modifier.fillMaxWidth().entrance(0),
+                 horizontalArrangement = Arrangement.SpaceBetween,
+                 verticalAlignment = Alignment.CenterVertically
+             ) {
+@@ -362,13 +382,28 @@ fun GeneratedExercisesScreen() {
+             }
+ 
+             Card(
+-                modifier = Modifier.fillMaxWidth(),
++                modifier = Modifier.fillMaxWidth().entrance(1),
+                 shape = androidx.compose.foundation.shape.RoundedCornerShape(28.dp),
+                 colors = CardDefaults.cardColors(
+                     containerColor = colors.primary
+                 ),
+                 elevation = CardDefaults.cardElevation(5.dp)
+             ) {
++                Box {
++                DriftingBlob(
++                    modifier = Modifier
++                        .align(Alignment.TopEnd)
++                        .offset(x = 50.dp, y = (-50).dp)
++                        .size(180.dp)
++                )
++                DriftingBlob(
++                    modifier = Modifier
++                        .align(Alignment.BottomStart)
++                        .offset(x = (-40).dp, y = 50.dp)
++                        .size(130.dp),
++                    color = Color.White.copy(alpha = 0.06f),
++                    durationMillis = 6800
++                )
+                 Column(
+                     modifier = Modifier
+                         .fillMaxWidth()
+@@ -413,20 +448,15 @@ fun GeneratedExercisesScreen() {
+                             )
+                         }
+ 
+-                        Box(
+-                            Modifier.size(72.dp),
+-                            contentAlignment = Alignment.Center
++                        KalynoRing(
++                            progress = progress,
++                            diameter = 76.dp,
++                            strokeWidth = 7.dp,
++                            color = colors.onPrimary,
++                            track = colors.onPrimary.copy(alpha = 0.2f)
+                         ) {
+-                            CircularProgressIndicator(
+-                                progress = progress,
+-                                modifier = Modifier.fillMaxSize(),
+-                                color = colors.onPrimary,
+-                                trackColor = colors.onPrimary.copy(alpha = 0.2f),
+-                                strokeWidth = 6.dp
+-                            )
+-
+                             Text(
+-                                "${(progress * 100).toInt()}%",
++                                "${rememberCountUp((progress * 100).toInt(), 1100)}%",
+                                 color = colors.onPrimary,
+                                 style = MaterialTheme.typography.titleMedium,
+                                 fontWeight = FontWeight.ExtraBold
+@@ -448,7 +478,7 @@ fun GeneratedExercisesScreen() {
+                                 verticalArrangement = Arrangement.spacedBy(3.dp)
+                             ) {
+                                 Text(
+-                                    "$remaining",
++                                    "$shownRemaining",
+                                     color = colors.onPrimary,
+                                     style = MaterialTheme.typography.headlineMedium,
+                                     fontWeight = FontWeight.ExtraBold
+@@ -471,7 +501,7 @@ fun GeneratedExercisesScreen() {
+                                 verticalArrangement = Arrangement.spacedBy(3.dp)
+                             ) {
+                                 Text(
+-                                    "$completed",
++                                    "$shownCompleted",
+                                     color = colors.onPrimary,
+                                     style = MaterialTheme.typography.headlineMedium,
+                                     fontWeight = FontWeight.ExtraBold
+@@ -503,8 +533,13 @@ fun GeneratedExercisesScreen() {
+                             )
+                         }
+ 
++                        val animatedProgress by animateFloatAsState(
++                            targetValue = progress,
++                            animationSpec = tween(1100, easing = FastOutSlowInEasing),
++                            label = "exercisesProgress"
++                        )
+                         LinearProgressIndicator(
+-                            progress = progress,
++                            progress = animatedProgress,
+                             modifier = Modifier
+                                 .fillMaxWidth()
+                                 .height(7.dp),
+@@ -513,9 +548,13 @@ fun GeneratedExercisesScreen() {
+                         )
+                     }
+                 }
++                }
+             }
+ 
+-            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
++            Column(
++                modifier = Modifier.entrance(2),
++                verticalArrangement = Arrangement.spacedBy(3.dp)
++            ) {
+                 Text(
+                     "À toi de jouer",
+                     style = MaterialTheme.typography.titleLarge,
+@@ -528,7 +567,10 @@ fun GeneratedExercisesScreen() {
+                 )
+             }
+ 
+-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
++            Row(
++                modifier = Modifier.entrance(3),
++                horizontalArrangement = Arrangement.spacedBy(8.dp)
++            ) {
+                 FilterChip(
+                     selected = filter == "all",
+                     onClick = { filter = "all" },
+@@ -623,7 +665,7 @@ fun GeneratedExercisesScreen() {
+                     }
+ 
+                     Card(
+-                        modifier = Modifier.fillMaxWidth(),
++                        modifier = Modifier.fillMaxWidth().entrance(4 + index),
+                         onClick = { openExercise(exercise) },
+                         shape = androidx.compose.foundation.shape.RoundedCornerShape(22.dp),
+                         colors = CardDefaults.cardColors(
+@@ -774,6 +816,14 @@ fun GeneratedExercisesScreen() {
+         }
+ 
+ 
++        val celebrateResult = result?.optString("verdict")?.lowercase() in
++            setOf("correct", "success", "passed")
++        val hapticFeedback = LocalHapticFeedback.current
++        LaunchedEffect(celebrateResult) {
++            if (celebrateResult) hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
++        }
++
++        Box(modifier = Modifier.fillMaxSize()) {
+         Column(
+             modifier = Modifier.fillMaxSize()
+                 .verticalScroll(rememberScrollState())
+@@ -781,7 +831,7 @@ fun GeneratedExercisesScreen() {
+             verticalArrangement = Arrangement.spacedBy(16.dp)
+         ) {
+             Card(
+-                modifier = Modifier.fillMaxWidth(),
++                modifier = Modifier.fillMaxWidth().entrance(0),
+                 shape = androidx.compose.foundation.shape.RoundedCornerShape(26.dp),
+                 colors = CardDefaults.cardColors(
+                     containerColor = colors.primary
+@@ -875,11 +925,16 @@ fun GeneratedExercisesScreen() {
+                             )
+                         }
+ 
+-                        LinearProgressIndicator(
+-                            progress = (
++                        val journeyProgress by animateFloatAsState(
++                            targetValue = (
+                                 exercisePosition.toFloat() /
+                                     exerciseTotal.toFloat()
+                             ).coerceIn(0f, 1f),
++                            animationSpec = tween(900, easing = FastOutSlowInEasing),
++                            label = "journeyProgress"
++                        )
++                        LinearProgressIndicator(
++                            progress = journeyProgress,
+                             modifier = Modifier
+                                 .fillMaxWidth()
+                                 .height(6.dp),
+@@ -891,7 +946,7 @@ fun GeneratedExercisesScreen() {
+             }
+ 
+             Card(
+-                modifier = Modifier.fillMaxWidth(),
++                modifier = Modifier.fillMaxWidth().entrance(1),
+                 shape = androidx.compose.foundation.shape.RoundedCornerShape(22.dp),
+                 colors = CardDefaults.cardColors(
+                     containerColor = colors.surface
+@@ -953,7 +1008,7 @@ fun GeneratedExercisesScreen() {
+             if (result == null) {
+ 
+                 Card(
+-                    modifier = Modifier.fillMaxWidth(),
++                    modifier = Modifier.fillMaxWidth().entrance(2),
+                     shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
+                     colors = CardDefaults.cardColors(
+                         containerColor = colors.surface
+@@ -1050,20 +1105,37 @@ fun GeneratedExercisesScreen() {
+ 
+                                 for (i in 0 until choices.length()) {
+                                     val checked = i in selectedChoices
++                                    val choiceScale by animateFloatAsState(
++                                        targetValue = if (checked) 1.015f else 1f,
++                                        animationSpec = spring(
++                                            dampingRatio = Spring.DampingRatioMediumBouncy,
++                                            stiffness = Spring.StiffnessMedium
++                                        ),
++                                        label = "choiceScale"
++                                    )
++                                    val choiceColor by animateColorAsState(
++                                        targetValue = if (checked)
++                                            colors.secondaryContainer
++                                        else
++                                            colors.surfaceVariant.copy(alpha = 0.35f),
++                                        animationSpec = tween(220),
++                                        label = "choiceColor"
++                                    )
+ 
+                                     Surface(
+                                         modifier = Modifier
+                                             .fillMaxWidth()
++                                            .graphicsLayer {
++                                                scaleX = choiceScale
++                                                scaleY = choiceScale
++                                            }
+                                             .clickable {
+                                                 selectedChoices =
+                                                     if (checked) selectedChoices - i
+                                                     else selectedChoices + i
+                                             },
+                                         shape = androidx.compose.foundation.shape.RoundedCornerShape(17.dp),
+-                                        color = if (checked)
+-                                            colors.secondaryContainer
+-                                        else
+-                                            colors.surfaceVariant.copy(alpha = 0.35f),
++                                        color = choiceColor,
+                                         border = androidx.compose.foundation.BorderStroke(
+                                             if (checked) 1.5.dp else 1.dp,
+                                             if (checked) colors.primary
+@@ -1432,8 +1504,9 @@ fun GeneratedExercisesScreen() {
+                 val reasoningAnalysis =
+                     details?.optJSONObject("reasoning_analysis")
+ 
++                val shownScore = rememberCountUp(score, durationMillis = 1100)
+                 Card(
+-                    modifier = Modifier.fillMaxWidth(),
++                    modifier = Modifier.fillMaxWidth().entrance(0),
+                     shape = androidx.compose.foundation.shape.RoundedCornerShape(26.dp),
+                     colors = CardDefaults.cardColors(
+                         containerColor = colors.surface
+@@ -1494,7 +1567,7 @@ fun GeneratedExercisesScreen() {
+                                     shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp)
+                                 ) {
+                                     Text(
+-                                        "$score/100",
++                                        "$shownScore/100",
+                                         Modifier.padding(
+                                             horizontal = 13.dp,
+                                             vertical = 10.dp
+@@ -1696,5 +1769,7 @@ fun GeneratedExercisesScreen() {
+             }
+             Spacer(Modifier.height(10.dp))
+         }
++            if (celebrateResult) ConfettiBurst()
++        }
+     }
+ }
+\ No newline at end of file
+diff --git a/app/src/main/java/ci/kalyno/app/ui/explorer/ExplorerScreen.kt b/app/src/main/java/ci/kalyno/app/ui/explorer/ExplorerScreen.kt
+index 3015768..c2a15bb 100644
+--- a/app/src/main/java/ci/kalyno/app/ui/explorer/ExplorerScreen.kt
++++ b/app/src/main/java/ci/kalyno/app/ui/explorer/ExplorerScreen.kt
+@@ -1,5 +1,6 @@
+ package ci.kalyno.app.ui.explorer
+ 
++import ci.kalyno.app.ui.components.entrance
+ import androidx.activity.compose.BackHandler
+ import androidx.compose.animation.AnimatedContent
+ import androidx.compose.animation.animateColorAsState
+@@ -270,22 +271,44 @@ private fun ExplorerHome(
+             .padding(top = 12.dp, bottom = 20.dp),
+         verticalArrangement = Arrangement.spacedBy(12.dp)
+     ) {
+-        HeroBannerCarousel(banners = ui.banners, chapters = ui.chapters, onOpenLesson = onOpenLesson)
++        Column(modifier = Modifier.padding(horizontal = 16.dp).entrance(0)) {
++            Text(
++                text = "Explorer",
++                color = KalynoText,
++                fontSize = 28.sp,
++                fontWeight = FontWeight.ExtraBold
++            )
++            Text(
++                text = "Choisis ton prochain chapitre et avance à ton rythme.",
++                color = KalynoMuted,
++                fontSize = 14.sp
++            )
++        }
+ 
+-        DisciplinesSection(
+-            disciplines = ui.disciplines,
+-            pressedId = ui.pressedDisciplineId,
+-            loading = ui.loading && ui.disciplines.isEmpty(),
+-            onClick = viewModel::onDisciplineClick
+-        )
++        Box(modifier = Modifier.entrance(1)) {
++            HeroBannerCarousel(banners = ui.banners, chapters = ui.chapters, onOpenLesson = onOpenLesson)
++        }
+ 
+-        SearchField(
+-            value = ui.query,
+-            onValueChange = viewModel::onQueryChange,
+-            modifier = Modifier.padding(horizontal = 16.dp)
+-        )
++        Box(modifier = Modifier.entrance(2)) {
++            DisciplinesSection(
++                disciplines = ui.disciplines,
++                pressedId = ui.pressedDisciplineId,
++                loading = ui.loading && ui.disciplines.isEmpty(),
++                onClick = viewModel::onDisciplineClick
++            )
++        }
++
++        Box(modifier = Modifier.entrance(3)) {
++            SearchField(
++                value = ui.query,
++                onValueChange = viewModel::onQueryChange,
++                modifier = Modifier.padding(horizontal = 16.dp)
++            )
++        }
+ 
+-        FilterChips(selected = ui.filter, onSelect = viewModel::onFilterChange)
++        Box(modifier = Modifier.entrance(4)) {
++            FilterChips(selected = ui.filter, onSelect = viewModel::onFilterChange)
++        }
+ 
+         if (ui.offline) {
+             Row(
+@@ -309,6 +332,10 @@ private fun ExplorerHome(
+ 
+         val visible = ui.visibleChapters
+ 
++        Column(
++            modifier = Modifier.entrance(5),
++            verticalArrangement = Arrangement.spacedBy(12.dp)
++        ) {
+         when {
+             ui.loading -> ExplorerSkeleton()
+ 
+@@ -359,6 +386,7 @@ private fun ExplorerHome(
+                 ExplorerFilter.COMMUNITY -> Unit
+             }
+         }
++        }
+     }
+ }
+ 
+diff --git a/app/src/main/java/ci/kalyno/app/ui/home/HomeScreen.kt b/app/src/main/java/ci/kalyno/app/ui/home/HomeScreen.kt
+index 10afca9..c7c082d 100644
+--- a/app/src/main/java/ci/kalyno/app/ui/home/HomeScreen.kt
++++ b/app/src/main/java/ci/kalyno/app/ui/home/HomeScreen.kt
+@@ -31,6 +31,7 @@ import androidx.compose.ui.Modifier
+ import androidx.compose.ui.draw.clip
+ import androidx.compose.ui.draw.shadow
+ import androidx.compose.ui.graphics.Color
++import androidx.compose.ui.graphics.graphicsLayer
+ import androidx.compose.ui.text.font.FontWeight
+ import androidx.compose.ui.unit.dp
+ import androidx.compose.ui.unit.sp
+@@ -38,6 +39,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
+ import androidx.lifecycle.viewmodel.compose.viewModel
+ import ci.kalyno.app.data.LevelInfo
+ import ci.kalyno.app.ui.components.KalynoErrorCard
++import ci.kalyno.app.ui.components.entrance
++import ci.kalyno.app.ui.components.rememberPulse
+ import ci.kalyno.app.ui.components.ShimmerBlock
+ import ci.kalyno.app.ui.icons.KalynoSvgIcon
+ import ci.kalyno.app.ui.icons.iconAssetFor
+@@ -92,15 +95,36 @@ fun HomeScreen(
+                 .verticalScroll(rememberScrollState())
+                 .padding(top = 18.dp, bottom = 8.dp)
+         ) {
++            // L'illustration flotte doucement : l'écran est vivant dès la première seconde
++            val float = rememberPulse(min = 0f, max = 1f, durationMillis = 2200)
+             Image(
+                 painter = painterResource(id = R.drawable.rentree_student),
+                 contentDescription = "Illustration de la rentrée scolaire",
+                 contentScale = ContentScale.Fit,
+                 modifier = Modifier
++                    .entrance(0)
+                     .fillMaxWidth()
+-                    .height(270.dp)
++                    .height(250.dp)
++                    .graphicsLayer { translationY = -float * 8.dp.toPx() }
+             )
+-            Spacer(Modifier.height(12.dp))
++            Spacer(Modifier.height(8.dp))
++            Text(
++                text = "Prêt pour ton année ?",
++                color = KalynoText,
++                fontSize = 26.sp,
++                lineHeight = 30.sp,
++                fontWeight = FontWeight.ExtraBold,
++                modifier = Modifier.entrance(1)
++            )
++            Spacer(Modifier.height(4.dp))
++            Text(
++                text = "Choisis ta classe : on construit ton parcours, tu n'as plus qu'à avancer chaque jour.",
++                color = KalynoMuted,
++                fontSize = 14.sp,
++                lineHeight = 20.sp,
++                modifier = Modifier.entrance(2)
++            )
++            Spacer(Modifier.height(16.dp))
+ 
+             when {
+                 state.loading -> LevelSkeleton()
+@@ -112,7 +136,9 @@ fun HomeScreen(
+ 
+                 else -> state.groups.forEachIndexed { index, group ->
+                     if (index > 0) Spacer(Modifier.height(16.dp))
+-                    LevelGroupSection(group = group, onSelect = onLevelSelected)
++                    Column(modifier = Modifier.entrance(3 + index)) {
++                        LevelGroupSection(group = group, onSelect = onLevelSelected)
++                    }
+                 }
+             }
+         }
+diff --git a/app/src/main/java/ci/kalyno/app/ui/main/AccueilModules.kt b/app/src/main/java/ci/kalyno/app/ui/main/AccueilModules.kt
+index 3059872..0bfdcea 100644
+--- a/app/src/main/java/ci/kalyno/app/ui/main/AccueilModules.kt
++++ b/app/src/main/java/ci/kalyno/app/ui/main/AccueilModules.kt
+@@ -21,6 +21,7 @@ import androidx.compose.ui.Alignment
+ import androidx.compose.ui.Modifier
+ import androidx.compose.ui.draw.clip
+ import androidx.compose.ui.graphics.Color
++import androidx.compose.ui.graphics.graphicsLayer
+ import androidx.compose.ui.text.font.FontWeight
+ import androidx.compose.ui.text.style.TextAlign
+ import androidx.compose.ui.text.style.TextOverflow
+@@ -50,6 +51,9 @@ import ci.kalyno.app.data.dashboard.UrgentTopic
+ import ci.kalyno.app.ui.components.KalynoCard
+ import ci.kalyno.app.ui.components.KalynoPrimaryButton
+ import ci.kalyno.app.ui.components.KalynoProgressBar
++import ci.kalyno.app.ui.components.KalynoRing
++import ci.kalyno.app.ui.components.rememberCountUp
++import ci.kalyno.app.ui.components.rememberPulse
+ import ci.kalyno.app.ui.components.ShimmerBlock
+ import ci.kalyno.app.ui.icons.KalynoSvgIcon
+ import ci.kalyno.app.ui.progress.MasteredCardsSection
+@@ -73,11 +77,15 @@ internal fun ModuleHeader(
+     icon: String,
+     title: String,
+     tint: Color = KalynoBlue,
+-    container: Color = KalynoBlueSoft
++    container: Color = KalynoBlueSoft,
++    animateIcon: Boolean = false
+ ) {
++    // L'icône flotte doucement quand le module réclame l'attention de l'élève
++    val bob = rememberPulse(min = 0f, max = 1f, durationMillis = 1100)
+     Row(verticalAlignment = Alignment.CenterVertically) {
+         Box(
+             modifier = Modifier
++                .graphicsLayer { translationY = if (animateIcon) -bob * 3.dp.toPx() else 0f }
+                 .size(36.dp)
+                 .clip(RoundedCornerShape(12.dp))
+                 .background(container),
+@@ -118,6 +126,7 @@ internal fun UrgentReviewModule(
+     modifier: Modifier = Modifier
+ ) {
+     val urgent = total > 0
++    val shownTotal = rememberCountUp(total, durationMillis = 900)
+     KalynoCard(
+         modifier = modifier,
+         onClick = if (urgent) onReview else null,
+@@ -128,7 +137,8 @@ internal fun UrgentReviewModule(
+             icon = "brain",
+             title = "Révisions du Dojo",
+             tint = if (urgent) KalynoRetryText else KalynoBlue,
+-            container = if (urgent) Color.White else KalynoBlueSoft
++            container = if (urgent) Color.White else KalynoBlueSoft,
++            animateIcon = urgent
+         )
+         Spacer(Modifier.height(14.dp))
+         when {
+@@ -154,7 +164,7 @@ internal fun UrgentReviewModule(
+             }
+             else -> {
+                 Text(
+-                    text = total.toString(),
++                    text = shownTotal.toString(),
+                     color = KalynoRetryText,
+                     fontSize = 36.sp,
+                     fontWeight = FontWeight.ExtraBold
+@@ -205,7 +215,7 @@ internal fun UrgentReviewModule(
+ internal fun ResumeModule(lesson: LastLessonUi, onClick: () -> Unit, modifier: Modifier = Modifier) {
+     val progress = lesson.progress.coerceIn(0f, 1f)
+     KalynoCard(modifier = modifier, onClick = onClick) {
+-        ModuleHeader(icon = "rocket", title = "Reprendre l'aventure")
++        ModuleHeader(icon = "rocket", title = "Reprendre l'aventure", animateIcon = true)
+         Spacer(Modifier.height(14.dp))
+         if (lesson.subjectName.isNotBlank()) {
+             Text(
+@@ -281,8 +291,9 @@ internal fun ProgressModule(
+             }
+         } else {
+             if (masteredCount != null) {
++                val shownMastered = rememberCountUp(masteredCount, durationMillis = 900)
+                 StatValue(
+-                    value = masteredCount.toString(),
++                    value = shownMastered.toString(),
+                     label = if (masteredCount == 1) "notion maîtrisée" else "notions maîtrisées"
+                 )
+             }
+@@ -291,9 +302,30 @@ internal fun ProgressModule(
+             }
+             if (retentionScore != null) {
+                 val score = retentionScore.coerceIn(0f, 1f)
+-                StatValue(value = "${(score * 100).toInt()} %", label = "rétention estimée")
+-                Spacer(Modifier.height(6.dp))
+-                KalynoProgressBar(progress = score, height = 6.dp)
++                val shownPercent = rememberCountUp((score * 100).toInt(), durationMillis = 1100)
++                Row(verticalAlignment = Alignment.CenterVertically) {
++                    KalynoRing(
++                        progress = score,
++                        diameter = 64.dp,
++                        strokeWidth = 7.dp
++                    ) {
++                        Text(
++                            text = "$shownPercent%",
++                            color = KalynoText,
++                            fontSize = 14.sp,
++                            fontWeight = FontWeight.ExtraBold
++                        )
++                    }
++                    Spacer(Modifier.width(10.dp))
++                    Text(
++                        text = "rétention estimée",
++                        color = KalynoMuted,
++                        fontSize = 12.sp,
++                        lineHeight = 16.sp,
++                        fontWeight = FontWeight.Medium,
++                        modifier = Modifier.weight(1f)
++                    )
++                }
+             }
+             Spacer(Modifier.height(10.dp))
+             Spacer(Modifier.weight(1f))
+diff --git a/app/src/main/java/ci/kalyno/app/ui/main/AccueilScreen.kt b/app/src/main/java/ci/kalyno/app/ui/main/AccueilScreen.kt
+index 61dc306..15dda3e 100644
+--- a/app/src/main/java/ci/kalyno/app/ui/main/AccueilScreen.kt
++++ b/app/src/main/java/ci/kalyno/app/ui/main/AccueilScreen.kt
+@@ -4,6 +4,7 @@ import androidx.compose.animation.AnimatedVisibility
+ import androidx.compose.animation.expandVertically
+ import androidx.compose.animation.fadeIn
+ import androidx.compose.foundation.background
++import androidx.compose.foundation.border
+ import androidx.compose.foundation.layout.Arrangement
+ import androidx.compose.foundation.layout.Box
+ import androidx.compose.foundation.layout.BoxWithConstraints
+@@ -26,6 +27,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
+ import androidx.compose.foundation.verticalScroll
+ import androidx.compose.material3.Text
+ import androidx.compose.runtime.Composable
++import java.time.LocalTime
+ import androidx.compose.ui.Alignment
+ import androidx.compose.ui.Modifier
+ import androidx.compose.ui.draw.clip
+@@ -33,18 +35,29 @@ import androidx.compose.ui.graphics.Brush
+ import androidx.compose.ui.graphics.Color
+ import androidx.compose.ui.semantics.contentDescription
+ import androidx.compose.ui.semantics.semantics
++import androidx.compose.ui.graphics.graphicsLayer
+ import androidx.compose.ui.text.font.FontWeight
++import androidx.compose.ui.text.style.TextOverflow
+ import androidx.compose.ui.unit.dp
+ import androidx.compose.ui.unit.sp
+ import ci.kalyno.app.data.dashboard.DailyQuote
+ import ci.kalyno.app.data.dashboard.DashboardUiState
+ import ci.kalyno.app.data.dashboard.LastLessonUi
++import ci.kalyno.app.ui.components.DriftingBlob
+ import ci.kalyno.app.ui.components.KalynoErrorCard
++import ci.kalyno.app.ui.components.KalynoPrimaryButton
++import ci.kalyno.app.ui.components.KalynoProgressBar
++import ci.kalyno.app.ui.components.entrance
++import ci.kalyno.app.ui.components.rememberCountUp
++import ci.kalyno.app.ui.components.rememberPulse
+ import ci.kalyno.app.ui.icons.KalynoSvgIcon
+ import ci.kalyno.app.ui.theme.KalynoAmberDeep
+ import ci.kalyno.app.ui.theme.KalynoAmberSoft
+ import ci.kalyno.app.ui.theme.KalynoBackground
+ import ci.kalyno.app.ui.theme.KalynoBlue
++import ci.kalyno.app.ui.theme.KalynoBlueSoft
++import ci.kalyno.app.ui.theme.KalynoOutline
++import ci.kalyno.app.ui.theme.KalynoMuted
+ import ci.kalyno.app.ui.theme.KalynoTealDark
+ import ci.kalyno.app.ui.theme.KalynoText
+ import ci.kalyno.app.ui.theme.KalynoYellow
+@@ -71,7 +84,9 @@ fun AccueilScreen(
+     onResumeLastLesson: (LastLessonUi) -> Unit,
+     onShuffleQuote: () -> Unit = {},
+     onToggleFavoriteQuote: (DailyQuote) -> Unit = {},
+-    onOpenProgress: () -> Unit = {}
++    onOpenProgress: () -> Unit = {},
++    nickname: String = "",
++    onOpenExplorer: () -> Unit = {}
+ ) {
+     BoxWithConstraints(
+         modifier = Modifier
+@@ -98,18 +113,30 @@ fun AccueilScreen(
+                     .padding(horizontal = sidePadding, vertical = 16.dp),
+                 verticalArrangement = Arrangement.spacedBy(gap)
+             ) {
+-                HomeTopBar(streak = state.streak)
++                HomeTopBar(
++                    streak = state.streak,
++                    nickname = nickname.ifBlank { state.nickname },
++                    modifier = Modifier.entrance(0)
++                )
++
++                SessionHero(
++                    state = state,
++                    onReviewUrgent = onReviewUrgent,
++                    onResume = onResumeLastLesson,
++                    onExplore = onOpenExplorer,
++                    modifier = Modifier.entrance(1)
++                )
+ 
+                 AnimatedVisibility(
+                     visible = state.examDaysLeft != null,
+                     enter = fadeIn() + expandVertically()
+                 ) {
+                     state.examDaysLeft?.let { days ->
+-                        ExamHero(
++                        ExamStrip(
+                             daysLeft = days,
+                             label = state.examLabel,
+                             coachLine = coachLine(state),
+-                            wide = wide
++                            modifier = Modifier.entrance(2)
+                         )
+                     }
+                 }
+@@ -135,6 +162,7 @@ fun AccueilScreen(
+                             val slot = Modifier
+                                 .weight(1f)
+                                 .fillMaxHeight()
++                                .entrance(3 + modules.indexOf(module))
+                             when (module) {
+                                 HomeModule.QUOTE -> QuoteModule(
+                                     state = state,
+@@ -175,119 +203,269 @@ fun AccueilScreen(
+     }
+ }
+ 
+-// ---------- 1. Top bar épurée ----------
++// ---------- 1. En-tête : salutation + série ----------
++
++private fun greeting(): String {
++    val hour = LocalTime.now().hour
++    return when {
++        hour in 5..11 -> "Bonjour"
++        hour in 12..17 -> "Bon après-midi"
++        else -> "Bonsoir"
++    }
++}
+ 
+ @Composable
+-private fun HomeTopBar(streak: Int) {
++private fun HomeTopBar(streak: Int, nickname: String, modifier: Modifier = Modifier) {
+     val streakLabel = if (streak <= 1) "Série de $streak jour" else "Série de $streak jours"
++    val shownStreak = rememberCountUp(streak, durationMillis = 900)
++    // La flamme respire quand une série est en cours ; immobile sinon
++    val pulse = rememberPulse(min = 1f, max = 1.16f, durationMillis = 800)
++    val flameScale = if (streak > 0) pulse else 1f
++
+     Row(
+-        modifier = Modifier.fillMaxWidth(),
++        modifier = modifier.fillMaxWidth(),
+         verticalAlignment = Alignment.CenterVertically,
+         horizontalArrangement = Arrangement.SpaceBetween
+     ) {
+-        Text(
+-            text = "KALYNO",
+-            color = KalynoText,
+-            fontSize = 20.sp,
+-            fontWeight = FontWeight.ExtraBold,
+-            letterSpacing = 1.sp
+-        )
++        Column(modifier = Modifier.weight(1f)) {
++            Text(
++                text = "KALYNO",
++                color = KalynoBlue,
++                fontSize = 12.sp,
++                fontWeight = FontWeight.ExtraBold,
++                letterSpacing = 2.sp
++            )
++            Spacer(Modifier.height(2.dp))
++            Text(
++                text = if (nickname.isBlank()) greeting() else "${greeting()}, $nickname",
++                color = KalynoText,
++                fontSize = 24.sp,
++                lineHeight = 28.sp,
++                fontWeight = FontWeight.ExtraBold,
++                maxLines = 1,
++                overflow = TextOverflow.Ellipsis
++            )
++        }
++        Spacer(Modifier.width(12.dp))
+         Row(
+             verticalAlignment = Alignment.CenterVertically,
+             modifier = Modifier
+                 .semantics(mergeDescendants = true) { contentDescription = streakLabel }
+                 .clip(CircleShape)
+                 .background(KalynoAmberSoft)
+-                .padding(horizontal = 14.dp, vertical = 8.dp)
++                .padding(horizontal = 14.dp, vertical = 9.dp)
+         ) {
+-            KalynoSvgIcon(name = "flame", size = 18.dp, tint = KalynoYellow)
++            Box(
++                modifier = Modifier.graphicsLayer {
++                    scaleX = flameScale
++                    scaleY = flameScale
++                }
++            ) {
++                KalynoSvgIcon(name = "flame", size = 20.dp, tint = KalynoYellow)
++            }
+             Spacer(Modifier.width(6.dp))
+             Text(
+-                text = streak.toString(),
++                text = shownStreak.toString(),
+                 color = KalynoAmberDeep,
+-                fontSize = 15.sp,
++                fontSize = 17.sp,
+                 fontWeight = FontWeight.ExtraBold
+             )
+         }
+     }
+ }
+ 
+-// ---------- 2. Hero : compte à rebours (date et intitulé publiés par l'admin) ----------
++// ---------- 2. Hero : la session du jour (le déclencheur d'habitude) ----------
++
++/** Paliers de série qui donnent un but proche à atteindre. */
++private val STREAK_MILESTONES = listOf(3, 7, 14, 30, 60, 100, 200, 365)
+ 
+ @Composable
+-private fun ExamHero(daysLeft: Int, label: String?, coachLine: String?, wide: Boolean) {
+-    val shape = RoundedCornerShape(24.dp)
++private fun SessionHero(
++    state: DashboardUiState,
++    onReviewUrgent: () -> Unit,
++    onResume: (LastLessonUi) -> Unit,
++    onExplore: () -> Unit,
++    modifier: Modifier = Modifier
++) {
++    val urgent = state.urgentTotal
++    val lastLesson = state.lastLesson
++    val shownUrgent = rememberCountUp(urgent, durationMillis = 900)
++
++    val title: String
++    val subtitle: String
++    val cta: String
++    val action: () -> Unit
++    when {
++        urgent > 0 -> {
++            title = if (urgent == 1) "1 notion t'attend" else "$shownUrgent notions t'attendent"
++            subtitle = "Une session courte pour les ancrer durablement en mémoire."
++            cta = "Réviser maintenant"
++            action = onReviewUrgent
++        }
++        lastLesson != null -> {
++            title = "Tout est à jour"
++            subtitle = "Enchaîne avec « ${lastLesson.chapterTitle} »."
++            cta = "Reprendre l'aventure"
++            action = { onResume(lastLesson) }
++        }
++        else -> {
++            title = "Tout est à jour"
++            subtitle = "C'est le bon moment pour attaquer un nouveau chapitre."
++            cta = "Explorer les chapitres"
++            action = onExplore
++        }
++    }
++
++    val streak = state.streak
++    val nextMilestone = STREAK_MILESTONES.firstOrNull { it > streak }
++    val shape = RoundedCornerShape(28.dp)
++
+     Box(
+-        modifier = Modifier
++        modifier = modifier
+             .fillMaxWidth()
+             .clip(shape)
+             .background(Brush.linearGradient(listOf(KalynoBlue, KalynoTealDark)))
+     ) {
+-        // Cercle décoratif discret (n'agrandit pas la bannière)
+         Box(modifier = Modifier.matchParentSize()) {
+-            Box(
++            DriftingBlob(
+                 modifier = Modifier
+                     .align(Alignment.TopEnd)
+-                    .offset(x = 48.dp, y = (-48).dp)
+-                    .size(if (wide) 220.dp else 160.dp)
+-                    .clip(CircleShape)
+-                    .background(Color.White.copy(alpha = 0.08f))
++                    .offset(x = 56.dp, y = (-56).dp)
++                    .size(190.dp),
++                color = Color.White.copy(alpha = 0.09f)
++            )
++            DriftingBlob(
++                modifier = Modifier
++                    .align(Alignment.BottomStart)
++                    .offset(x = (-40).dp, y = 44.dp)
++                    .size(130.dp),
++                color = Color.White.copy(alpha = 0.06f),
++                durationMillis = 6800
+             )
+         }
+-        Column(modifier = Modifier.padding(if (wide) 32.dp else 22.dp)) {
+-            Row(verticalAlignment = Alignment.CenterVertically) {
+-                KalynoSvgIcon(name = "calendar", size = 16.dp, tint = Color.White.copy(alpha = 0.85f))
+-                Spacer(Modifier.width(8.dp))
+-                Text(
+-                    text = "COMPTE À REBOURS",
+-                    color = Color.White.copy(alpha = 0.85f),
+-                    fontSize = 12.sp,
+-                    fontWeight = FontWeight.ExtraBold,
+-                    letterSpacing = 1.sp
+-                )
+-            }
+-            Spacer(Modifier.height(10.dp))
++        Column(modifier = Modifier.padding(22.dp)) {
+             Text(
+-                text = if (daysLeft == 0) "Jour J" else "J-$daysLeft",
++                text = "TA SESSION DU JOUR",
++                color = Color.White.copy(alpha = 0.8f),
++                fontSize = 11.sp,
++                fontWeight = FontWeight.ExtraBold,
++                letterSpacing = 1.5.sp
++            )
++            Spacer(Modifier.height(8.dp))
++            Text(
++                text = title,
+                 color = Color.White,
+-                fontSize = if (wide) 56.sp else 44.sp,
++                fontSize = 28.sp,
++                lineHeight = 32.sp,
+                 fontWeight = FontWeight.ExtraBold
+             )
+-            if (daysLeft > 0) {
+-                Text(
+-                    text = "avant les épreuves",
+-                    color = Color.White.copy(alpha = 0.9f),
+-                    fontSize = 15.sp,
+-                    fontWeight = FontWeight.Medium
+-                )
++            Spacer(Modifier.height(6.dp))
++            Text(
++                text = subtitle,
++                color = Color.White.copy(alpha = 0.9f),
++                fontSize = 14.sp,
++                lineHeight = 20.sp,
++                maxLines = 3,
++                overflow = TextOverflow.Ellipsis
++            )
++            Spacer(Modifier.height(18.dp))
++            KalynoPrimaryButton(
++                label = cta,
++                onClick = action,
++                height = 52.dp,
++                container = Color.White,
++                content = KalynoBlue
++            )
++
++            // Série : un objectif proche donne envie de ne pas la casser
++            Spacer(Modifier.height(18.dp))
++            val streakLine = when {
++                streak <= 0 -> "Lance ta série aujourd'hui : un jour, puis un autre."
++                nextMilestone == null -> "$streak jours d'affilée : tu es une légende."
++                else -> {
++                    val left = (nextMilestone ?: streak) - streak
++                    val unit = if (left == 1) "jour" else "jours"
++                    "Série de $streak : encore $left $unit pour atteindre $nextMilestone."
++                }
+             }
+-            if (!label.isNullOrBlank()) {
++            Row(verticalAlignment = Alignment.CenterVertically) {
++                KalynoSvgIcon(name = "flame", size = 16.dp, tint = KalynoYellow)
++                Spacer(Modifier.width(8.dp))
+                 Text(
+-                    text = label,
++                    text = streakLine,
+                     color = Color.White,
+-                    fontSize = 18.sp,
+-                    fontWeight = FontWeight.ExtraBold
++                    fontSize = 13.sp,
++                    fontWeight = FontWeight.SemiBold,
++                    lineHeight = 18.sp
+                 )
+             }
++            if (nextMilestone != null && streak > 0) {
++                Spacer(Modifier.height(8.dp))
++                KalynoProgressBar(
++                    progress = streak.toFloat() / nextMilestone.toFloat(),
++                    height = 6.dp,
++                    color = KalynoYellow,
++                    track = Color.White.copy(alpha = 0.22f)
++                )
++            }
++        }
++    }
++}
++
++// ---------- 3. Compte à rebours (date et intitulé publiés par l'admin) ----------
++
++@Composable
++private fun ExamStrip(
++    daysLeft: Int,
++    label: String?,
++    coachLine: String?,
++    modifier: Modifier = Modifier
++) {
++    val shown = rememberCountUp(daysLeft, durationMillis = 1000)
++    val shape = RoundedCornerShape(24.dp)
++    Row(
++        modifier = modifier
++            .fillMaxWidth()
++            .clip(shape)
++            .background(Color.White)
++            .border(1.dp, KalynoOutline, shape)
++            .padding(14.dp),
++        verticalAlignment = Alignment.CenterVertically
++    ) {
++        Column(
++            horizontalAlignment = Alignment.CenterHorizontally,
++            modifier = Modifier
++                .clip(RoundedCornerShape(18.dp))
++                .background(KalynoBlueSoft)
++                .padding(horizontal = 16.dp, vertical = 12.dp)
++        ) {
++            Text(
++                text = if (daysLeft == 0) "Jour J" else "J-$shown",
++                color = KalynoBlue,
++                fontSize = 26.sp,
++                fontWeight = FontWeight.ExtraBold
++            )
++        }
++        Spacer(Modifier.width(14.dp))
++        Column(modifier = Modifier.weight(1f)) {
++            Text(
++                text = if (!label.isNullOrBlank()) label else "avant les épreuves",
++                color = KalynoText,
++                fontSize = 15.sp,
++                fontWeight = FontWeight.ExtraBold,
++                maxLines = 2,
++                overflow = TextOverflow.Ellipsis
++            )
+             if (!coachLine.isNullOrBlank()) {
+-                Spacer(Modifier.height(14.dp))
+-                Row(
+-                    modifier = Modifier
+-                        .clip(RoundedCornerShape(14.dp))
+-                        .background(Color.White.copy(alpha = 0.14f))
+-                        .padding(horizontal = 14.dp, vertical = 10.dp),
+-                    verticalAlignment = Alignment.CenterVertically
+-                ) {
+-                    KalynoSvgIcon(name = "message-circle", size = 16.dp, tint = KalynoYellow)
+-                    Spacer(Modifier.width(8.dp))
+-                    Text(
+-                        text = coachLine,
+-                        color = Color.White,
+-                        fontSize = 13.sp,
+-                        fontWeight = FontWeight.SemiBold,
+-                        lineHeight = 18.sp
+-                    )
+-                }
++                Spacer(Modifier.height(3.dp))
++                Text(
++                    text = coachLine,
++                    color = KalynoMuted,
++                    fontSize = 12.sp,
++                    lineHeight = 17.sp,
++                    maxLines = 3,
++                    overflow = TextOverflow.Ellipsis
++                )
+             }
+         }
+     }
+diff --git a/app/src/main/java/ci/kalyno/app/ui/main/KalynoBottomBar.kt b/app/src/main/java/ci/kalyno/app/ui/main/KalynoBottomBar.kt
+new file mode 100644
+index 0000000..0039611
+--- /dev/null
++++ b/app/src/main/java/ci/kalyno/app/ui/main/KalynoBottomBar.kt
+@@ -0,0 +1,200 @@
++package ci.kalyno.app.ui.main
++
++import androidx.compose.animation.AnimatedVisibility
++import androidx.compose.animation.animateColorAsState
++import androidx.compose.animation.core.FastOutSlowInEasing
++import androidx.compose.animation.core.Spring
++import androidx.compose.animation.core.animateFloatAsState
++import androidx.compose.animation.core.spring
++import androidx.compose.animation.core.tween
++import androidx.compose.animation.expandHorizontally
++import androidx.compose.animation.fadeIn
++import androidx.compose.animation.fadeOut
++import androidx.compose.animation.shrinkHorizontally
++import androidx.compose.foundation.background
++import androidx.compose.foundation.border
++import androidx.compose.foundation.clickable
++import androidx.compose.foundation.interaction.MutableInteractionSource
++import androidx.compose.foundation.interaction.collectIsPressedAsState
++import androidx.compose.foundation.layout.Arrangement
++import androidx.compose.foundation.layout.Box
++import androidx.compose.foundation.layout.Row
++import androidx.compose.foundation.layout.Spacer
++import androidx.compose.foundation.layout.fillMaxWidth
++import androidx.compose.foundation.layout.height
++import androidx.compose.foundation.layout.navigationBarsPadding
++import androidx.compose.foundation.layout.padding
++import androidx.compose.foundation.layout.width
++import androidx.compose.foundation.shape.RoundedCornerShape
++import androidx.compose.material3.Text
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.getValue
++import androidx.compose.runtime.remember
++import androidx.compose.ui.Alignment
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.draw.clip
++import androidx.compose.ui.draw.shadow
++import androidx.compose.ui.graphics.Color
++import androidx.compose.ui.graphics.graphicsLayer
++import androidx.compose.ui.hapticfeedback.HapticFeedbackType
++import androidx.compose.ui.platform.LocalHapticFeedback
++import androidx.compose.ui.semantics.Role
++import androidx.compose.ui.semantics.contentDescription
++import androidx.compose.ui.semantics.role
++import androidx.compose.ui.semantics.selected
++import androidx.compose.ui.semantics.semantics
++import androidx.compose.ui.text.font.FontWeight
++import androidx.compose.ui.text.style.TextOverflow
++import androidx.compose.ui.unit.dp
++import androidx.compose.ui.unit.sp
++import ci.kalyno.app.ui.icons.KalynoSvgIcon
++import ci.kalyno.app.ui.theme.KalynoBlue
++import ci.kalyno.app.ui.theme.KalynoBlueSoft
++import ci.kalyno.app.ui.theme.KalynoMuted
++import ci.kalyno.app.ui.theme.KalynoOutline
++import ci.kalyno.app.ui.theme.KalynoShadow
++
++data class BottomBarItem(val icon: String, val label: String)
++
++/**
++ * Barre de navigation flottante : capsule blanche détachée du bas de l'écran.
++ * L'onglet actif s'élargit en douceur, révèle son libellé et rebondit ; les autres restent
++ * réduits à leur icône pour laisser respirer les six destinations.
++ */
++@Composable
++fun KalynoBottomBar(
++    items: List<BottomBarItem>,
++    selected: Int,
++    onSelect: (Int) -> Unit,
++    modifier: Modifier = Modifier
++) {
++    val haptic = LocalHapticFeedback.current
++    val shape = RoundedCornerShape(28.dp)
++
++    Box(
++        modifier = modifier
++            .fillMaxWidth()
++            .navigationBarsPadding()
++            .padding(horizontal = 12.dp, vertical = 8.dp)
++    ) {
++        Row(
++            modifier = Modifier
++                .fillMaxWidth()
++                .shadow(
++                    elevation = 12.dp,
++                    shape = shape,
++                    ambientColor = KalynoShadow,
++                    spotColor = KalynoShadow
++                )
++                .clip(shape)
++                .background(Color.White)
++                .border(1.dp, KalynoOutline, shape)
++                .padding(6.dp),
++            verticalAlignment = Alignment.CenterVertically,
++            horizontalArrangement = Arrangement.spacedBy(2.dp)
++        ) {
++            items.forEachIndexed { index, item ->
++                val isSelected = index == selected
++                val weight by animateFloatAsState(
++                    targetValue = if (isSelected) 2.6f else 1f,
++                    animationSpec = tween(durationMillis = 320, easing = FastOutSlowInEasing),
++                    label = "barWeight"
++                )
++                BarItem(
++                    item = item,
++                    selected = isSelected,
++                    onClick = {
++                        if (!isSelected) {
++                            haptic.performHapticFeedback(HapticFeedbackType.ContextClick)
++                            onSelect(index)
++                        }
++                    },
++                    modifier = Modifier.weight(weight)
++                )
++            }
++        }
++    }
++}
++
++@Composable
++private fun BarItem(
++    item: BottomBarItem,
++    selected: Boolean,
++    onClick: () -> Unit,
++    modifier: Modifier = Modifier
++) {
++    val interaction = remember { MutableInteractionSource() }
++    val pressed by interaction.collectIsPressedAsState()
++
++    val pressScale by animateFloatAsState(
++        targetValue = if (pressed) 0.9f else 1f,
++        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
++        label = "barPress"
++    )
++    val iconScale by animateFloatAsState(
++        targetValue = if (selected) 1.12f else 1f,
++        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
++        label = "barIconScale"
++    )
++    val container by animateColorAsState(
++        targetValue = if (selected) KalynoBlueSoft else Color.Transparent,
++        animationSpec = tween(durationMillis = 260),
++        label = "barContainer"
++    )
++    val tint by animateColorAsState(
++        targetValue = if (selected) KalynoBlue else KalynoMuted,
++        animationSpec = tween(durationMillis = 260),
++        label = "barTint"
++    )
++
++    Box(
++        modifier = modifier
++            .height(48.dp)
++            .graphicsLayer {
++                scaleX = pressScale
++                scaleY = pressScale
++            }
++            .clip(RoundedCornerShape(22.dp))
++            .background(container)
++            .clickable(
++                interactionSource = interaction,
++                indication = null,
++                onClick = onClick
++            )
++            .semantics {
++                role = Role.Tab
++                this.selected = selected
++                contentDescription = item.label
++            },
++        contentAlignment = Alignment.Center
++    ) {
++        Row(verticalAlignment = Alignment.CenterVertically) {
++            Box(
++                modifier = Modifier.graphicsLayer {
++                    scaleX = iconScale
++                    scaleY = iconScale
++                }
++            ) {
++                KalynoSvgIcon(name = item.icon, size = 22.dp, tint = tint)
++            }
++            AnimatedVisibility(
++                visible = selected,
++                enter = fadeIn(tween(220, delayMillis = 80)) + expandHorizontally(tween(300)),
++                exit = fadeOut(tween(90)) + shrinkHorizontally(tween(220))
++            ) {
++                Row {
++                    Spacer(Modifier.width(5.dp))
++                    Text(
++                        text = item.label,
++                        color = KalynoBlue,
++                        fontSize = 11.sp,
++                        fontWeight = FontWeight.ExtraBold,
++                        maxLines = 1,
++                        softWrap = false,
++                        overflow = TextOverflow.Clip
++                    )
++                }
++            }
++        }
++    }
++}
+diff --git a/app/src/main/java/ci/kalyno/app/ui/main/MainScreen.kt b/app/src/main/java/ci/kalyno/app/ui/main/MainScreen.kt
+index 233e7d6..798d402 100644
+--- a/app/src/main/java/ci/kalyno/app/ui/main/MainScreen.kt
++++ b/app/src/main/java/ci/kalyno/app/ui/main/MainScreen.kt
+@@ -1,6 +1,15 @@
+ package ci.kalyno.app.ui.main
+ 
+ import androidx.activity.compose.BackHandler
++import androidx.compose.animation.AnimatedContent
++import androidx.compose.animation.ContentTransform
++import androidx.compose.animation.core.FastOutSlowInEasing
++import androidx.compose.animation.core.tween
++import androidx.compose.animation.fadeIn
++import androidx.compose.animation.fadeOut
++import androidx.compose.animation.slideInHorizontally
++import androidx.compose.animation.slideOutHorizontally
++import androidx.compose.animation.togetherWith
+ import androidx.compose.foundation.BorderStroke
+ import androidx.compose.foundation.background
+ import androidx.compose.foundation.clickable
+@@ -146,27 +155,11 @@ fun MainScreen(
+             containerColor = KalynoBackground,
+             snackbarHost = { ReportSnackbarHost(reportLayer) },
+             bottomBar = {
+-                NavigationBar(containerColor = Color.White) {
+-                    TABS.forEachIndexed { index, item ->
+-                        NavigationBarItem(
+-                            selected = tab == index,
+-                            onClick = { tab = index },
+-                            icon = { KalynoSvgIcon(name = item.icon, size = 24.dp, tint = if (tab == index) KalynoBlue else KalynoMuted) },
+-                            label = {
+-                                Text(
+-                                    item.label,
+-                                    fontSize = 12.sp,
+-                                    fontWeight = FontWeight.Bold
+-                                )
+-                            },
+-                            colors = NavigationBarItemDefaults.colors(
+-                                selectedTextColor = KalynoBlue,
+-                                unselectedTextColor = KalynoMuted,
+-                                indicatorColor = KalynoBlueSoft
+-                            )
+-                        )
+-                    }
+-                }
++                KalynoBottomBar(
++                    items = TABS.map { BottomBarItem(it.icon, it.label) },
++                    selected = tab,
++                    onSelect = { tab = it }
++                )
+             }
+         ) { padding ->
+             ReportSheetHost(reportLayer)
+@@ -175,13 +168,20 @@ fun MainScreen(
+                     .fillMaxSize()
+                     .padding(padding)
+             ) {
+-                when (tab) {
++                AnimatedContent(
++                    targetState = tab,
++                    transitionSpec = { tabTransition(initialState, targetState) },
++                    label = "tabContent"
++                ) { current ->
++                when (current) {
+                     0 -> AccueilScreen(
+                         state = state,
+                         onStartMission = viewModel::startMission,
+                         onReviewUrgent = viewModel::startUrgentReview,
+                         onRetry = viewModel::retry,
+-                        onResumeLastLesson = { tab = 2 }, // ouvre l'onglet Explorer
++                        onResumeLastLesson = { tab = 3 }, // ouvre l'onglet Explorer
++                        nickname = nickname,
++                        onOpenExplorer = { tab = 3 },
+                         onShuffleQuote = viewModel::shuffleQuote,
+                         onToggleFavoriteQuote = viewModel::toggleFavorite,
+                         onOpenProgress = { progressOpen = true }
+@@ -221,7 +221,17 @@ fun MainScreen(
+                         )
+                     }
+                 }
++                }
+             }
+         }
+     }
+ }
++
++/** Transition entre onglets : fondu + léger glissement dans le sens de la navigation. */
++private fun tabTransition(from: Int, to: Int): ContentTransform {
++    val dir = if (to > from) 1 else -1
++    return (fadeIn(tween(240, delayMillis = 50)) +
++        slideInHorizontally(tween(300, easing = FastOutSlowInEasing)) { full -> full / 12 * dir }) togetherWith
++        (fadeOut(tween(110)) +
++            slideOutHorizontally(tween(200, easing = FastOutSlowInEasing)) { full -> -full / 16 * dir })
++}
+diff --git a/app/src/main/java/ci/kalyno/app/ui/profile/ProfileScreen.kt b/app/src/main/java/ci/kalyno/app/ui/profile/ProfileScreen.kt
+index 10cfcd7..d126850 100644
+--- a/app/src/main/java/ci/kalyno/app/ui/profile/ProfileScreen.kt
++++ b/app/src/main/java/ci/kalyno/app/ui/profile/ProfileScreen.kt
+@@ -1,5 +1,16 @@
+ package ci.kalyno.app.ui.profile
+ 
++import ci.kalyno.app.ui.theme.KalynoTealDark
++import ci.kalyno.app.ui.components.rememberPulse
++import ci.kalyno.app.ui.components.DriftingBlob
++import androidx.compose.ui.graphics.graphicsLayer
++import androidx.compose.ui.graphics.Brush
++import androidx.compose.runtime.remember
++import androidx.compose.runtime.LaunchedEffect
++import androidx.compose.foundation.layout.offset
++import androidx.compose.animation.core.spring
++import androidx.compose.animation.core.Spring
++import androidx.compose.animation.core.Animatable
+ import androidx.compose.foundation.background
+ import androidx.compose.foundation.border
+ import androidx.compose.foundation.clickable
+@@ -324,29 +335,75 @@ private fun ProfileHeader(
+     onEditNickname: () -> Unit
+ ) {
+     val haptic = rememberHaptic()
+-    SettingsCard {
++    val shape = RoundedCornerShape(28.dp)
++
++    // L'avatar entre avec un ressort élastique, un halo respire derrière lui
++    val pop = remember { Animatable(0f) }
++    LaunchedEffect(Unit) {
++        pop.animateTo(1f, spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow))
++    }
++    val halo = rememberPulse(min = 1f, max = 1.14f, durationMillis = 1800)
++
++    Box(
++        modifier = Modifier
++            .fillMaxWidth()
++            .clip(shape)
++            .background(Brush.linearGradient(listOf(KalynoBlue, KalynoTealDark)))
++    ) {
++        Box(modifier = Modifier.matchParentSize()) {
++            DriftingBlob(
++                modifier = Modifier
++                    .align(Alignment.TopEnd)
++                    .offset(x = 50.dp, y = (-50).dp)
++                    .size(180.dp)
++            )
++            DriftingBlob(
++                modifier = Modifier
++                    .align(Alignment.BottomStart)
++                    .offset(x = (-36).dp, y = 40.dp)
++                    .size(120.dp),
++                color = Color.White.copy(alpha = 0.06f),
++                durationMillis = 6800
++            )
++        }
+         Column(
+             modifier = Modifier
+                 .fillMaxWidth()
+-                .padding(horizontal = 20.dp, vertical = 26.dp),
++                .padding(horizontal = 20.dp, vertical = 28.dp),
+             horizontalAlignment = Alignment.CenterHorizontally
+         ) {
+-            // Avatar : bordure Vert Pétrole + fond teinté + initiale
+-            Box(
+-                modifier = Modifier
+-                    .size(92.dp)
+-                    .border(3.dp, KalynoBlue, CircleShape)
+-                    .padding(5.dp)
+-                    .clip(CircleShape)
+-                    .background(KalynoBlueSoft),
+-                contentAlignment = Alignment.Center
+-            ) {
+-                Text(
+-                    text = nickname.trim().take(1).uppercase().ifEmpty { "K" },
+-                    color = KalynoBlue,
+-                    fontSize = 36.sp,
+-                    fontWeight = FontWeight.ExtraBold
++            // Avatar : halo translucide + anneau blanc + initiale
++            Box(contentAlignment = Alignment.Center) {
++                Box(
++                    modifier = Modifier
++                        .size(104.dp)
++                        .graphicsLayer {
++                            scaleX = halo
++                            scaleY = halo
++                        }
++                        .clip(CircleShape)
++                        .background(Color.White.copy(alpha = 0.16f))
+                 )
++                Box(
++                    modifier = Modifier
++                        .graphicsLayer {
++                            scaleX = pop.value
++                            scaleY = pop.value
++                        }
++                        .size(92.dp)
++                        .border(3.dp, Color.White, CircleShape)
++                        .padding(5.dp)
++                        .clip(CircleShape)
++                        .background(Color.White),
++                    contentAlignment = Alignment.Center
++                ) {
++                    Text(
++                        text = nickname.trim().take(1).uppercase().ifEmpty { "K" },
++                        color = KalynoBlue,
++                        fontSize = 36.sp,
++                        fontWeight = FontWeight.ExtraBold
++                    )
++                }
+             }
+ 
+             Spacer(Modifier.height(14.dp))
+@@ -364,7 +421,7 @@ private fun ProfileHeader(
+             ) {
+                 Text(
+                     text = nickname.ifBlank { "Élève" },
+-                    color = KalynoText,
++                    color = Color.White,
+                     fontSize = 24.sp,
+                     fontWeight = FontWeight.ExtraBold,
+                     textAlign = TextAlign.Center,
+@@ -376,13 +433,18 @@ private fun ProfileHeader(
+                 Icon(
+                     imageVector = Icons.Default.Edit,
+                     contentDescription = null,
+-                    tint = KalynoBlue,
++                    tint = Color.White.copy(alpha = 0.9f),
+                     modifier = Modifier.size(18.dp)
+                 )
+             }
+ 
+             Spacer(Modifier.height(6.dp))
+-            KalynoPill(text = classLabel, fontSize = 13)
++            KalynoPill(
++                text = classLabel,
++                fontSize = 13,
++                container = Color.White.copy(alpha = 0.18f),
++                content = Color.White
++            )
+             Spacer(Modifier.height(14.dp))
+             StreakChip(streak)
+         }
+diff --git a/app/src/main/java/ci/kalyno/app/ui/review/ReviewSessionScreen.kt b/app/src/main/java/ci/kalyno/app/ui/review/ReviewSessionScreen.kt
+index 9c82816..267e788 100644
+--- a/app/src/main/java/ci/kalyno/app/ui/review/ReviewSessionScreen.kt
++++ b/app/src/main/java/ci/kalyno/app/ui/review/ReviewSessionScreen.kt
+@@ -62,7 +62,10 @@ import ci.kalyno.app.data.dashboard.ReviewSession
+ import ci.kalyno.app.data.srs.ReviewRating
+ import ci.kalyno.app.ui.components.KalynoCard
+ import ci.kalyno.app.ui.components.KalynoPill
++import ci.kalyno.app.ui.components.CelebrationChip
++import ci.kalyno.app.ui.components.KalynoCelebration
+ import ci.kalyno.app.ui.components.KalynoPrimaryButton
++import ci.kalyno.app.ui.dojo.DojoMessages
+ import ci.kalyno.app.ui.components.StreakBadge
+ import ci.kalyno.app.ui.components.rememberHaptic
+ import ci.kalyno.app.ui.theme.KalynoAmberDeep
+@@ -95,6 +98,7 @@ fun ReviewSessionScreen(
+     val haptic = rememberHaptic()
+     val context = LocalContext.current
+     val dayStreak = remember { StreakStore(context.applicationContext).current() }
++    val streakAfter = remember { StreakStore(context.applicationContext).projectedAfterCompletion() }
+ 
+     var index by rememberSaveable(session.id) { mutableIntStateOf(0) }
+     var forgotten by rememberSaveable(session.id) { mutableIntStateOf(0) }
+@@ -138,6 +142,8 @@ fun ReviewSessionScreen(
+                     forgotten = forgotten,
+                     hesitated = hesitated,
+                     easy = easy,
++                    streakBefore = dayStreak,
++                    streakAfter = streakAfter,
+                     onDone = { onClose(true) }
+                 )
+             } else {
+@@ -736,55 +742,34 @@ private fun Finished(
+     forgotten: Int,
+     hesitated: Int,
+     easy: Int,
++    streakBefore: Int,
++    streakAfter: Int,
+     onDone: () -> Unit
+ ) {
+-    Column(
+-        modifier = Modifier
+-            .fillMaxSize()
+-            .padding(24.dp),
+-        verticalArrangement = Arrangement.Center,
+-        horizontalAlignment = Alignment.CenterHorizontally
++    val kept = if (total > 0) (total - forgotten).toFloat() / total else 0f
++    val good = total > 0 && forgotten * 100 <= total * 40
++    val message = remember { if (good) DojoMessages.congrats() else DojoMessages.encourage() }
++
++    KalynoCelebration(
++        good = good,
++        title = "Session terminée !",
++        subtitle = if (total == 1) "1 carte révisée" else "$total cartes révisées",
++        message = message,
++        score = kept,
++        scoreCaption = "NOTIONS RETENUES",
++        streakBefore = streakBefore,
++        streakAfter = streakAfter,
++        buttonLabel = "TERMINER",
++        onDone = onDone
+     ) {
+-        Text("🎉", fontSize = 64.sp)
+-        Spacer(Modifier.height(12.dp))
+-        Text(
+-            text = "Session terminée !",
+-            color = KalynoText,
+-            fontSize = 28.sp,
+-            fontWeight = FontWeight.ExtraBold,
+-            textAlign = TextAlign.Center
+-        )
+-        Spacer(Modifier.height(8.dp))
+-        Text(
+-            text = if (total == 1) "1 carte révisée" else "$total cartes révisées",
+-            color = KalynoMuted,
+-            fontSize = 16.sp
+-        )
+-        Spacer(Modifier.height(24.dp))
+         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+-            SummaryChip("🔴", forgotten, KalynoDangerSoft, KalynoDanger)
+-            SummaryChip("🟡", hesitated, KalynoAmberSoft, KalynoAmberDeep)
+-            SummaryChip("🟢", easy, KalynoCorrectSoft, KalynoCorrectText)
++            CelebrationChip("oubliées", forgotten, KalynoDangerSoft, KalynoDanger, Modifier.weight(1f))
++            CelebrationChip("hésitées", hesitated, KalynoAmberSoft, KalynoAmberDeep, Modifier.weight(1f))
++            CelebrationChip("faciles", easy, KalynoCorrectSoft, KalynoCorrectText, Modifier.weight(1f))
+         }
+-        Spacer(Modifier.height(32.dp))
+-        KalynoPrimaryButton(label = "TERMINER", onClick = onDone)
+     }
+ }
+ 
+-@Composable
+-private fun SummaryChip(emoji: String, count: Int, container: Color, content: Color) {
+-    Text(
+-        text = "$emoji $count",
+-        color = content,
+-        fontSize = 16.sp,
+-        fontWeight = FontWeight.ExtraBold,
+-        modifier = Modifier
+-            .clip(CircleShape)
+-            .background(container)
+-            .padding(horizontal = 18.dp, vertical = 10.dp)
+-    )
+-}
+-
+ // ---------------------------------------------------------------------------
+ // Utilitaires purs
+ // ---------------------------------------------------------------------------
