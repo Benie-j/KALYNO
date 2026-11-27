@@ -2,6 +2,7 @@ package ci.kalyno.app.ui.dojo
 
 import android.app.Application
 import android.os.SystemClock
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import ci.kalyno.app.data.dashboard.DashboardRepository
@@ -463,7 +464,7 @@ class DojoViewModel(app: Application) : AndroidViewModel(app) {
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
-                    // tentative non enregistrée : la session continue
+                    Log.e("KalynoDojo", "Échec d'enregistrement local d'une tentative Dojo", e)
                 }
                 try {
                     val days = repository.rate(studentId, cardId, rating, levelId, latencyMs = lastLatencyMs)
@@ -478,7 +479,7 @@ class DojoViewModel(app: Application) : AndroidViewModel(app) {
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
-                    // Une écriture perdue ne doit pas bloquer la session
+                    Log.e("KalynoDojo", "Échec d'enregistrement de la progression FSRS", e)
                 }
             }
         }

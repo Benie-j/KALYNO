@@ -83,6 +83,13 @@ interface DashboardDao {
     )
     suspend fun progressReviewedSince(studentId: String, since: Long, limit: Int): List<CardProgressEntity>
 
+    /** Rejeu complet idempotent : aucun élément ne saute si plusieurs cartes ont le même horodatage. */
+    @Query(
+        "SELECT * FROM card_progress WHERE studentId = :studentId AND lastReviewedAt IS NOT NULL " +
+            "ORDER BY lastReviewedAt ASC, flashcardId ASC"
+    )
+    suspend fun allReviewedProgress(studentId: String): List<CardProgressEntity>
+
     @Query("SELECT * FROM card_progress WHERE studentId = :studentId AND flashcardId IN (:ids)")
     suspend fun progressByIds(studentId: String, ids: List<String>): List<CardProgressEntity>
 

@@ -9,6 +9,7 @@ import ci.kalyno.app.data.StreakStore
 import ci.kalyno.app.data.auth.AuthStore
 import ci.kalyno.app.data.auth.SupabaseAuthApi
 import ci.kalyno.app.data.dashboard.KalynoDatabase
+import ci.kalyno.app.data.progress.DojoAttemptEntity
 import ci.kalyno.app.data.srs.CardProgressEntity
 import ci.kalyno.app.data.srs.ReviewLogEntity
 import ci.kalyno.app.data.srs.ReviewRating
@@ -42,6 +43,7 @@ class CloudSync(context: Context) {
     private val dao = KalynoDatabase.get(appContext).dashboardDao()
     private val lessonDao = KalynoDatabase.get(appContext).lessonProgressDao()
     private val sessionDao = KalynoDatabase.get(appContext).sessionProgressDao()
+    private val attemptDao = KalynoDatabase.get(appContext).attemptDao()
 
     /** Profil du compte, ou null s'il n'existe pas encore. */
     suspend fun fetchProfile(): RemoteProfile? = withContext(Dispatchers.IO) {
@@ -112,6 +114,8 @@ class CloudSync(context: Context) {
         step("séances envoyées") { pushSessions(studentId, userId, token) }
         step("historique reçu") { pullLogs(studentId, userId, token) }
         step("historique envoyé") { pushLogs(studentId, userId, token) }
+        step("tentatives Dojo reçues") { pullDojoAttempts(studentId, userId, token) }
+        step("tentatives Dojo envoyées") { pushDojoAttempts(studentId, userId, token) }
 
         // La série a sa propre étape : une erreur ici n'empêche pas les autres, et ne bloque pas le drapeau d'envoi complet
         var streakError: Exception? = null
@@ -198,12 +202,13 @@ class CloudSync(context: Context) {
             if (extended) ",success_count,fail_count,relearn_left,avg_latency_ms,dojo_stage" else ""
 
     /** Lit une page de cartes ; si le serveur ne connaît pas encore les nouvelles colonnes, repli sur l'ancien format. */
-    private fun fetchCards(userId: String, since: Long, token: String): JSONArray {
+    private fun fetchCards(userId: String, offset: Int, token: String): JSONArray {
         fun get(extended: Boolean) = JSONArray(
             SupabaseRest.request(
                 "GET",
-                "student_card_progress?user_id=eq.$userId&last_reviewed_at=gt.$since" +
-                    "&select=${cardSelect(extended)}&order=last_reviewed_at.asc&limit=$PAGE_SIZE",
+                "student_card_progress?user_id=eq.$userId" +
+                    "&select=${cardSelect(extended)}&order=last_reviewed_at.asc,flashcard_id.asc" +
+                    "&limit=$PAGE_SIZE&offset=$offset",
                 token
             )
         )
@@ -219,26 +224,18 @@ class CloudSync(context: Context) {
     }
 
     private suspend fun pull(studentId: String, userId: String, token: String) {
-        var since = store.lastPullAt()
-        var maxSeen = since
-        var allApplied = true
-
+        var offset = 0
         while (true) {
-            val rows = fetchCards(userId, since, token)
+            val rows = fetchCards(userId, offset, token)
             if (rows.length() == 0) break
-
             val remote = (0 until rows.length()).map { rows.getJSONObject(it) }
             val ids = remote.map { it.getString("flashcard_id") }
             val existing = ids.chunked(500).flatMap { dao.existingFlashcardIds(it) }.toSet()
             val local = ids.chunked(500).flatMap { dao.progressByIds(studentId, it) }.associateBy { it.flashcardId }
-
             val toSave = remote.mapNotNull { r ->
                 val id = r.getString("flashcard_id")
                 val reviewedAt = r.getLong("last_reviewed_at")
-                if (id !in existing) {
-                    allApplied = false // contenu pas (encore) présent sur ce téléphone
-                    return@mapNotNull null
-                }
+                if (id !in existing) return@mapNotNull null
                 val mine = local[id]
                 if (mine != null && (mine.lastReviewedAt ?: 0L) >= reviewedAt) null
                 else CardProgressEntity(
@@ -261,14 +258,9 @@ class CloudSync(context: Context) {
                 )
             }
             if (toSave.isNotEmpty()) dao.upsertProgress(toSave)
-
-            since = remote.maxOf { it.getLong("last_reviewed_at") }
-            maxSeen = maxOf(maxSeen, since)
+            offset += rows.length()
             if (rows.length() < PAGE_SIZE) break
         }
-
-        // On n'avance le repère que si tout a pu être appliqué : sinon on retentera au prochain passage
-        if (allApplied) store.setLastPullAt(maxSeen)
     }
 
     private fun cardJson(p: CardProgressEntity, userId: String, extended: Boolean): JSONObject {
@@ -338,18 +330,8 @@ class CloudSync(context: Context) {
     }
 
     private suspend fun push(studentId: String, userId: String, token: String) {
-        var since = store.lastPushAt()
-
-        while (true) {
-            val rows = dao.progressReviewedSince(studentId, since, PUSH_BATCH)
-            if (rows.isEmpty()) break
-
-            postCards(rows, userId, token)
-
-            // Le repère n'avance qu'après un envoi réussi : un échec est rejoué au prochain passage
-            since = rows.last().lastReviewedAt ?: since
-            store.setLastPushAt(since)
-            if (rows.size < PUSH_BATCH) break
+        dao.allReviewedProgress(studentId).chunked(PUSH_BATCH).forEach { batch ->
+            postCards(batch, userId, token)
         }
     }
 
@@ -359,12 +341,13 @@ class CloudSync(context: Context) {
         "flashcard_id,rating,interval_before,interval_after,reviewed_at" +
             if (extended) ",latency_ms,retrievability_before" else ""
 
-    private fun fetchLogs(userId: String, since: Long, token: String): JSONArray {
+    private fun fetchLogs(userId: String, offset: Int, token: String): JSONArray {
         fun get(extended: Boolean) = JSONArray(
             SupabaseRest.request(
                 "GET",
-                "student_review_log?user_id=eq.$userId&reviewed_at=gt.$since" +
-                    "&select=${logSelect(extended)}&order=reviewed_at.asc&limit=$PAGE_SIZE",
+                "student_review_log?user_id=eq.$userId" +
+                    "&select=${logSelect(extended)}&order=reviewed_at.asc,flashcard_id.asc" +
+                    "&limit=$PAGE_SIZE&offset=$offset",
                 token
             )
         )
@@ -380,12 +363,10 @@ class CloudSync(context: Context) {
 
     /** Récupère l'historique des révisions faites ailleurs (nouveau téléphone). Les doublons sont ignorés. */
     private suspend fun pullLogs(studentId: String, userId: String, token: String) {
-        var since = store.lastLogPullAt()
-
+        var offset = 0
         while (true) {
-            val rows = fetchLogs(userId, since, token)
+            val rows = fetchLogs(userId, offset, token)
             if (rows.length() == 0) break
-
             val items = (0 until rows.length()).mapNotNull { i ->
                 val r = rows.getJSONObject(i)
                 val rating = runCatching { ReviewRating.valueOf(r.getString("rating")) }.getOrNull()
@@ -402,9 +383,7 @@ class CloudSync(context: Context) {
                 )
             }
             if (items.isNotEmpty()) dao.insertLogs(items)
-
-            since = rows.getJSONObject(rows.length() - 1).getLong("reviewed_at")
-            store.setLastLogPullAt(since)
+            offset += rows.length()
             if (rows.length() < PAGE_SIZE) break
         }
     }
@@ -449,6 +428,84 @@ class CloudSync(context: Context) {
             afterId = rows.last().logId
             store.setLastLogPushId(afterId)
             if (rows.size < LOG_PUSH_BATCH) break
+        }
+    }
+
+    // ------------------------------------------------------------------ Tentatives du Dojo
+
+    /** Clé déterministe : le rejeu d'une même tentative ne crée jamais une seconde ligne cloud. */
+    private fun dojoAttemptClientId(userId: String, a: DojoAttemptEntity): String =
+        "$userId:${a.flashcardId}:${a.attemptedAt}:${a.attemptNumber}"
+
+    private fun dojoAttemptJson(a: DojoAttemptEntity, userId: String): JSONObject =
+        JSONObject()
+            .put("client_attempt_id", dojoAttemptClientId(userId, a))
+            .put("user_id", userId)
+            .put("flashcard_id", a.flashcardId)
+            .put("attempted_at", a.attemptedAt)
+            .put("is_success", a.isSuccess)
+            .put("attempt_number", a.attemptNumber)
+            .put("rating", a.rating.name)
+            .put("kind", a.kind)
+            .put("question", a.question)
+            .put("student_answer", a.studentAnswer ?: JSONObject.NULL)
+            .put("reference_answer", a.referenceAnswer)
+            .put("lesson_title", a.lessonTitle)
+            .put("subject_name", a.subjectName)
+            .put("is_legacy", a.isLegacy)
+
+    private suspend fun pushDojoAttempts(studentId: String, userId: String, token: String) {
+        attemptDao.allForStudent(studentId).chunked(PUSH_BATCH).forEach { batch ->
+            val body = JSONArray()
+            batch.forEach { body.put(dojoAttemptJson(it, userId)) }
+            SupabaseRest.request(
+                "POST",
+                "student_dojo_attempts?on_conflict=client_attempt_id",
+                token,
+                body.toString(),
+                IGNORE_DUPLICATES
+            )
+        }
+    }
+
+    /** Restaure les tentatives enregistrées sur les autres appareils ; Room ignore les doublons. */
+    private suspend fun pullDojoAttempts(studentId: String, userId: String, token: String) {
+        var offset = 0
+        while (true) {
+            val rows = JSONArray(
+                SupabaseRest.request(
+                    "GET",
+                    "student_dojo_attempts?user_id=eq.$userId" +
+                        "&select=flashcard_id,attempted_at,is_success,attempt_number,rating,kind,question," +
+                        "student_answer,reference_answer,lesson_title,subject_name,is_legacy" +
+                        "&order=attempted_at.asc,client_attempt_id.asc&limit=$PAGE_SIZE&offset=$offset",
+                    token
+                )
+            )
+            if (rows.length() == 0) break
+            val items = (0 until rows.length()).mapNotNull { i ->
+                val r = rows.getJSONObject(i)
+                val rating = runCatching { ReviewRating.valueOf(r.getString("rating")) }.getOrNull()
+                    ?: return@mapNotNull null
+                DojoAttemptEntity(
+                    studentId = studentId,
+                    flashcardId = r.getString("flashcard_id"),
+                    attemptedAt = r.getLong("attempted_at"),
+                    isSuccess = r.getBoolean("is_success"),
+                    attemptNumber = r.optInt("attempt_number", 0),
+                    rating = rating,
+                    kind = r.getString("kind"),
+                    question = r.getString("question"),
+                    studentAnswer = if (r.isNull("student_answer")) null else r.getString("student_answer"),
+                    referenceAnswer = r.getString("reference_answer"),
+                    lessonTitle = r.optString("lesson_title", ""),
+                    subjectName = r.optString("subject_name", ""),
+                    isLegacy = r.optBoolean("is_legacy", false)
+                )
+            }
+            if (items.isNotEmpty()) attemptDao.insertAll(items)
+            offset += rows.length()
+            if (rows.length() < PAGE_SIZE) break
         }
     }
 

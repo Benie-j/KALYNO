@@ -64,6 +64,14 @@ abstract class AttemptDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     abstract suspend fun insert(attempt: DojoAttemptEntity): Long
 
+    /** Import cloud idempotent : les doublons locaux sont ignorés par l'index unique. */
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    abstract suspend fun insertAll(attempts: List<DojoAttemptEntity>)
+
+    /** Toutes les tentatives de l'élève, triées de façon stable pour l'envoi cloud. */
+    @Query("SELECT * FROM dojo_attempts WHERE studentId = :studentId ORDER BY attemptedAt ASC, id ASC")
+    abstract suspend fun allForStudent(studentId: String): List<DojoAttemptEntity>
+
     @Query(
         "SELECT * FROM dojo_attempts WHERE studentId = :studentId AND flashcardId = :flashcardId " +
             "ORDER BY attemptedAt DESC, id DESC LIMIT 1"
