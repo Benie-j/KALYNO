@@ -11,7 +11,6 @@ import ci.kalyno.app.data.SupabaseLearningRepository
 import ci.kalyno.app.data.cloud.CloudSync
 import ci.kalyno.app.data.cloud.CloudSyncScheduler
 import ci.kalyno.app.data.dojo.DojoStagePolicy
-import ci.kalyno.app.data.freeexercises.FreeExercises
 import ci.kalyno.app.data.lessons.LessonProgressRepository
 import ci.kalyno.app.data.srs.CardProgressEntity
 import ci.kalyno.app.data.srs.FlashcardEntity
@@ -56,12 +55,7 @@ class DashboardRepository(context: Context) {
         /** Probabilite moyenne de retention (courbe de l'oubli FSRS), null si aucune carte revisee. */
         val retentionScore: Float?,
         /** Derniere lecon ouverte dans l'Explorer ("Reprendre l'aventure"), null si aucune encore. */
-        val lastLesson: LastLessonUi?,
-        /** Exercices libres a proposer (non encore faits d'abord), limites a une session. */
-        val freeItems: List<ReviewItem> = emptyList(),
-        /** Nombre d'exercices libres publies pour la classe, et part encore jamais faite. */
-        val freeTotal: Int = 0,
-        val freeNew: Int = 0
+        val lastLesson: LastLessonUi?
     )
 
     /** Libellés des séances connus au dernier chargement (sert aussi au rafraîchissement de « Reprendre l'aventure »). */
@@ -98,8 +92,8 @@ class DashboardRepository(context: Context) {
             // Hors ligne ou erreur serveur : on continue avec la base locale.
         }
 
-        // Exercices libres (independants des cours) : copies dans Room a chaque chargement, silencieux hors ligne
-        syncFreeExercises(levelId)
+        // Les exercices libres n'existent plus : on retire les copies restees dans Room sur cet appareil
+        purgeLegacyFreeExercises()
 
         val cardIndex: Map<String, Triple<LearningSubject, LearningChapter, LearningCard>> =
             content.orEmpty().flatMap { s ->
@@ -130,7 +124,7 @@ class DashboardRepository(context: Context) {
             srs.subjectExposure(studentId).associate { it.subjectId to it.lastStudiedAt }
         )
             .filter { it.subjectId in levelSubjectIds && it.flashcardId in unlockedCardIds }
-        if (content != null) due = due.filter { it.flashcardId in cardIndex || FreeExercises.isFreeSubject(it.subjectId) }
+        if (content != null) due = due.filter { it.flashcardId in cardIndex }
 
         val entities: Map<String, FlashcardEntity> = due.map { it.flashcardId }
             .chunked(500)
@@ -174,26 +168,6 @@ class DashboardRepository(context: Context) {
         val allowedToday = SrsConfig.newCardQuota(dueCount)
         val introduced = dao.progressedCardIds(studentId).toSet()
         val lastIntroduced = dao.lastIntroductionBySubject(studentId).associate { it.subjectId to it.lastIntroducedAt }
-
-        val freeEntities = dao.flashcardsForSubject(FreeExercises.subjectId(levelId))
-        val freeItems = freeEntities
-            .sortedBy { it.id in introduced } // jamais faits d'abord (tri stable : l'ordre de l'admin est conserve)
-            .take(SrsConfig.SESSION_SIZE)
-            .map { e ->
-                val storedIndices = ci.kalyno.app.data.dojo.parseIndexList(e.correctIndices)
-                ReviewItem(
-                    cardId = e.id,
-                    subjectName = FreeExercises.SUBJECT_NAME,
-                    chapterTitle = e.chapitre,
-                    front = e.question,
-                    choices = choicesFromJson(e.choicesJson),
-                    correctIndex = storedIndices.firstOrNull(),
-                    answer = e.reponse,
-                    explanation = e.explanation,
-                    kind = e.kind,
-                    correctIndices = storedIndices
-                )
-            }
 
         val remainingQuota = (allowedToday - introducedToday).coerceAtLeast(0)
         val mission = content?.let {
@@ -283,10 +257,7 @@ class DashboardRepository(context: Context) {
             masteredNotions = masteredNotions,
             masteredCards = masteredCards,
             retentionScore = retentionScore,
-            lastLesson = lastLessonOf(studentId, subjectNames, introduced, sessionLabels),
-            freeItems = freeItems,
-            freeTotal = freeEntities.size,
-            freeNew = freeEntities.count { it.id !in introduced }
+            lastLesson = lastLessonOf(studentId, subjectNames, introduced, sessionLabels)
         )
     }
 
@@ -330,44 +301,21 @@ class DashboardRepository(context: Context) {
     }
 
     /**
-     * Telecharge les exercices libres publies et les range dans Room (matiere technique `libre_<classe>`, sans lecon).
-     * Le nettoyage des exercices disparus n'a lieu qu'apres un telechargement reussi : hors ligne, rien n'est supprime.
+     * Les exercices libres ont ete supprimes : retire de Room les matieres techniques `libre_<classe>` et leurs cartes
+     * (la progression associee part avec elles). Sans effet, et quasi gratuit, une fois la purge faite.
      */
-    private suspend fun syncFreeExercises(levelId: String) {
+    private suspend fun purgeLegacyFreeExercises() {
         try {
-            val fetched = FreeExercises.fetch(levelId)
-            val subjectId = FreeExercises.subjectId(levelId)
-            dao.upsertSubjects(listOf(SubjectEntity(subjectId, FreeExercises.SUBJECT_NAME, levelId, 1f)))
-            val cards = fetched.mapNotNull { exercise ->
-                val c = exercise.card
-                val answer = answerOf(c)
-                if (c.front.isBlank() || answer.isNullOrBlank()) null
-                else FlashcardEntity(
-                    id = c.id,
-                    subjectId = subjectId,
-                    chapitre = exercise.label ?: FreeExercises.SUBJECT_NAME,
-                    question = c.front,
-                    reponse = answer,
-                    kind = c.kind,
-                    choicesJson = JSONArray(c.choices).toString(),
-                    correctIndices = ci.kalyno.app.data.dojo
-                        .mergeCorrectIndices(c.correctIndices, c.correctIndex)
-                        .joinToString(","),
-                    explanation = c.explanation,
-                    adminReference = c.adminReference,
-                    lessonId = null
-                )
+            val subjectIds = dao.legacyFreeSubjectIds()
+            if (subjectIds.isEmpty()) return
+            for (subjectId in subjectIds) {
+                dao.flashcardIdsForSubject(subjectId).chunked(500).forEach { dao.deleteFlashcardsByIds(it) }
             }
-            cards.chunked(300).forEach { dao.upsertFlashcards(it) }
-            val keep = cards.mapTo(HashSet()) { it.id }
-            dao.flashcardIdsForSubject(subjectId)
-                .filter { it !in keep }
-                .chunked(500)
-                .forEach { dao.deleteFlashcardsByIds(it) }
+            dao.deleteSubjectsByIds(subjectIds)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            // Hors ligne, ou table pas encore creee dans Supabase : on garde la copie locale
+            // La purge reessaiera au prochain chargement
         }
     }
 

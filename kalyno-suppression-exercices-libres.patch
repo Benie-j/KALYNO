@@ -1,0 +1,412 @@
+diff --git a/app/src/main/java/ci/kalyno/app/data/dashboard/DashboardDao.kt b/app/src/main/java/ci/kalyno/app/data/dashboard/DashboardDao.kt
+index c148c8e..be9b18d 100644
+--- a/app/src/main/java/ci/kalyno/app/data/dashboard/DashboardDao.kt
++++ b/app/src/main/java/ci/kalyno/app/data/dashboard/DashboardDao.kt
+@@ -58,10 +58,17 @@ interface DashboardDao {
+     @Query("SELECT id FROM flashcards WHERE subjectId = :subjectId")
+     suspend fun flashcardIdsForSubject(subjectId: String): List<String>
+ 
+-    /** Retire les exercices libres depublies ou supprimes par l'admin (la progression associee part avec eux). */
++    /** Retire des cartes (la progression associee part avec elles). */
+     @Query("DELETE FROM flashcards WHERE id IN (:ids)")
+     suspend fun deleteFlashcardsByIds(ids: List<String>)
+ 
++    /** Matieres techniques des anciens exercices libres (`libre_<classe>`), a purger. */
++    @Query("SELECT id FROM subjects WHERE substr(id, 1, 6) = 'libre_'")
++    suspend fun legacyFreeSubjectIds(): List<String>
++
++    @Query("DELETE FROM subjects WHERE id IN (:ids)")
++    suspend fun deleteSubjectsByIds(ids: List<String>)
++
+     /** Cartes avec leur leçon parente (relation Room, une seule lecture groupée pour la session du Dojo). */
+     @Transaction
+     @Query("SELECT * FROM flashcards WHERE id IN (:ids)")
+diff --git a/app/src/main/java/ci/kalyno/app/data/dashboard/DashboardModels.kt b/app/src/main/java/ci/kalyno/app/data/dashboard/DashboardModels.kt
+index 0cb5279..65eded0 100644
+--- a/app/src/main/java/ci/kalyno/app/data/dashboard/DashboardModels.kt
++++ b/app/src/main/java/ci/kalyno/app/data/dashboard/DashboardModels.kt
+@@ -139,10 +139,6 @@ data class DashboardUiState(
+     val urgentTotal: Int = 0,
+     val urgentTopics: List<UrgentTopic> = emptyList(),
+     val urgentItems: List<ReviewItem> = emptyList(),
+-    /** Exercices libres (hors cours) : une session d'entrainement, nombre publie et part jamais faite. */
+-    val freeItems: List<ReviewItem> = emptyList(),
+-    val freeTotal: Int = 0,
+-    val freeNew: Int = 0,
+     /** Jours avant l'examen publié par l'admin ; null tant qu'aucune date n'est publiée. */
+     val examDaysLeft: Int? = null,
+     val session: ReviewSession? = null,
+diff --git a/app/src/main/java/ci/kalyno/app/data/dashboard/DashboardRepository.kt b/app/src/main/java/ci/kalyno/app/data/dashboard/DashboardRepository.kt
+index db53f8d..ed2b369 100644
+--- a/app/src/main/java/ci/kalyno/app/data/dashboard/DashboardRepository.kt
++++ b/app/src/main/java/ci/kalyno/app/data/dashboard/DashboardRepository.kt
+@@ -11,7 +11,6 @@ import ci.kalyno.app.data.SupabaseLearningRepository
+ import ci.kalyno.app.data.cloud.CloudSync
+ import ci.kalyno.app.data.cloud.CloudSyncScheduler
+ import ci.kalyno.app.data.dojo.DojoStagePolicy
+-import ci.kalyno.app.data.freeexercises.FreeExercises
+ import ci.kalyno.app.data.lessons.LessonProgressRepository
+ import ci.kalyno.app.data.srs.CardProgressEntity
+ import ci.kalyno.app.data.srs.FlashcardEntity
+@@ -56,12 +55,7 @@ class DashboardRepository(context: Context) {
+         /** Probabilite moyenne de retention (courbe de l'oubli FSRS), null si aucune carte revisee. */
+         val retentionScore: Float?,
+         /** Derniere lecon ouverte dans l'Explorer ("Reprendre l'aventure"), null si aucune encore. */
+-        val lastLesson: LastLessonUi?,
+-        /** Exercices libres a proposer (non encore faits d'abord), limites a une session. */
+-        val freeItems: List<ReviewItem> = emptyList(),
+-        /** Nombre d'exercices libres publies pour la classe, et part encore jamais faite. */
+-        val freeTotal: Int = 0,
+-        val freeNew: Int = 0
++        val lastLesson: LastLessonUi?
+     )
+ 
+     /** Libellés des séances connus au dernier chargement (sert aussi au rafraîchissement de « Reprendre l'aventure »). */
+@@ -98,8 +92,8 @@ class DashboardRepository(context: Context) {
+             // Hors ligne ou erreur serveur : on continue avec la base locale.
+         }
+ 
+-        // Exercices libres (independants des cours) : copies dans Room a chaque chargement, silencieux hors ligne
+-        syncFreeExercises(levelId)
++        // Les exercices libres n'existent plus : on retire les copies restees dans Room sur cet appareil
++        purgeLegacyFreeExercises()
+ 
+         val cardIndex: Map<String, Triple<LearningSubject, LearningChapter, LearningCard>> =
+             content.orEmpty().flatMap { s ->
+@@ -130,7 +124,7 @@ class DashboardRepository(context: Context) {
+             srs.subjectExposure(studentId).associate { it.subjectId to it.lastStudiedAt }
+         )
+             .filter { it.subjectId in levelSubjectIds && it.flashcardId in unlockedCardIds }
+-        if (content != null) due = due.filter { it.flashcardId in cardIndex || FreeExercises.isFreeSubject(it.subjectId) }
++        if (content != null) due = due.filter { it.flashcardId in cardIndex }
+ 
+         val entities: Map<String, FlashcardEntity> = due.map { it.flashcardId }
+             .chunked(500)
+@@ -175,26 +169,6 @@ class DashboardRepository(context: Context) {
+         val introduced = dao.progressedCardIds(studentId).toSet()
+         val lastIntroduced = dao.lastIntroductionBySubject(studentId).associate { it.subjectId to it.lastIntroducedAt }
+ 
+-        val freeEntities = dao.flashcardsForSubject(FreeExercises.subjectId(levelId))
+-        val freeItems = freeEntities
+-            .sortedBy { it.id in introduced } // jamais faits d'abord (tri stable : l'ordre de l'admin est conserve)
+-            .take(SrsConfig.SESSION_SIZE)
+-            .map { e ->
+-                val storedIndices = ci.kalyno.app.data.dojo.parseIndexList(e.correctIndices)
+-                ReviewItem(
+-                    cardId = e.id,
+-                    subjectName = FreeExercises.SUBJECT_NAME,
+-                    chapterTitle = e.chapitre,
+-                    front = e.question,
+-                    choices = choicesFromJson(e.choicesJson),
+-                    correctIndex = storedIndices.firstOrNull(),
+-                    answer = e.reponse,
+-                    explanation = e.explanation,
+-                    kind = e.kind,
+-                    correctIndices = storedIndices
+-                )
+-            }
+-
+         val remainingQuota = (allowedToday - introducedToday).coerceAtLeast(0)
+         val mission = content?.let {
+             buildMission(
+@@ -283,10 +257,7 @@ class DashboardRepository(context: Context) {
+             masteredNotions = masteredNotions,
+             masteredCards = masteredCards,
+             retentionScore = retentionScore,
+-            lastLesson = lastLessonOf(studentId, subjectNames, introduced, sessionLabels),
+-            freeItems = freeItems,
+-            freeTotal = freeEntities.size,
+-            freeNew = freeEntities.count { it.id !in introduced }
++            lastLesson = lastLessonOf(studentId, subjectNames, introduced, sessionLabels)
+         )
+     }
+ 
+@@ -330,44 +301,21 @@ class DashboardRepository(context: Context) {
+     }
+ 
+     /**
+-     * Telecharge les exercices libres publies et les range dans Room (matiere technique `libre_<classe>`, sans lecon).
+-     * Le nettoyage des exercices disparus n'a lieu qu'apres un telechargement reussi : hors ligne, rien n'est supprime.
++     * Les exercices libres ont ete supprimes : retire de Room les matieres techniques `libre_<classe>` et leurs cartes
++     * (la progression associee part avec elles). Sans effet, et quasi gratuit, une fois la purge faite.
+      */
+-    private suspend fun syncFreeExercises(levelId: String) {
++    private suspend fun purgeLegacyFreeExercises() {
+         try {
+-            val fetched = FreeExercises.fetch(levelId)
+-            val subjectId = FreeExercises.subjectId(levelId)
+-            dao.upsertSubjects(listOf(SubjectEntity(subjectId, FreeExercises.SUBJECT_NAME, levelId, 1f)))
+-            val cards = fetched.mapNotNull { exercise ->
+-                val c = exercise.card
+-                val answer = answerOf(c)
+-                if (c.front.isBlank() || answer.isNullOrBlank()) null
+-                else FlashcardEntity(
+-                    id = c.id,
+-                    subjectId = subjectId,
+-                    chapitre = exercise.label ?: FreeExercises.SUBJECT_NAME,
+-                    question = c.front,
+-                    reponse = answer,
+-                    kind = c.kind,
+-                    choicesJson = JSONArray(c.choices).toString(),
+-                    correctIndices = ci.kalyno.app.data.dojo
+-                        .mergeCorrectIndices(c.correctIndices, c.correctIndex)
+-                        .joinToString(","),
+-                    explanation = c.explanation,
+-                    adminReference = c.adminReference,
+-                    lessonId = null
+-                )
++            val subjectIds = dao.legacyFreeSubjectIds()
++            if (subjectIds.isEmpty()) return
++            for (subjectId in subjectIds) {
++                dao.flashcardIdsForSubject(subjectId).chunked(500).forEach { dao.deleteFlashcardsByIds(it) }
+             }
+-            cards.chunked(300).forEach { dao.upsertFlashcards(it) }
+-            val keep = cards.mapTo(HashSet()) { it.id }
+-            dao.flashcardIdsForSubject(subjectId)
+-                .filter { it !in keep }
+-                .chunked(500)
+-                .forEach { dao.deleteFlashcardsByIds(it) }
++            dao.deleteSubjectsByIds(subjectIds)
+         } catch (e: CancellationException) {
+             throw e
+         } catch (e: Exception) {
+-            // Hors ligne, ou table pas encore creee dans Supabase : on garde la copie locale
++            // La purge reessaiera au prochain chargement
+         }
+     }
+ 
+diff --git a/app/src/main/java/ci/kalyno/app/data/freeexercises/FreeExercises.kt b/app/src/main/java/ci/kalyno/app/data/freeexercises/FreeExercises.kt
+deleted file mode 100644
+index 93a0524..0000000
+--- a/app/src/main/java/ci/kalyno/app/data/freeexercises/FreeExercises.kt
++++ /dev/null
+@@ -1,65 +0,0 @@
+-package ci.kalyno.app.data.freeexercises
+-
+-import ci.kalyno.app.data.LearningCard
+-import ci.kalyno.app.data.dashboard.SupabaseHttp
+-import org.json.JSONArray
+-import java.net.URLEncoder
+-
+-/** Un exercice libre publie par l'admin : une carte + une etiquette facultative (theme libre). */
+-data class FreeExercise(val card: LearningCard, val label: String?)
+-
+-/**
+- * Exercices libres : independants des disciplines, chapitres et lecons.
+- * Ils sont ranges dans Room sous une matiere technique par classe (`libre_<classe>`), sans lecon :
+- * ils ne dependent donc d'aucune progression dans les cours.
+- */
+-object FreeExercises {
+-    const val SUBJECT_PREFIX = "libre_"
+-    const val SUBJECT_NAME = "Exercices libres"
+-
+-    fun subjectId(levelId: String): String = SUBJECT_PREFIX + levelId
+-
+-    fun isFreeSubject(subjectId: String): Boolean = subjectId.startsWith(SUBJECT_PREFIX)
+-
+-    /**
+-     * Exercices publies pour [levelId] ou pour toutes les classes (level_id vide), dans l'ordre de l'admin.
+-     * Bloquant : a appeler hors du thread principal. Leve une exception hors ligne ou si la table n'existe pas encore.
+-     */
+-    fun fetch(levelId: String): List<FreeExercise> {
+-        val level = URLEncoder.encode(levelId, "UTF-8")
+-        val filter = "&is_published=eq.true&or=(level_id.is.null,level_id.eq.$level)&order=position.asc"
+-        val base = "free_exercises?select=id,label,kind,front,back,choices,correct_index,explanation,position"
+-        // `admin_reference` (réponses des tableaux) : si la colonne n'existe pas encore (HTTP 400), on relit sans elle
+-        val rows = JSONArray(
+-            try {
+-                SupabaseHttp.get("$base,admin_reference$filter")
+-            } catch (e: java.io.IOException) {
+-                if (e.message?.contains("400") == true) SupabaseHttp.get("$base$filter") else throw e
+-            }
+-        )
+-        return buildList {
+-            for (i in 0 until rows.length()) {
+-                val row = rows.getJSONObject(i)
+-                val rawChoices = row.optJSONArray("choices")
+-                val choices = if (rawChoices == null) emptyList() else List(rawChoices.length()) { rawChoices.optString(it) }
+-                add(
+-                    FreeExercise(
+-                        card = LearningCard(
+-                            id = row.getString("id"),
+-                            capsuleId = null,
+-                            kind = row.optString("kind", "flashcard"),
+-                            front = row.optString("front", ""),
+-                            back = if (row.isNull("back")) null else row.optString("back"),
+-                            choices = choices,
+-                            correctIndex = if (row.isNull("correct_index")) null else row.optInt("correct_index"),
+-                            explanation = if (row.isNull("explanation")) null else row.optString("explanation"),
+-                            adminReference = if (row.isNull("admin_reference")) null
+-                            else row.optString("admin_reference").trim().takeIf { it.isNotEmpty() }
+-                        ),
+-                        label = if (row.isNull("label")) null else row.optString("label").trim().ifEmpty { null }
+-                    )
+-                )
+-            }
+-        }
+-    }
+-}
+diff --git a/app/src/main/java/ci/kalyno/app/data/lessons/LessonProgress.kt b/app/src/main/java/ci/kalyno/app/data/lessons/LessonProgress.kt
+index 8e5ce63..60ecd9f 100644
+--- a/app/src/main/java/ci/kalyno/app/data/lessons/LessonProgress.kt
++++ b/app/src/main/java/ci/kalyno/app/data/lessons/LessonProgress.kt
+@@ -68,8 +68,6 @@ abstract class LessonProgressDao {
+         INNER JOIN catalog_lessons l ON l.subjectId = f.subjectId AND l.title = f.chapitre
+         INNER JOIN lesson_progress lp ON lp.lessonId = l.id
+         WHERE f.lessonId IS NULL AND lp.studentId = :studentId AND lp.isCompleted = 1
+-        UNION
+-        SELECT f.id FROM flashcards f WHERE substr(f.subjectId, 1, 6) = 'libre_'
+         """
+     )
+     abstract suspend fun unlockedCardIds(studentId: String): List<String>
+diff --git a/app/src/main/java/ci/kalyno/app/ui/dojo/DojoScreen.kt b/app/src/main/java/ci/kalyno/app/ui/dojo/DojoScreen.kt
+index 5a8b950..2559603 100644
+--- a/app/src/main/java/ci/kalyno/app/ui/dojo/DojoScreen.kt
++++ b/app/src/main/java/ci/kalyno/app/ui/dojo/DojoScreen.kt
+@@ -77,8 +77,7 @@ fun DojoScreen(
+     state: DashboardUiState,
+     onStartMission: () -> Unit,
+     onReviewUrgent: () -> Unit,
+-    onRetry: () -> Unit,
+-    onStartFreeExercises: () -> Unit = {}
++    onRetry: () -> Unit
+ ) {
+     Column(
+         modifier = Modifier
+@@ -113,11 +112,6 @@ fun DojoScreen(
+                 Box(Modifier.entrance(3)) {
+                     MissionBlock(state = state, onStart = onStartMission, onReview = onReviewUrgent)
+                 }
+-                if (state.freeTotal > 0) {
+-                    Box(Modifier.entrance(4)) {
+-                        FreeExercisesBlock(state = state, onStart = onStartFreeExercises)
+-                    }
+-                }
+             }
+         }
+     }
+@@ -690,48 +684,6 @@ private fun MissionBlock(
+     }
+ }
+ 
+-/** Exercices libres : une banque d'entraînement qui ne dépend d'aucune leçon. */
+-@Composable
+-private fun FreeExercisesBlock(state: DashboardUiState, onStart: () -> Unit) {
+-    KalynoCard(modifier = Modifier.fillMaxWidth()) {
+-        SectionTitle(
+-            icon = "dumbbell",
+-            title = "Exercices libres",
+-            subtitle = "Sans passer par une leçon"
+-        )
+-        Spacer(Modifier.height(12.dp))
+-        Text(
+-            text = "Entraîne-toi quand tu veux, à ton rythme.",
+-            color = KalynoText,
+-            fontSize = 15.sp,
+-            lineHeight = 22.sp
+-        )
+-        Spacer(Modifier.height(6.dp))
+-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+-            KalynoPill(
+-                text = if (state.freeTotal == 1) "1 exercice" else "${state.freeTotal} exercices",
+-                fontSize = 11
+-            )
+-            if (state.freeNew > 0) {
+-                KalynoPill(
+-                    text = if (state.freeNew == 1) "1 à découvrir" else "${state.freeNew} à découvrir",
+-                    container = KalynoAmberSoft,
+-                    content = KalynoAmberDeep,
+-                    fontSize = 11
+-                )
+-            }
+-        }
+-        Spacer(Modifier.height(14.dp))
+-        // Action secondaire : la mission du jour reste le bouton principal de l'écran
+-        KalynoPrimaryButton(
+-            label = "M'ENTRAÎNER",
+-            onClick = onStart,
+-            container = KalynoBlueSoft,
+-            content = KalynoBlue
+-        )
+-    }
+-}
+-
+ @Composable
+ private fun DojoSkeleton() {
+     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+diff --git a/app/src/main/java/ci/kalyno/app/ui/main/DashboardViewModel.kt b/app/src/main/java/ci/kalyno/app/ui/main/DashboardViewModel.kt
+index e42aac7..ae605cf 100644
+--- a/app/src/main/java/ci/kalyno/app/ui/main/DashboardViewModel.kt
++++ b/app/src/main/java/ci/kalyno/app/ui/main/DashboardViewModel.kt
+@@ -142,9 +142,6 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
+                         urgentTotal = snapshot.urgentTotal,
+                         urgentTopics = snapshot.urgentTopics,
+                         urgentItems = snapshot.urgentItems,
+-                        freeItems = snapshot.freeItems,
+-                        freeTotal = snapshot.freeTotal,
+-                        freeNew = snapshot.freeNew,
+                         examDaysLeft = snapshot.examDaysLeft,
+                         examLabel = exams.label(levelId),
+                         masteredCount = snapshot.masteredCount,
+@@ -227,21 +224,6 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
+         }
+     }
+ 
+-    /** Lance une session d'entrainement sur les exercices libres. */
+-    fun startFreeExercises() {
+-        val items = _state.value.freeItems
+-        if (items.isEmpty()) return
+-        _state.update {
+-            it.copy(
+-                session = ReviewSession(
+-                    id = UUID.randomUUID().toString(),
+-                    title = ci.kalyno.app.data.freeexercises.FreeExercises.SUBJECT_NAME,
+-                    items = items
+-                )
+-            )
+-        }
+-    }
+-
+     fun startUrgentReview() {
+         val items = _state.value.urgentItems
+         if (items.isEmpty()) return
+diff --git a/app/src/main/java/ci/kalyno/app/ui/main/MainScreen.kt b/app/src/main/java/ci/kalyno/app/ui/main/MainScreen.kt
+index bd41e79..4a5ac48 100644
+--- a/app/src/main/java/ci/kalyno/app/ui/main/MainScreen.kt
++++ b/app/src/main/java/ci/kalyno/app/ui/main/MainScreen.kt
+@@ -199,8 +199,7 @@ fun MainScreen(
+                         state = state,
+                         onStartMission = viewModel::startMission,
+                         onReviewUrgent = viewModel::startUrgentReview,
+-                        onRetry = viewModel::retry,
+-                        onStartFreeExercises = viewModel::startFreeExercises
++                        onRetry = viewModel::retry
+                     )
+                     2 -> GeneratedExercisesScreen(levelId = levelId)
+                     3 -> ExplorerScreen(
+diff --git a/supabase/migrations/20261128_supprimer_exercices_libres.sql b/supabase/migrations/20261128_supprimer_exercices_libres.sql
+new file mode 100644
+index 0000000..f1b00e2
+--- /dev/null
++++ b/supabase/migrations/20261128_supprimer_exercices_libres.sql
+@@ -0,0 +1,20 @@
++-- KALYNO : suppression definitive des Exercices libres.
++-- A coller dans Supabase > SQL Editor. Script rejouable.
++--
++-- ATTENTION : les exercices libres deja publies sont supprimes pour toujours.
++-- Pour en garder une copie, exporte d'abord la table : Table Editor > free_exercises > Export (CSV).
++--
++-- Ne touche pas aux cours, cartes, chapitres, lecons ni a l'historique des tentatives des eleves.
++-- Ne rejoue plus 20261122_exercices_libres.sql ni la partie free_exercises de 20261123_tableaux_a_completer.sql.
++
++begin;
++
++-- Apercu avant suppression (visible dans le resultat si tu retires "begin/commit" pour tester)
++-- select count(*) as exercices_libres_supprimes from public.free_exercises;
++
++-- La suppression de la table emporte avec elle ses index, son trigger et ses regles RLS.
++drop table if exists public.free_exercises cascade;
++
++drop function if exists public.free_exercises_touch_updated_at();
++
++commit;

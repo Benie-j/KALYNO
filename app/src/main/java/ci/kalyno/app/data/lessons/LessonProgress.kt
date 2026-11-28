@@ -68,8 +68,6 @@ abstract class LessonProgressDao {
         INNER JOIN catalog_lessons l ON l.subjectId = f.subjectId AND l.title = f.chapitre
         INNER JOIN lesson_progress lp ON lp.lessonId = l.id
         WHERE f.lessonId IS NULL AND lp.studentId = :studentId AND lp.isCompleted = 1
-        UNION
-        SELECT f.id FROM flashcards f WHERE substr(f.subjectId, 1, 6) = 'libre_'
         """
     )
     abstract suspend fun unlockedCardIds(studentId: String): List<String>

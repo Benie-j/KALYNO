@@ -77,8 +77,7 @@ fun DojoScreen(
     state: DashboardUiState,
     onStartMission: () -> Unit,
     onReviewUrgent: () -> Unit,
-    onRetry: () -> Unit,
-    onStartFreeExercises: () -> Unit = {}
+    onRetry: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -112,11 +111,6 @@ fun DojoScreen(
                 }
                 Box(Modifier.entrance(3)) {
                     MissionBlock(state = state, onStart = onStartMission, onReview = onReviewUrgent)
-                }
-                if (state.freeTotal > 0) {
-                    Box(Modifier.entrance(4)) {
-                        FreeExercisesBlock(state = state, onStart = onStartFreeExercises)
-                    }
                 }
             }
         }
@@ -687,48 +681,6 @@ private fun MissionBlock(
                 lineHeight = 20.sp
             )
         }
-    }
-}
-
-/** Exercices libres : une banque d'entraînement qui ne dépend d'aucune leçon. */
-@Composable
-private fun FreeExercisesBlock(state: DashboardUiState, onStart: () -> Unit) {
-    KalynoCard(modifier = Modifier.fillMaxWidth()) {
-        SectionTitle(
-            icon = "dumbbell",
-            title = "Exercices libres",
-            subtitle = "Sans passer par une leçon"
-        )
-        Spacer(Modifier.height(12.dp))
-        Text(
-            text = "Entraîne-toi quand tu veux, à ton rythme.",
-            color = KalynoText,
-            fontSize = 15.sp,
-            lineHeight = 22.sp
-        )
-        Spacer(Modifier.height(6.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            KalynoPill(
-                text = if (state.freeTotal == 1) "1 exercice" else "${state.freeTotal} exercices",
-                fontSize = 11
-            )
-            if (state.freeNew > 0) {
-                KalynoPill(
-                    text = if (state.freeNew == 1) "1 à découvrir" else "${state.freeNew} à découvrir",
-                    container = KalynoAmberSoft,
-                    content = KalynoAmberDeep,
-                    fontSize = 11
-                )
-            }
-        }
-        Spacer(Modifier.height(14.dp))
-        // Action secondaire : la mission du jour reste le bouton principal de l'écran
-        KalynoPrimaryButton(
-            label = "M'ENTRAÎNER",
-            onClick = onStart,
-            container = KalynoBlueSoft,
-            content = KalynoBlue
-        )
     }
 }
 
