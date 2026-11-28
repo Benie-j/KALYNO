@@ -1,0 +1,530 @@
+package ci.kalyno.app.ui.explorer
+
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
+import ci.kalyno.app.data.AppPrefs
+import ci.kalyno.app.data.ContentGate
+import ci.kalyno.app.data.ExplorerBanner
+import ci.kalyno.app.data.LearningCapsule
+import ci.kalyno.app.data.LearningCard
+import ci.kalyno.app.data.LearningSubject
+import ci.kalyno.app.data.SupabaseLearningRepository
+import ci.kalyno.app.data.catalog.CatalogRepository
+import ci.kalyno.app.data.catalog.CatalogTree
+import ci.kalyno.app.data.dashboard.KalynoDatabase
+import ci.kalyno.app.data.dashboard.ReviewItem
+import ci.kalyno.app.data.dashboard.StudentId
+import ci.kalyno.app.data.lessons.LessonProgressRepository
+import ci.kalyno.app.data.lessons.SessionProgressRepository
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.collectLatest
+import ci.kalyno.app.data.srs.ForYouPlanner
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlin.math.roundToInt
+
+// ---------------------------------------------------------------------------
+// Modèle d'UI
+// ---------------------------------------------------------------------------
+
+enum class ExplorerFilter(val label: String) {
+    FOR_YOU("Pour Toi"),
+    CHALLENGES("Défis"),
+    COMMUNITY("Communauté"),
+    PATHS("Parcours")
+}
+
+/** Un chapitre publié par l'admin, avec la progression de l'élève. */
+data class ExplorerChapter(
+    val id: String,
+    val subjectId: String,
+    val subjectName: String,
+    val subjectEmoji: String,
+    val title: String,
+    val minutes: Int,
+    val discovered: Int,
+    val capsules: List<LearningCapsule>,
+    val items: List<ReviewItem>,
+    /** Smart Tag admin ("urgent", "populaire"…), null si absent. */
+    val tag: String? = null,
+    /** Icône vectorielle de la discipline (clé admin), null = icône par défaut. */
+    val subjectIconKey: String? = null,
+    /** Thème (chapitre global) de la leçon, null tant que l'admin ne l'a pas rangée. */
+    val themeId: String? = null,
+    /** Séances chronologiques de la leçon (vide pour les anciennes leçons). */
+    val sessions: List<ci.kalyno.app.data.LearningSession> = emptyList(),
+    /** Notes et ressources complémentaires facultatives (admin), null si absentes. */
+    val complement: String? = null
+) {
+    val questionCount: Int get() = items.size
+    val progress: Float
+        get() = if (items.isEmpty()) 0f else (discovered.toFloat() / items.size).coerceIn(0f, 1f)
+}
+
+data class SubjectProgress(val name: String, val iconKey: String?, val progress: Float)
+
+/** Une discipline (= matière publiée par l'admin) affichée en mini-carte dans Explorer. */
+data class Discipline(
+    val id: String,
+    val name: String,
+    val iconKey: String?,
+    val lessonCount: Int
+)
+
+/** Un thème (chapitre global) d'une discipline : il regroupe des leçons. */
+data class ExplorerTheme(
+    val id: String,
+    val disciplineId: String,
+    val title: String,
+    val lessonCount: Int
+)
+
+/**
+ * Navigation interne à l'onglet Explorer (aucune dépendance à un NavHost).
+ * [depth] sert à choisir le sens de l'animation de transition.
+ */
+sealed interface ExplorerRoute {
+    val depth: Int
+
+    data object Home : ExplorerRoute {
+        override val depth = 0
+    }
+
+    data class DisciplineLessons(val disciplineId: String) : ExplorerRoute {
+        override val depth = 1
+    }
+
+    data class LessonDetail(val lessonId: String) : ExplorerRoute {
+        override val depth = 2
+    }
+}
+
+data class ExplorerUiState(
+    val loading: Boolean = true,
+    /** Renseigné uniquement s'il n'y a rien à afficher (ni réseau, ni cache). */
+    val error: String? = null,
+    /** Vrai quand on affiche le cache faute de réseau. */
+    val offline: Boolean = false,
+    val chapters: List<ExplorerChapter> = emptyList(),
+    val query: String = "",
+    val filter: ExplorerFilter = ExplorerFilter.FOR_YOU,
+    /** Disciplines publiées (ordre défini par l'admin), lues dans Room. */
+    val disciplines: List<Discipline> = emptyList(),
+    /** Thèmes publiés de toutes les disciplines (ordre défini par l'admin), lus dans Room. */
+    val themes: List<ExplorerTheme> = emptyList(),
+    /** Discipline touchée : se colore immédiatement, avant l'ouverture de sa page. */
+    val pressedDisciplineId: String? = null,
+    val openDisciplineId: String? = null,
+    val openLessonId: String? = null,
+    /** Leçons que l'élève a validées avec « Terminer » (Room) : seules leurs questions sont jouables. */
+    val completedLessonIds: Set<String> = emptySet(),
+    /** Séances que l'élève a validées (Room) : seuls leurs exercices sont jouables. */
+    val completedSessionIds: Set<String> = emptySet(),
+    /** Séance ouverte dans la leçon (null = liste des séances). */
+    val openSessionId: String? = null,
+    /** Bannière « à la une » publiée par l'admin (null = rien à afficher). */
+    val banner: ExplorerBanner? = null,
+    /** Toutes les annonces « à la une » actives, dans l'ordre de l'admin. */
+    val banners: List<ExplorerBanner> = emptyList(),
+    /** Leçons à réviser selon FSRS (null = pas encore calculé). */
+    val forYou: List<ForYouPick>? = null
+) {
+    val route: ExplorerRoute
+        get() = when {
+            openLessonId != null -> ExplorerRoute.LessonDetail(openLessonId)
+            openDisciplineId != null -> ExplorerRoute.DisciplineLessons(openDisciplineId)
+            else -> ExplorerRoute.Home
+        }
+
+    fun themesOf(disciplineId: String): List<ExplorerTheme> =
+        themes.filter { it.disciplineId == disciplineId }
+
+    /** Leçons (= chapitres publiés) d'une discipline, dans l'ordre de l'admin. */
+    fun lessonsOf(disciplineId: String): List<ExplorerChapter> =
+        chapters.filter { it.subjectId == disciplineId }
+
+    fun isCompleted(lessonId: String): Boolean = lessonId in completedLessonIds
+
+    fun isSessionCompleted(sessionId: String): Boolean = sessionId in completedSessionIds
+
+    /** Exercices que l'élève a le droit de jouer dans cette leçon (leçon terminée, ou séances terminées). */
+    fun unlockedItems(chapter: ExplorerChapter): List<ReviewItem> =
+        unlockedItemsOf(chapter, completedLessonIds, completedSessionIds)
+
+    val visibleChapters: List<ExplorerChapter>
+        get() {
+            val q = query.trim()
+            if (q.isEmpty()) return chapters
+            return chapters.filter {
+                it.title.contains(q, ignoreCase = true) || it.subjectName.contains(q, ignoreCase = true)
+            }
+        }
+
+    val subjectProgress: List<SubjectProgress>
+        get() = chapters
+            .groupBy { it.subjectId }
+            .values
+            .map { list ->
+                val total = list.sumOf { it.questionCount }
+                val done = list.sumOf { it.discovered }
+                SubjectProgress(
+                    name = list.first().subjectName,
+                    iconKey = list.first().subjectIconKey,
+                    progress = if (total == 0) 0f else done.toFloat() / total
+                )
+            }
+}
+
+// ---------------------------------------------------------------------------
+// ViewModel (online-first : réseau d'abord, cache JSON en secours)
+// ---------------------------------------------------------------------------
+
+/** Durée du retour visuel (carte verte) avant d'ouvrir la page de la discipline. */
+private const val PRESS_FEEDBACK_MS = 140L
+
+class ExplorerViewModel(app: Application) : AndroidViewModel(app) {
+
+    private val remote = SupabaseLearningRepository()
+    private val cache = LearningContentCache(app)
+    private val gate = ContentGate(app)
+    private val catalog = CatalogRepository.get(app)
+    private val dao = KalynoDatabase.get(app).dashboardDao()
+    private val srs = KalynoDatabase.get(app).srsDao()
+    private val prefs = AppPrefs(app)
+    private val studentId = StudentId.get(app)
+    private val lessonProgress = LessonProgressRepository.get(app)
+    private val sessionProgress = SessionProgressRepository.get(app)
+    private var sessionCompletionJob: Job? = null
+
+    private val _state = MutableStateFlow(ExplorerUiState())
+    val state: StateFlow<ExplorerUiState> = _state.asStateFlow()
+
+    private var levelId: String? = null
+    private var job: Job? = null
+    private var treeJob: Job? = null
+    private var completionJob: Job? = null
+
+    /** Incrémenté à chaque rafraîchissement : « Pour toi » est recalculé après chaque session de révision. */
+    private val forYouTick = MutableStateFlow(0)
+
+    init {
+        viewModelScope.launch {
+            combine(
+                _state.map { Triple(it.chapters, it.completedLessonIds, it.completedSessionIds) }.distinctUntilChanged(),
+                forYouTick
+            ) { content, _ -> content }
+                .collectLatest { (chapters, completed, completedSessions) ->
+                    val picks = try {
+                        withContext(Dispatchers.IO) { computeForYou(chapters, completed, completedSessions) }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        emptyList()
+                    }
+                    _state.update { it.copy(forYou = picks) }
+                }
+        }
+    }
+
+    /** Premier appel : charge tout. Appels suivants (retour sur l'onglet) : rafraîchit en douceur. */
+    fun load(level: String) {
+        if (levelId == level) {
+            refresh(silent = true)
+            return
+        }
+        levelId = level
+        _state.value = ExplorerUiState()
+        observeTree(level)
+        observeCompletion()
+        observeSessionCompletion()
+        refresh(silent = false)
+    }
+
+    /** Leçons terminées lues dans Room : le bouton « Terminer » et l'accès aux questions se mettent à jour seuls. */
+    private fun observeCompletion() {
+        completionJob?.cancel()
+        completionJob = viewModelScope.launch {
+            lessonProgress.observeCompleted(studentId).collect { ids ->
+                _state.update { it.copy(completedLessonIds = ids) }
+            }
+        }
+    }
+
+    /** Clic sur « Terminer » : la leçon est validée (idempotent), ses exercices rejoignent le Dojo. */
+    fun onLessonCompleted(lessonId: String) {
+        if (_state.value.isCompleted(lessonId)) return
+        viewModelScope.launch {
+            try {
+                lessonProgress.markCompleted(studentId, lessonId)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Écriture perdue : le bouton reste actif, l'élève peut réessayer
+            }
+        }
+    }
+
+    /** Séances terminées lues dans Room : les boutons et les exercices se mettent à jour seuls. */
+    private fun observeSessionCompletion() {
+        sessionCompletionJob?.cancel()
+        sessionCompletionJob = viewModelScope.launch {
+            sessionProgress.observeCompleted(studentId).collect { ids ->
+                _state.update { it.copy(completedSessionIds = ids) }
+            }
+        }
+    }
+
+    fun onSessionClick(sessionId: String) {
+        _state.update { it.copy(openSessionId = sessionId) }
+    }
+
+    /** Clic sur « Terminer » d'une séance : seule cette séance est validée (idempotent), seuls ses exercices se débloquent. */
+    fun onSessionCompleted(sessionId: String) {
+        if (_state.value.isSessionCompleted(sessionId)) return
+        viewModelScope.launch {
+            try {
+                sessionProgress.markCompleted(studentId, sessionId)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Écriture perdue : le bouton reste actif, l'élève peut réessayer
+            }
+        }
+    }
+
+    /**
+     * Leçons à réviser, classées par urgence FSRS (voir [ForYouPlanner]).
+     * Seules comptent les leçons terminées (règle du Dojo) dont au moins une carte est due.
+     */
+    private suspend fun computeForYou(
+        chapters: List<ExplorerChapter>,
+        completed: Set<String>,
+        completedSessions: Set<String>
+    ): List<ForYouPick> {
+        // Exercices jouables : leçon terminée (historique) ou séances terminées
+        val playable = chapters.mapNotNull { ch ->
+            val unlocked = unlockedItemsOf(ch, completed, completedSessions)
+            if (unlocked.isEmpty()) null else ch.copy(items = unlocked)
+        }
+        if (playable.isEmpty()) return emptyList()
+
+        val now = System.currentTimeMillis()
+        val chapterOfCard = playable.flatMap { chapter -> chapter.items.map { it.cardId to chapter.id } }.toMap()
+        val due = srs.getDueCards(studentId, now).filter { it.flashcardId in chapterOfCard }
+        if (due.isEmpty()) return emptyList()
+
+        val exposure = srs.subjectExposure(studentId).associate { it.subjectId to it.lastStudiedAt }
+        val byId = playable.associateBy { it.id }
+        return ForYouPlanner.rank(due, chapterOfCard, now, exposure).mapNotNull { rank ->
+            byId[rank.chapterId]?.let { ForYouPick(it, rank.dueCardIds.toSet(), rank.relearnCount) }
+        }
+    }
+
+    fun retry() = refresh(silent = false)
+
+    /** Disciplines et thèmes viennent de Room : affichage immédiat, même sans réseau. */
+    private fun observeTree(level: String) {
+        treeJob?.cancel()
+        treeJob = viewModelScope.launch {
+            catalog.observeTree(level).collect { tree ->
+                _state.update { sanitized(it.copy(disciplines = tree.toDisciplines(), themes = tree.toThemes())) }
+            }
+        }
+    }
+
+    private fun CatalogTree.toDisciplines(): List<Discipline> =
+        subjects.map { Discipline(it.id, it.name, it.iconKey, it.lessonCount) }
+
+    private fun CatalogTree.toThemes(): List<ExplorerTheme> =
+        themes.map { ExplorerTheme(it.id, it.subjectId, it.title, it.lessonCount) }
+
+    fun onQueryChange(value: String) = _state.update { it.copy(query = value) }
+
+    fun onFilterChange(value: ExplorerFilter) = _state.update { it.copy(filter = value) }
+
+    // ----- Navigation Explorer -> Discipline -> Leçon -----
+
+    /**
+     * Micro-interaction : la carte devient verte instantanément, puis la page de la discipline
+     * s'ouvre après un très court délai (le temps de percevoir le retour visuel).
+     */
+    fun onDisciplineClick(id: String) {
+        val st = _state.value
+        if (st.pressedDisciplineId != null || st.openDisciplineId != null) return
+        _state.update { it.copy(pressedDisciplineId = id) }
+        viewModelScope.launch {
+            delay(PRESS_FEEDBACK_MS)
+            _state.update { if (it.pressedDisciplineId == id) it.copy(openDisciplineId = id) else it }
+        }
+    }
+
+    fun onLessonClick(chapter: ExplorerChapter) {
+        prefs.saveLastLesson(
+            subjectName = chapter.subjectName,
+            subjectEmoji = chapter.subjectEmoji,
+            chapterTitle = chapter.title,
+            progress = chapter.progress
+        )
+        prefs.markLessonOpened(chapter.id)
+        prefs.saveLastLessonId(studentId, chapter.id)
+        _state.update { it.copy(openLessonId = chapter.id, openSessionId = null) }
+    }
+
+    /** Gère le retour système / flèche. Renvoie false si on est déjà sur l'accueil Explorer. */
+    fun onBack(): Boolean {
+        val st = _state.value
+        return when {
+            st.openSessionId != null -> {
+                // Retour de l'écran d'une séance vers la liste des séances de la leçon
+                _state.update { it.copy(openSessionId = null) }
+                true
+            }
+            st.openLessonId != null -> {
+                _state.update { it.copy(openLessonId = null) }
+                true
+            }
+            st.openDisciplineId != null || st.pressedDisciplineId != null -> {
+                _state.update { it.copy(openDisciplineId = null, pressedDisciplineId = null) }
+                true
+            }
+            else -> false
+        }
+    }
+
+    fun refresh(silent: Boolean) {
+        val level = levelId ?: return
+        forYouTick.update { it + 1 }
+        job?.cancel()
+        job = viewModelScope.launch {
+            if (!silent && _state.value.chapters.isEmpty()) {
+                _state.update { it.copy(loading = true, error = null) }
+            }
+
+            // 1) Affichage immédiat depuis le cache (si on n'a encore rien)
+            if (_state.value.chapters.isEmpty()) {
+                val cached = withContext(Dispatchers.IO) { cache.read(level) }
+                if (cached != null && cached.isNotEmpty()) {
+                    val chapters = withContext(Dispatchers.IO) { toChapters(cached) }
+                    // Première ouverture après la mise à jour : on amorce Room avec l'ancien cache
+                    withContext(Dispatchers.IO) { runCatching { catalog.storeTree(level, cached) } }
+                    _state.update { sanitized(it.copy(chapters = chapters, loading = false)) }
+                }
+            }
+
+            // 2) Réseau : source de vérité (synchronisée avec l'admin)
+            try {
+                // Contenu : téléchargé seulement si l'admin a modifié quelque chose (sinon une petite requête)
+                val loaded = gate.load(level)
+                val subjects = loaded.subjects
+                val banners = remote.loadBanners(level)
+                if (loaded.changed) {
+                    withContext(Dispatchers.IO) { runCatching { catalog.storeTree(level, subjects) } }
+                }
+                val chapters = withContext(Dispatchers.IO) { toChapters(subjects) }
+                _state.update {
+                    sanitized(
+                        it.copy(
+                            loading = false,
+                            error = null,
+                            offline = false,
+                            chapters = chapters,
+                            banner = banners.firstOrNull(),
+                            banners = banners
+                        )
+                    )
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _state.update { st ->
+                    if (st.chapters.isNotEmpty()) {
+                        st.copy(loading = false, offline = true)
+                    } else {
+                        st.copy(
+                            loading = false,
+                            error = e.message?.takeIf { m -> m.isNotBlank() }
+                                ?: "Impossible de charger les contenus."
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    // ----- Mapping contenu -> UI -----
+
+    /** Si l'admin dépublie la leçon / discipline ouverte, on revient proprement en arrière. */
+    private fun sanitized(st: ExplorerUiState): ExplorerUiState {
+        var next = st
+        if (next.openLessonId != null && next.chapters.none { it.id == next.openLessonId }) {
+            next = next.copy(openLessonId = null, openSessionId = null)
+        }
+        // Séance masquée ou supprimée par l'admin pendant la lecture : retour à la liste des séances
+        if (next.openSessionId != null) {
+            val lesson = next.chapters.firstOrNull { it.id == next.openLessonId }
+            if (lesson == null || lesson.availableSessions().none { it.id == next.openSessionId }) next = next.copy(openSessionId = null)
+        }
+        if (next.openDisciplineId != null && next.disciplines.none { it.id == next.openDisciplineId }) {
+            next = next.copy(openDisciplineId = null, pressedDisciplineId = null)
+        }
+        return next
+    }
+
+    private suspend fun toChapters(subjects: List<LearningSubject>): List<ExplorerChapter> {
+        val introduced = runCatching { dao.progressedCardIds(studentId).toHashSet() }
+            .getOrDefault(hashSetOf())
+
+        return subjects.flatMap { subject ->
+            subject.chapters.map { chapter ->
+                val items = chapter.cards.mapNotNull { toItem(it, subject.name, chapter.title) }
+                val capsuleMinutes = chapter.capsules.sumOf { it.minutes }
+                ExplorerChapter(
+                    id = chapter.id,
+                    subjectId = subject.id,
+                    subjectName = subject.name,
+                    subjectEmoji = subject.emoji,
+                    title = chapter.title,
+                    minutes = if (capsuleMinutes > 0) capsuleMinutes
+                    else (items.size * 1.5).roundToInt().coerceAtLeast(if (items.isEmpty()) 0 else 1),
+                    discovered = items.count { it.cardId in introduced },
+                    capsules = chapter.capsules,
+                    items = items,
+                    tag = chapter.tag,
+                    subjectIconKey = subject.iconKey,
+                    themeId = chapter.themeId,
+                    sessions = chapter.sessions,
+                    complement = chapter.complement
+                )
+            }
+        }
+    }
+
+    private fun toItem(card: LearningCard, subject: String, chapter: String): ReviewItem? {
+        val indices = ci.kalyno.app.data.dojo.mergeCorrectIndices(card.correctIndices, card.correctIndex)
+        val answer = ci.kalyno.app.data.dojo.cardAnswerText(card.kind, card.front, card.choices, indices, card.back, card.adminReference)
+        if (card.front.isBlank() || answer.isNullOrBlank()) return null
+        return ReviewItem(
+            cardId = card.id,
+            subjectName = subject,
+            chapterTitle = chapter,
+            front = card.front,
+            choices = card.choices,
+            correctIndex = card.correctIndex ?: indices.firstOrNull(),
+            answer = answer,
+            explanation = card.explanation,
+            kind = card.kind,
+            correctIndices = indices
+        )
+    }
+}
