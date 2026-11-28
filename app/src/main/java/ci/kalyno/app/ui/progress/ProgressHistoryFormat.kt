@@ -34,7 +34,9 @@ data class AttemptUi(
     /** null = non conservée (historique antérieur à la mise à jour). */
     val studentAnswer: String?,
     val referenceAnswer: String,
-    val isLegacy: Boolean
+    val isLegacy: Boolean,
+    /** « Aujourd'hui », « Hier » ou la date : jour de la tentative (affiché dans l'historique par leçon). */
+    val date: String = ""
 )
 
 /** Textes et regroupement de l'historique (fonctions pures, testées sans Android). */
@@ -66,7 +68,7 @@ internal object HistoryFormat {
         }
     }
 
-    fun toUi(a: DojoAttemptEntity, zone: ZoneId) = AttemptUi(
+    fun toUi(a: DojoAttemptEntity, zone: ZoneId, today: LocalDate = LocalDate.now(zone)) = AttemptUi(
         id = a.id,
         lessonTitle = a.lessonTitle,
         subjectName = a.subjectName,
@@ -77,7 +79,8 @@ internal object HistoryFormat {
         // Tableau : la saisie est stockée en JSON ; on affiche le détail cellule par cellule, jamais le JSON brut
         studentAnswer = (TableAttempt.describe(a.studentAnswer) ?: a.studentAnswer)?.takeIf { it.isNotBlank() },
         referenceAnswer = a.referenceAnswer,
-        isLegacy = a.isLegacy
+        isLegacy = a.isLegacy,
+        date = dayLabel(Instant.ofEpochMilli(a.attemptedAt).atZone(zone).toLocalDate(), today)
     )
 
     /** Regroupe une liste déjà triée du plus récent au plus ancien en « titre de jour + tentatives ». */
@@ -94,7 +97,7 @@ internal object HistoryFormat {
                 currentDay = day
                 rows += HistoryRow.Day(day.toEpochDay(), dayLabel(day, today))
             }
-            rows += HistoryRow.Attempt(toUi(a, zone))
+            rows += HistoryRow.Attempt(toUi(a, zone, today))
         }
         return rows
     }

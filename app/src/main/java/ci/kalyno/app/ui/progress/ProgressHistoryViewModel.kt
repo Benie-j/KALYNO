@@ -135,6 +135,27 @@ class ProgressHistoryViewModel(app: Application) : AndroidViewModel(app) {
         .flowOn(Dispatchers.Default)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ProgressHistoryUiState())
 
+    /**
+     * Toute la mémoire de l'élève pour les écrans détaillés (classés par matière et leçon).
+     * `null` = Room n'a pas encore répondu. Observé seulement tant qu'un écran détaillé est ouvert.
+     */
+    val allAttempts: StateFlow<List<AttemptUi>?> = dao.observeHistory(studentId, HistoryStatus.ALL.code, null, Int.MAX_VALUE)
+        .map { list ->
+            val today = LocalDate.now(zone)
+            list.map { HistoryFormat.toUi(it, zone, today) }
+        }
+        .flowOn(Dispatchers.Default)
+        .stateIn<List<AttemptUi>?>(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    /** Toutes les fiches apprises (réussies au moins une fois), de la plus récente à la plus ancienne. */
+    val allLearned: StateFlow<List<LearnedCardUi>?> = dao.observeLearned(studentId, Int.MAX_VALUE)
+        .map { list ->
+            val today = LocalDate.now(zone)
+            list.map { toLearnedUi(it, today, zone) }
+        }
+        .flowOn(Dispatchers.Default)
+        .stateIn<List<LearnedCardUi>?>(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
     fun selectStatus(status: HistoryStatus) = changeFilter { it.copy(status = status) }
 
     /** Toucher la discipline déjà choisie la désélectionne. */

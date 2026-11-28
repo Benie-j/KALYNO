@@ -1,6 +1,13 @@
 package ci.kalyno.app.ui.progress
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -92,11 +99,13 @@ import ci.kalyno.app.ui.theme.KalynoText
 import ci.kalyno.app.ui.theme.KalynoYellow
 
 private val SideMargin = 16.dp
-private const val MASTERED_PREVIEW = 3
+
+/** Les quatre écrans de « Ma progression » : l'accueil et les trois écrans détaillés. */
+private enum class ProgressSection { HUB, HISTORY, CARDS, SHEETS }
 
 /**
- * « Ma progression » : héros de rétention, bilan de réussite, niveaux de maîtrise, cartes maîtrisées,
- * puis chronologie de toutes les tentatives du Dojo.
+ * « Ma progression » : un accueil (rétention, bilan, semaine) et trois cartes cliquables qui ouvrent chacune
+ * un écran détaillé classé par matière puis par leçon : Historique du Dojo, Cartes apprises, Fiches apprises.
  * Tout vient de Room (hors-ligne) ; [retentionScore] est la rétention FSRS déjà calculée par le tableau de bord,
  * pour que le chiffre soit identique à celui de la carte.
  */
@@ -109,141 +118,195 @@ fun ProgressHistoryScreen(
     viewModel: ProgressHistoryViewModel = viewModel()
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    val listState = rememberLazyListState()
-    var showAllMastered by rememberSaveable { mutableStateOf(false) }
+    var section by rememberSaveable { mutableStateOf(ProgressSection.HUB) }
 
-    // Chargement progressif : on demande la page suivante quand la fin de la liste approche
-    val nearEnd by remember {
-        derivedStateOf {
-            val info = listState.layoutInfo
-            val last = info.visibleItemsInfo.lastOrNull()?.index ?: 0
-            last >= info.totalItemsCount - 6
+    // Retour système : écran détaillé -> accueil de la progression (puis MainScreen reprend la main)
+    BackHandler(enabled = section != ProgressSection.HUB) { section = ProgressSection.HUB }
+
+    AnimatedContent(
+        targetState = section,
+        transitionSpec = {
+            val dir = if (targetState != ProgressSection.HUB) 1 else -1
+            (slideInHorizontally(tween(300)) { it / 4 * dir } + fadeIn(tween(300))) togetherWith
+                (slideOutHorizontally(tween(300)) { -it / 6 * dir } + fadeOut(tween(180)))
+        },
+        label = "progressSection"
+    ) { current ->
+        when (current) {
+            ProgressSection.HUB -> ProgressHub(
+                retentionScore = retentionScore,
+                masteredCount = masteredCount,
+                masteredCards = masteredCards,
+                state = state,
+                onBack = onBack,
+                onOpen = { section = it }
+            )
+
+            ProgressSection.HISTORY -> HistoryDetailScreen(
+                viewModel = viewModel,
+                onBack = { section = ProgressSection.HUB }
+            )
+
+            ProgressSection.CARDS -> MasteredDetailScreen(
+                cards = masteredCards,
+                onBack = { section = ProgressSection.HUB }
+            )
+
+            ProgressSection.SHEETS -> SheetsDetailScreen(
+                viewModel = viewModel,
+                onBack = { section = ProgressSection.HUB }
+            )
         }
     }
-    LaunchedEffect(nearEnd, state.canLoadMore, state.rows.size) {
-        if (nearEnd && state.canLoadMore) viewModel.loadMore()
-    }
+}
 
+@Composable
+private fun ProgressHub(
+    retentionScore: Float?,
+    masteredCount: Int?,
+    masteredCards: List<MasteredCard>,
+    state: ProgressHistoryUiState,
+    onBack: () -> Unit,
+    onOpen: (ProgressSection) -> Unit
+) {
     val summary = state.summary
     val side = Modifier.padding(horizontal = SideMargin)
-    val timeline = remember(state.rows, state.canLoadMore) { buildTimeline(state.rows, state.canLoadMore) }
 
-    LazyColumn(
-        state = listState,
+    Column(
         modifier = Modifier
             .fillMaxSize()
             .background(KalynoBackground)
-            .navigationBarsPadding(),
-        contentPadding = PaddingValues(bottom = 32.dp),
+            .navigationBarsPadding()
+            .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // ----- 1. Héros : anneau de rétention + trois chiffres clés -----
-        item(key = "hero") {
-            ProgressHero(
-                retentionScore = retentionScore,
-                learnedCards = summary?.learnedCards,
-                masteredCount = masteredCount,
-                masteredCardsCount = masteredCards.size,
-                onBack = onBack
-            )
-        }
+        // ----- 1. Héros : anneau de rétention -----
+        ProgressHero(
+            retentionScore = retentionScore,
+            masteredCount = masteredCount,
+            onBack = onBack
+        )
 
-        // ----- 2. Bilan de réussite -----
+        // ----- 2. Les trois portes d'entrée vers le détail -----
+        ProgressNavCard(
+            icon = "history",
+            tint = KalynoBlue,
+            container = KalynoBlueSoft,
+            title = "Historique du Dojo",
+            subtitle = "Chaque réponse, classée par matière et par leçon",
+            count = summary?.total,
+            detail = summary?.takeIf { it.total > 0 }?.let { "${it.successes} succès · ${it.failures} échecs" },
+            onClick = { onOpen(ProgressSection.HISTORY) },
+            modifier = side.entrance(2)
+        )
+        ProgressNavCard(
+            icon = "trophy",
+            tint = KalynoAmberDeep,
+            container = KalynoAmberSoft,
+            title = "Cartes apprises",
+            subtitle = "Validées par 3 répétitions réussies, par matière et par leçon",
+            count = masteredCards.size,
+            detail = null,
+            onClick = { onOpen(ProgressSection.CARDS) },
+            modifier = side.entrance(3)
+        )
+        ProgressNavCard(
+            icon = "layers",
+            tint = KalynoCorrectText,
+            container = KalynoCorrectSoft,
+            title = "Fiches apprises",
+            subtitle = "Réussies au moins une fois, à retourner pour réviser",
+            count = summary?.learnedCards,
+            detail = null,
+            onClick = { onOpen(ProgressSection.SHEETS) },
+            modifier = side.entrance(4)
+        )
+
+        // ----- 3. Aperçu -----
         if (summary != null && summary.total > 0) {
-            item(key = "success") { SuccessCard(summary, side) }
+            SuccessCard(summary, side.entrance(5))
         }
-
-        // ----- 3. Niveaux de maîtrise -----
         if (masteredCards.isNotEmpty()) {
-            item(key = "tiers") { TierCard(masteredCards, side) }
+            TierCard(masteredCards, side.entrance(6))
         }
-
-        // ----- 4. Fiches apprises : de vraies cartes à retourner -----
-        if (state.learned.isNotEmpty()) {
-            item(key = "learned-header") {
-                val total = summary?.learnedCards ?: state.learned.size
-                SectionTitle(
-                    iconName = "layers",
-                    title = "Fiches apprises",
-                    subtitle = if (total > state.learned.size) {
-                        "Tes ${state.learned.size} plus récentes · touche une carte pour la retourner"
-                    } else {
-                        "Touche une carte pour la retourner et revoir la réponse"
-                    },
-                    count = total,
-                    modifier = side
-                )
-            }
-            item(key = "learned-row") {
-                LazyRow(
-                    contentPadding = PaddingValues(horizontal = SideMargin, vertical = 6.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    items(state.learned, key = { it.id }) { card -> FlipCard(card) }
-                }
-            }
-        }
-
-        // ----- 5. Cartes maîtrisées (aperçu, puis tout voir) -----
-        item(key = "mastered-header") {
-            Box(side) { MasteredCardsHeader(masteredCards.size) }
-        }
-        if (masteredCards.isEmpty()) {
-            item(key = "mastered-empty") { Box(side) { MasteredCardsEmptyText() } }
-        } else {
-            val shown = if (showAllMastered) masteredCards else masteredCards.take(MASTERED_PREVIEW)
-            items(shown, key = { "mastered-${it.cardId}" }) { card -> MasteredCardItem(card, side) }
-            if (masteredCards.size > MASTERED_PREVIEW) {
-                item(key = "mastered-toggle") {
-                    ToggleLink(
-                        label = if (showAllMastered) "Réduire la liste" else "Voir les ${masteredCards.size} cartes",
-                        expanded = showAllMastered,
-                        onClick = { showAllMastered = !showAllMastered },
-                        modifier = side
-                    )
-                }
-            }
-        }
-
-        // ----- 6. Historique du Dojo -----
         if (state.neverPlayed) {
-            item(key = "empty") { EmptyState(side) }
+            EmptyState(side.entrance(5))
         } else {
-            item(key = "week") { WeekCard(state.week, side) }
-            item(key = "history-title") {
-                SectionTitle(
-                    iconName = "history",
-                    title = "Historique du Dojo",
-                    subtitle = "Chaque réponse, de la plus récente à la plus ancienne",
-                    count = null,
-                    modifier = side.padding(top = 6.dp)
+            WeekCard(state.week, side.entrance(7))
+        }
+        Spacer(Modifier.height(20.dp))
+    }
+}
+
+/** Carte d'entrée vers un écran détaillé : icône, titre, explication, total qui monte et flèche. */
+@Composable
+private fun ProgressNavCard(
+    icon: String,
+    tint: Color,
+    container: Color,
+    title: String,
+    subtitle: String,
+    count: Int?,
+    detail: String?,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val haptic = rememberHaptic()
+    val shown = rememberCountUp(count ?: 0, durationMillis = 900)
+
+    KalynoCard(
+        modifier = modifier.fillMaxWidth(),
+        onClick = {
+            haptic()
+            onClick()
+        },
+        shape = RoundedCornerShape(22.dp),
+        contentPadding = 16.dp
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .size(54.dp)
+                    .clip(RoundedCornerShape(17.dp))
+                    .background(container),
+                contentAlignment = Alignment.Center
+            ) {
+                KalynoSvgIcon(name = icon, size = 28.dp, tint = tint)
+            }
+            Spacer(Modifier.width(14.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    color = KalynoText,
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.ExtraBold
                 )
-            }
-            item(key = "filters") {
-                FilterBar(state, viewModel::selectStatus, viewModel::selectSubject)
-            }
-            if (!state.loading && state.rows.isEmpty()) {
-                item(key = "no-result") {
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = subtitle,
+                    color = KalynoMuted,
+                    fontSize = 12.sp,
+                    lineHeight = 17.sp
+                )
+                if (detail != null) {
+                    Spacer(Modifier.height(6.dp))
                     Text(
-                        text = "Aucune tentative pour ce filtre.",
-                        color = KalynoMuted,
-                        fontSize = 13.sp,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp)
+                        text = detail,
+                        color = tint,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.ExtraBold
                     )
                 }
             }
-            items(timeline, key = { it.row.key }, contentType = { it.row::class }) { entry ->
-                when (val row = entry.row) {
-                    is HistoryRow.Day -> DayHeader(row.label, entry.dots)
-                    is HistoryRow.Attempt -> TimelineAttempt(row.item, entry.lineAbove, entry.lineBelow)
-                }
-            }
-            if (state.canLoadMore) {
-                item(key = "more") {
-                    ShimmerBlock(side.fillMaxWidth().height(64.dp), RoundedCornerShape(24.dp))
-                }
-            }
+            Spacer(Modifier.width(10.dp))
+            Text(
+                text = if (count == null) "–" else shown.toString(),
+                color = KalynoText,
+                fontSize = 26.sp,
+                fontWeight = FontWeight.ExtraBold
+            )
+            Spacer(Modifier.width(4.dp))
+            KalynoSvgIcon(name = "chevron-right", size = 18.dp, tint = KalynoMuted)
         }
     }
 }
@@ -263,9 +326,7 @@ private fun retentionVerdict(percent: Int?): String = when {
 @Composable
 private fun ProgressHero(
     retentionScore: Float?,
-    learnedCards: Int?,
     masteredCount: Int?,
-    masteredCardsCount: Int,
     onBack: () -> Unit
 ) {
     val haptic = rememberHaptic()
@@ -403,74 +464,27 @@ private fun ProgressHero(
                 modifier = Modifier.padding(horizontal = 24.dp)
             )
 
-            Spacer(Modifier.height(20.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                GlassStat(
-                    iconName = "layers",
-                    value = learnedCards,
-                    label = "Fiches apprises",
-                    modifier = Modifier.weight(1f).entrance(3)
-                )
-                GlassStat(
-                    iconName = "graduation-cap",
-                    value = masteredCount,
-                    label = if (masteredCount == 1) "Notion maîtrisée" else "Notions maîtrisées",
-                    modifier = Modifier.weight(1f).entrance(4)
-                )
-                GlassStat(
-                    iconName = "trophy",
-                    value = masteredCardsCount,
-                    label = if (masteredCardsCount == 1) "Carte maîtrisée" else "Cartes maîtrisées",
-                    modifier = Modifier.weight(1f).entrance(5),
-                    tint = KalynoYellow
-                )
+            if (masteredCount != null && masteredCount > 0) {
+                Spacer(Modifier.height(14.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .entrance(3)
+                        .clip(CircleShape)
+                        .background(Color.White.copy(alpha = 0.14f))
+                        .padding(horizontal = 14.dp, vertical = 7.dp)
+                ) {
+                    KalynoSvgIcon(name = "graduation-cap", size = 16.dp, tint = Color.White)
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = if (masteredCount == 1) "1 notion maîtrisée" else "$masteredCount notions maîtrisées",
+                        color = Color.White,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.ExtraBold
+                    )
+                }
             }
         }
-    }
-}
-
-/** Tuile « verre dépoli » : icône, valeur qui monte de 0 à la valeur réelle, libellé sur deux lignes. */
-@Composable
-private fun GlassStat(
-    iconName: String,
-    value: Int?,
-    label: String,
-    modifier: Modifier = Modifier,
-    tint: Color = Color.White
-) {
-    val shown = rememberCountUp(value ?: 0)
-    val tileShape = RoundedCornerShape(20.dp)
-    Column(
-        modifier = modifier
-            .clip(tileShape)
-            .background(Color.White.copy(alpha = 0.14f))
-            .border(1.dp, Color.White.copy(alpha = 0.2f), tileShape)
-            .padding(vertical = 14.dp, horizontal = 6.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        KalynoSvgIcon(name = iconName, size = 22.dp, tint = tint)
-        Spacer(Modifier.height(6.dp))
-        Text(
-            text = if (value == null) "–" else shown.toString(),
-            color = Color.White,
-            fontSize = 26.sp,
-            fontWeight = FontWeight.ExtraBold
-        )
-        Text(
-            text = label,
-            color = Color.White.copy(alpha = 0.85f),
-            fontSize = 11.sp,
-            lineHeight = 14.sp,
-            fontWeight = FontWeight.Bold,
-            textAlign = TextAlign.Center,
-            minLines = 2,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis
-        )
     }
 }
 
@@ -688,305 +702,7 @@ private fun TierRow(style: TierStyle, count: Int, share: Float) {
 }
 
 @Composable
-private fun ToggleLink(
-    label: String,
-    expanded: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val haptic = rememberHaptic()
-    val rotation by animateFloatAsState(if (expanded) 180f else 0f, label = "toggleChevron")
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .background(KalynoBlueSoft)
-            .clickable {
-                haptic()
-                onClick()
-            }
-            .padding(vertical = 12.dp),
-        horizontalArrangement = Arrangement.Center,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(text = label, color = KalynoBlue, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold)
-        Spacer(Modifier.width(6.dp))
-        Box(Modifier.rotate(rotation)) {
-            KalynoSvgIcon(name = "chevron-down", size = 14.dp, tint = KalynoBlue)
-        }
-    }
-}
-
-// ===========================================================================
-// FILTRES
-// ===========================================================================
-
-@Composable
-private fun FilterBar(
-    state: ProgressHistoryUiState,
-    onStatus: (HistoryStatus) -> Unit,
-    onSubject: (String?) -> Unit
-) {
-    val haptic = rememberHaptic()
-    val summary = state.summary
-    val segmentShape = RoundedCornerShape(16.dp)
-
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        // Contrôle segmenté : Tout / Succès / Échecs, avec le nombre de chaque
-        Row(
-            modifier = Modifier
-                .padding(horizontal = SideMargin)
-                .fillMaxWidth()
-                .clip(segmentShape)
-                .background(Color.White)
-                .border(1.dp, KalynoOutline, segmentShape)
-                .padding(4.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            HistoryStatus.entries.forEach { status ->
-                val selected = state.filter.status == status
-                val container by animateColorAsState(
-                    targetValue = if (selected) KalynoBlue else Color.Transparent,
-                    animationSpec = tween(160),
-                    label = "segmentContainer"
-                )
-                val content by animateColorAsState(
-                    targetValue = if (selected) Color.White else KalynoMuted,
-                    animationSpec = tween(160),
-                    label = "segmentContent"
-                )
-                val label = when (status) {
-                    HistoryStatus.ALL -> "Tout" + (summary?.let { " · ${it.total}" } ?: "")
-                    HistoryStatus.SUCCESS -> "Succès" + (summary?.let { " · ${it.successes}" } ?: "")
-                    HistoryStatus.FAILURE -> "Échecs" + (summary?.let { " · ${it.failures}" } ?: "")
-                }
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(container)
-                        .clickable {
-                            haptic()
-                            onStatus(status)
-                        }
-                        .padding(vertical = 10.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = label,
-                        color = content,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        maxLines = 1
-                    )
-                }
-            }
-        }
-
-        if (state.subjects.isNotEmpty()) {
-            LazyRow(
-                contentPadding = PaddingValues(horizontal = SideMargin),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(state.subjects) { subject ->
-                    HistoryChip(subject, selected = state.filter.subject == subject) { onSubject(subject) }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun HistoryChip(label: String, selected: Boolean, onClick: () -> Unit) {
-    val haptic = rememberHaptic()
-    val container by animateColorAsState(
-        targetValue = if (selected) KalynoBlue else Color.White,
-        animationSpec = tween(160),
-        label = "chipContainer"
-    )
-    val content by animateColorAsState(
-        targetValue = if (selected) Color.White else KalynoText,
-        animationSpec = tween(160),
-        label = "chipContent"
-    )
-    val shape = RoundedCornerShape(50)
-    Box(
-        Modifier
-            .clip(shape)
-            .background(container)
-            .border(1.dp, if (selected) KalynoBlue else KalynoOutline, shape)
-            .clickable {
-                haptic()
-                onClick()
-            }
-            .padding(horizontal = 14.dp, vertical = 8.dp)
-    ) {
-        Text(
-            text = label,
-            color = content,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 1
-        )
-    }
-}
-
-// ===========================================================================
-// CHRONOLOGIE
-// ===========================================================================
-
-/** Une ligne de la chronologie, avec ce qu'il faut savoir pour dessiner le fil qui relie les tentatives. */
-private data class TimelineEntry(
-    val row: HistoryRow,
-    val lineAbove: Boolean,
-    val lineBelow: Boolean,
-    /** Résultat de chaque tentative du jour (vrai = succès) ; vide pour une tentative. */
-    val dots: List<Boolean>
-)
-
-private fun buildTimeline(rows: List<HistoryRow>, moreBelow: Boolean): List<TimelineEntry> {
-    val out = ArrayList<TimelineEntry>(rows.size)
-    rows.forEachIndexed { index, row ->
-        when (row) {
-            is HistoryRow.Day -> {
-                val dots = ArrayList<Boolean>()
-                var j = index + 1
-                while (j < rows.size) {
-                    val next = rows[j]
-                    if (next is HistoryRow.Attempt) {
-                        dots += next.item.success
-                        j++
-                    } else {
-                        break
-                    }
-                }
-                out += TimelineEntry(row, lineAbove = false, lineBelow = false, dots = dots)
-            }
-            is HistoryRow.Attempt -> {
-                val previousIsAttempt = rows.getOrNull(index - 1) is HistoryRow.Attempt
-                val next = rows.getOrNull(index + 1)
-                val nextIsAttempt = next is HistoryRow.Attempt
-                out += TimelineEntry(
-                    row = row,
-                    lineAbove = previousIsAttempt,
-                    // Le fil continue vers le bas tant qu'il reste des tentatives (même à charger)
-                    lineBelow = nextIsAttempt || (next == null && moreBelow),
-                    dots = emptyList()
-                )
-            }
-        }
-    }
-    return out
-}
-
-private val TimelineNode = 28.dp
-private val NodeCenterY = 22.dp
-private const val MAX_DAY_DOTS = 10
-
-@Composable
-private fun DayHeader(label: String, dots: List<Boolean>) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(start = SideMargin, end = SideMargin, top = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(Modifier.width(TimelineNode), contentAlignment = Alignment.Center) {
-            Box(
-                modifier = Modifier
-                    .size(12.dp)
-                    .clip(CircleShape)
-                    .background(KalynoBlue)
-                    .border(3.dp, KalynoBlueSoft, CircleShape)
-            )
-        }
-        Spacer(Modifier.width(10.dp))
-        Column(Modifier.weight(1f)) {
-            Text(
-                text = label,
-                color = KalynoText,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.ExtraBold
-            )
-            if (dots.isNotEmpty()) {
-                Text(
-                    text = if (dots.size == 1) "1 réponse" else "${dots.size} réponses",
-                    color = KalynoMuted,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Medium
-                )
-            }
-        }
-        // Un point par réponse : vert = succès, rouge doux = échec
-        Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-            dots.take(MAX_DAY_DOTS).forEach { success ->
-                Box(
-                    modifier = Modifier
-                        .size(8.dp)
-                        .clip(CircleShape)
-                        .background(if (success) KalynoCorrect else KalynoDanger.copy(alpha = 0.55f))
-                )
-            }
-            if (dots.size > MAX_DAY_DOTS) {
-                Text(
-                    text = "+${dots.size - MAX_DAY_DOTS}",
-                    color = KalynoMuted,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.ExtraBold
-                )
-            }
-        }
-    }
-}
-
-/** Une tentative sur le fil du temps : pastille de résultat sur la ligne, carte dépliable à droite. */
-@Composable
-private fun TimelineAttempt(item: AttemptUi, lineAbove: Boolean, lineBelow: Boolean) {
-    val accent = if (item.success) KalynoCorrect else KalynoDanger
-
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .drawBehind {
-                // Le fil déborde de 6 dp en haut et en bas pour traverser l'espace entre deux cartes
-                val x = (SideMargin + TimelineNode / 2).toPx()
-                val nodeY = NodeCenterY.toPx()
-                val top = if (lineAbove) -6.dp.toPx() else nodeY
-                val bottom = if (lineBelow) size.height + 6.dp.toPx() else nodeY
-                if (bottom > top) {
-                    drawLine(
-                        color = KalynoOutline,
-                        start = Offset(x, top),
-                        end = Offset(x, bottom),
-                        strokeWidth = 2.dp.toPx()
-                    )
-                }
-            }
-    ) {
-        Row(Modifier.padding(horizontal = SideMargin)) {
-            Box(
-                modifier = Modifier
-                    .padding(top = NodeCenterY - TimelineNode / 2)
-                    .size(TimelineNode)
-                    .clip(CircleShape)
-                    .background(accent)
-                    .border(3.dp, KalynoBackground, CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                KalynoSvgIcon(
-                    name = if (item.success) "check" else "x",
-                    size = 14.dp,
-                    tint = Color.White
-                )
-            }
-            Spacer(Modifier.width(10.dp))
-            AttemptCard(item, Modifier.weight(1f))
-        }
-    }
-}
-
-@Composable
-private fun AttemptCard(item: AttemptUi, modifier: Modifier = Modifier) {
+internal fun AttemptCard(item: AttemptUi, modifier: Modifier = Modifier, showContext: Boolean = true) {
     var expanded by rememberSaveable(item.id) { mutableStateOf(false) }
     val rotation by animateFloatAsState(if (expanded) 180f else 0f, label = "chevron")
 
@@ -1001,7 +717,8 @@ private fun AttemptCard(item: AttemptUi, modifier: Modifier = Modifier) {
     ) {
         Row(verticalAlignment = Alignment.Top) {
             Text(
-                text = item.lessonTitle,
+                // Dans l'historique classé par leçon, la leçon est déjà le titre du groupe : on montre le jour
+                text = if (showContext) item.lessonTitle else item.date.ifBlank { item.time },
                 color = KalynoText,
                 fontSize = 15.sp,
                 fontWeight = FontWeight.ExtraBold,
@@ -1023,7 +740,7 @@ private fun AttemptCard(item: AttemptUi, modifier: Modifier = Modifier) {
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             StatusBadge(item.success)
-            if (item.subjectName.isNotBlank()) {
+            if (showContext && item.subjectName.isNotBlank()) {
                 Text(
                     text = item.subjectName,
                     color = KalynoBlue,
@@ -1189,49 +906,6 @@ private fun EmptyState(modifier: Modifier = Modifier) {
 }
 
 // ===========================================================================
-// TITRES DE SECTION
-// ===========================================================================
-
-@Composable
-private fun SectionTitle(
-    iconName: String,
-    title: String,
-    subtitle: String,
-    count: Int?,
-    modifier: Modifier = Modifier
-) {
-    Row(modifier = modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Box(
-            modifier = Modifier
-                .size(38.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(KalynoBlueSoft),
-            contentAlignment = Alignment.Center
-        ) {
-            KalynoSvgIcon(name = iconName, size = 20.dp, tint = KalynoBlue)
-        }
-        Spacer(Modifier.width(12.dp))
-        Column(Modifier.weight(1f)) {
-            Text(text = title, color = KalynoText, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold)
-            Text(text = subtitle, color = KalynoMuted, fontSize = 12.sp, lineHeight = 16.sp)
-        }
-        if (count != null && count > 0) {
-            Spacer(Modifier.width(8.dp))
-            Text(
-                text = count.toString(),
-                color = KalynoBlue,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.ExtraBold,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(KalynoBlueSoft)
-                    .padding(horizontal = 10.dp, vertical = 4.dp)
-            )
-        }
-    }
-}
-
-// ===========================================================================
 // FICHES APPRISES : cartes à retourner
 // ===========================================================================
 
@@ -1240,7 +914,7 @@ private fun SectionTitle(
  * Un toucher la retourne (rotation 3D) ; l'état de retournement est conservé à la rotation de l'écran.
  */
 @Composable
-private fun FlipCard(card: LearnedCardUi) {
+internal fun FlipCard(card: LearnedCardUi) {
     val haptic = rememberHaptic()
     var flipped by rememberSaveable(card.id) { mutableStateOf(false) }
     val rotation by animateFloatAsState(
