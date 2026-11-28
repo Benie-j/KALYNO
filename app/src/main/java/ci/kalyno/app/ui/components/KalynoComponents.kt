@@ -1,5 +1,6 @@
 package ci.kalyno.app.ui.components
 
+import ci.kalyno.app.ui.theme.KalynoSurface
 import ci.kalyno.app.ui.theme.KalynoShimmerHighlight
 import ci.kalyno.app.ui.theme.KalynoShimmerBase
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -88,7 +89,7 @@ fun KalynoCard(
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
     shape: Shape = RoundedCornerShape(24.dp),
-    background: Color = Color.White,
+    background: Color = KalynoSurface,
     borderColor: Color = KalynoOutline,
     contentPadding: Dp = 18.dp,
     content: @Composable ColumnScope.() -> Unit

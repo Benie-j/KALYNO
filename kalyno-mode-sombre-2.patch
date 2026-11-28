@@ -1,0 +1,199 @@
+diff --git a/app/src/main/java/ci/kalyno/app/ui/auth/KalynoAuthScreen.kt b/app/src/main/java/ci/kalyno/app/ui/auth/KalynoAuthScreen.kt
+index de22e02..fc7b26d 100644
+--- a/app/src/main/java/ci/kalyno/app/ui/auth/KalynoAuthScreen.kt
++++ b/app/src/main/java/ci/kalyno/app/ui/auth/KalynoAuthScreen.kt
+@@ -1,5 +1,6 @@
+ package ci.kalyno.app.ui.auth
+ 
++import ci.kalyno.app.ui.theme.KalynoSurface
+ import androidx.compose.foundation.BorderStroke
+ import androidx.compose.foundation.background
+ import androidx.compose.foundation.border
+@@ -67,7 +68,7 @@ import ci.kalyno.app.ui.theme.KalynoRetryText
+ import ci.kalyno.app.ui.theme.KalynoText
+ import ci.kalyno.app.ui.theme.KalynoTheme
+ 
+-private val Surface = Color.White
++private val Surface: Color get() = KalynoSurface
+ private val ButtonShape = RoundedCornerShape(24.dp)
+ private val FieldShape = RoundedCornerShape(24.dp)
+ 
+diff --git a/app/src/main/java/ci/kalyno/app/ui/badges/BadgeCard.kt b/app/src/main/java/ci/kalyno/app/ui/badges/BadgeCard.kt
+index ad1019a..4f686c5 100644
+--- a/app/src/main/java/ci/kalyno/app/ui/badges/BadgeCard.kt
++++ b/app/src/main/java/ci/kalyno/app/ui/badges/BadgeCard.kt
+@@ -1,5 +1,6 @@
+ package ci.kalyno.app.ui.badges
+ 
++import ci.kalyno.app.ui.theme.KalynoSurface
+ import ci.kalyno.app.ui.theme.KalynoSurfaceVariant
+ import androidx.compose.foundation.BorderStroke
+ import androidx.compose.foundation.background
+@@ -40,7 +41,7 @@ fun BadgeCard(state: BadgeUiState, modifier: Modifier = Modifier) {
+     Surface(
+         modifier = modifier.fillMaxWidth(),
+         shape = RoundedCornerShape(20.dp),
+-        color = Color.White,
++        color = KalynoSurface,
+         border = BorderStroke(1.dp, if (unlocked) KalynoBlue.copy(alpha = 0.4f) else KalynoOutline)
+     ) {
+         Column(
+diff --git a/app/src/main/java/ci/kalyno/app/ui/challenge/ChallengeScreen.kt b/app/src/main/java/ci/kalyno/app/ui/challenge/ChallengeScreen.kt
+index bdf4353..7a615e1 100644
+--- a/app/src/main/java/ci/kalyno/app/ui/challenge/ChallengeScreen.kt
++++ b/app/src/main/java/ci/kalyno/app/ui/challenge/ChallengeScreen.kt
+@@ -1,6 +1,7 @@
+ package ci.kalyno.app.ui.challenge
+ 
+ 
++import ci.kalyno.app.ui.theme.KalynoSurface
+ import ci.kalyno.app.data.ai.AiExerciseContext
+ import ci.kalyno.app.data.ai.KalynoVerdict
+ import ci.kalyno.app.data.ai.toDetailText
+@@ -468,7 +469,7 @@ private fun ChallengeQuestionCard(
+         modifier = Modifier.fillMaxWidth(),
+         shape = RoundedCornerShape(20.dp),
+         contentPadding = 16.dp,
+-        background = Color.White,
++        background = KalynoSurface,
+         borderColor = KalynoOutline
+     ) {
+         Row(verticalAlignment = Alignment.CenterVertically) {
+diff --git a/app/src/main/java/ci/kalyno/app/ui/components/KalynoComponents.kt b/app/src/main/java/ci/kalyno/app/ui/components/KalynoComponents.kt
+index 1ab8e64..e4e70e5 100644
+--- a/app/src/main/java/ci/kalyno/app/ui/components/KalynoComponents.kt
++++ b/app/src/main/java/ci/kalyno/app/ui/components/KalynoComponents.kt
+@@ -1,5 +1,6 @@
+ package ci.kalyno.app.ui.components
+ 
++import ci.kalyno.app.ui.theme.KalynoSurface
+ import ci.kalyno.app.ui.theme.KalynoShimmerHighlight
+ import ci.kalyno.app.ui.theme.KalynoShimmerBase
+ import androidx.compose.animation.core.FastOutSlowInEasing
+@@ -88,7 +89,7 @@ fun KalynoCard(
+     modifier: Modifier = Modifier,
+     onClick: (() -> Unit)? = null,
+     shape: Shape = RoundedCornerShape(24.dp),
+-    background: Color = Color.White,
++    background: Color = KalynoSurface,
+     borderColor: Color = KalynoOutline,
+     contentPadding: Dp = 18.dp,
+     content: @Composable ColumnScope.() -> Unit
+diff --git a/app/src/main/java/ci/kalyno/app/ui/explorer/RichText.kt b/app/src/main/java/ci/kalyno/app/ui/explorer/RichText.kt
+index a72bc39..ca3e7eb 100644
+--- a/app/src/main/java/ci/kalyno/app/ui/explorer/RichText.kt
++++ b/app/src/main/java/ci/kalyno/app/ui/explorer/RichText.kt
+@@ -1,5 +1,7 @@
+ package ci.kalyno.app.ui.explorer
+ 
++import ci.kalyno.app.ui.theme.adaptContentText
++import ci.kalyno.app.ui.theme.adaptContentBackground
+ import ci.kalyno.app.ui.theme.KalynoHighlight
+ import ci.kalyno.app.ui.theme.KalynoDanger
+ import androidx.compose.foundation.Canvas
+@@ -287,8 +289,8 @@ private fun parseRich(html: String): List<RBlock> {
+         when (name) {
+             "p" -> { flush(); kind = if (activeBoxBorder != null) RKind.BOX else RKind.P }
+             "div" -> {
+-                val border = BORDER_RE.find(raw)?.let { hexColor(it.groupValues[1]) }
+-                val background = BG_RE.find(raw)?.let { hexColor(it.groupValues[1]) }
++                val border = BORDER_RE.find(raw)?.let { hexColor(it.groupValues[1]) }?.let { adaptContentBackground(it) }
++                val background = BG_RE.find(raw)?.let { hexColor(it.groupValues[1]) }?.let { adaptContentBackground(it) }
+                 if (border != null) {
+                     flush()
+                     activeBoxBorder = border
+@@ -319,8 +321,8 @@ private fun parseRich(html: String): List<RBlock> {
+             "sub" -> push(SpanStyle(baselineShift = BaselineShift.Subscript, fontSize = 0.75.em))
+             "mark" -> push(SpanStyle(background = KalynoHighlight))
+             "span", "font" -> {
+-                val color = COLOR_RE.find(raw)?.let { hexColor(it.groupValues[1]) }
+-                val bg = BG_RE.find(raw)?.let { hexColor(it.groupValues[1]) }
++                val color = COLOR_RE.find(raw)?.let { hexColor(it.groupValues[1]) }?.let { adaptContentText(it) }
++                val bg = BG_RE.find(raw)?.let { hexColor(it.groupValues[1]) }?.let { adaptContentBackground(it) }
+                 if (color != null || bg != null) {
+                     push(SpanStyle(color = color ?: Color.Unspecified, background = bg ?: Color.Unspecified))
+                 } else {
+diff --git a/app/src/main/java/ci/kalyno/app/ui/explorer/tables/RichTable.kt b/app/src/main/java/ci/kalyno/app/ui/explorer/tables/RichTable.kt
+index a4f8ae2..27d8d63 100644
+--- a/app/src/main/java/ci/kalyno/app/ui/explorer/tables/RichTable.kt
++++ b/app/src/main/java/ci/kalyno/app/ui/explorer/tables/RichTable.kt
+@@ -1,5 +1,7 @@
+ package ci.kalyno.app.ui.explorer.tables
+ 
++import ci.kalyno.app.ui.theme.adaptContentText
++import ci.kalyno.app.ui.theme.adaptContentBackground
+ import androidx.compose.foundation.background
+ import androidx.compose.foundation.horizontalScroll
+ import androidx.compose.foundation.layout.Arrangement
+@@ -88,13 +90,13 @@ internal fun RichTable(raw: String, color: Color, fontSize: TextUnit, lineHeight
+ private fun TableCellView(p: PlacedCell, table: HtmlTable, color: Color, fontSize: TextUnit, lineHeight: TextUnit) {
+     val cell = p.cell
+     val density = LocalDensity.current
+-    val lineColorDefault = table.borderColor?.let { Color(it) } ?: color.copy(alpha = 0.85f)
++    val lineColorDefault = table.borderColor?.let { adaptContentBackground(Color(it)) } ?: color.copy(alpha = 0.85f)
+     val tableLinePx = with(density) { table.borderDp.dp.toPx() }
+     val cellLinePx = cell.borderDp?.let { with(density) { it.dp.toPx() } }
+-    val cellLineColor = cell.borderColor?.let { Color(it) }
+-    val bg = cell.background?.let { Color(it) }
+-        ?: if (cell.header) color.copy(alpha = 0.07f) else table.background?.let { Color(it) } ?: Color.Transparent
+-    val textColor = cell.textColor?.let { Color(it) } ?: color
++    val cellLineColor = cell.borderColor?.let { adaptContentBackground(Color(it)) }
++    val bg = cell.background?.let { adaptContentBackground(Color(it)) }
++        ?: if (cell.header) color.copy(alpha = 0.07f) else table.background?.let { adaptContentBackground(Color(it)) } ?: Color.Transparent
++    val textColor = cell.textColor?.let { adaptContentText(Color(it)) } ?: color
+     val h = when (cell.align ?: if (cell.header) CellAlign.CENTER else CellAlign.START) {
+         CellAlign.START -> -1f
+         CellAlign.CENTER -> 0f
+diff --git a/app/src/main/java/ci/kalyno/app/ui/profile/SettingsComponents.kt b/app/src/main/java/ci/kalyno/app/ui/profile/SettingsComponents.kt
+index 118ec4b..19612f6 100644
+--- a/app/src/main/java/ci/kalyno/app/ui/profile/SettingsComponents.kt
++++ b/app/src/main/java/ci/kalyno/app/ui/profile/SettingsComponents.kt
+@@ -303,7 +303,7 @@ fun ActionTile(
+     onClick: () -> Unit,
+     modifier: Modifier = Modifier,
+     background: Color = KalynoBlueSoft,
+-    iconBackground: Color = Color.White,
++    iconBackground: Color = KalynoSurface,
+     iconTint: Color = KalynoBlue
+ ) {
+     val haptic = rememberHaptic()
+diff --git a/app/src/main/java/ci/kalyno/app/ui/review/ReviewSessionScreen.kt b/app/src/main/java/ci/kalyno/app/ui/review/ReviewSessionScreen.kt
+index 13ca417..717e0b6 100644
+--- a/app/src/main/java/ci/kalyno/app/ui/review/ReviewSessionScreen.kt
++++ b/app/src/main/java/ci/kalyno/app/ui/review/ReviewSessionScreen.kt
+@@ -535,7 +535,7 @@ private fun BackFace(
+     KalynoCard(
+         modifier = Modifier.fillMaxWidth(),
+         contentPadding = 22.dp,
+-        background = Color.White,
++        background = KalynoSurface,
+         borderColor = if (result == false) KalynoDangerBorder else KalynoOutline
+     ) {
+         KalynoPill(text = "✅ CORRECTION", container = KalynoCorrectSoft, content = KalynoCorrectText)
+diff --git a/app/src/main/java/ci/kalyno/app/ui/theme/DesignTokens.kt b/app/src/main/java/ci/kalyno/app/ui/theme/DesignTokens.kt
+index 4f9ec19..a57dacf 100644
+--- a/app/src/main/java/ci/kalyno/app/ui/theme/DesignTokens.kt
++++ b/app/src/main/java/ci/kalyno/app/ui/theme/DesignTokens.kt
+@@ -1,6 +1,8 @@
+ package ci.kalyno.app.ui.theme
+ 
+ import androidx.compose.ui.graphics.Color
++import androidx.compose.ui.graphics.lerp
++import androidx.compose.ui.graphics.luminance
+ 
+ /**
+  * Jetons de design complémentaires (en plus de Palette.kt et KalynoTheme.kt).
+@@ -38,3 +40,13 @@ val KalynoTealDark: Color get() = kc(0xFF115E59, 0xFF0F766E)
+ 
+ // Ombre diffuse des cartes
+ val KalynoShadow: Color get() = kc(0x1F0F172A, 0x66000000)
++
++/** Fond/bordure venant du contenu admin (pensé pour fond clair) : atténué en mode sombre. */
++fun adaptContentBackground(c: Color): Color =
++    if (!KalynoThemeState.isDark || c.alpha < 0.05f || c.luminance() < 0.5f) c
++    else lerp(KalynoSurface, c.copy(alpha = 1f), 0.22f)
++
++/** Couleur de texte venant du contenu admin : les teintes sombres sont éclaircies en mode sombre. */
++fun adaptContentText(c: Color): Color =
++    if (!KalynoThemeState.isDark || c.luminance() > 0.35f) c
++    else lerp(c, Color.White, 0.6f)

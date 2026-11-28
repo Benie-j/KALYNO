@@ -1,5 +1,7 @@
 package ci.kalyno.app.ui.explorer.tables
 
+import ci.kalyno.app.ui.theme.adaptContentText
+import ci.kalyno.app.ui.theme.adaptContentBackground
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -88,13 +90,13 @@ internal fun RichTable(raw: String, color: Color, fontSize: TextUnit, lineHeight
 private fun TableCellView(p: PlacedCell, table: HtmlTable, color: Color, fontSize: TextUnit, lineHeight: TextUnit) {
     val cell = p.cell
     val density = LocalDensity.current
-    val lineColorDefault = table.borderColor?.let { Color(it) } ?: color.copy(alpha = 0.85f)
+    val lineColorDefault = table.borderColor?.let { adaptContentBackground(Color(it)) } ?: color.copy(alpha = 0.85f)
     val tableLinePx = with(density) { table.borderDp.dp.toPx() }
     val cellLinePx = cell.borderDp?.let { with(density) { it.dp.toPx() } }
-    val cellLineColor = cell.borderColor?.let { Color(it) }
-    val bg = cell.background?.let { Color(it) }
-        ?: if (cell.header) color.copy(alpha = 0.07f) else table.background?.let { Color(it) } ?: Color.Transparent
-    val textColor = cell.textColor?.let { Color(it) } ?: color
+    val cellLineColor = cell.borderColor?.let { adaptContentBackground(Color(it)) }
+    val bg = cell.background?.let { adaptContentBackground(Color(it)) }
+        ?: if (cell.header) color.copy(alpha = 0.07f) else table.background?.let { adaptContentBackground(Color(it)) } ?: Color.Transparent
+    val textColor = cell.textColor?.let { adaptContentText(Color(it)) } ?: color
     val h = when (cell.align ?: if (cell.header) CellAlign.CENTER else CellAlign.START) {
         CellAlign.START -> -1f
         CellAlign.CENTER -> 0f

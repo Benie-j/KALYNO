@@ -1,6 +1,8 @@
 package ci.kalyno.app.ui.theme
 
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.luminance
 
 /**
  * Jetons de design complémentaires (en plus de Palette.kt et KalynoTheme.kt).
@@ -38,3 +40,13 @@ val KalynoTealDark: Color get() = kc(0xFF115E59, 0xFF0F766E)
 
 // Ombre diffuse des cartes
 val KalynoShadow: Color get() = kc(0x1F0F172A, 0x66000000)
+
+/** Fond/bordure venant du contenu admin (pensé pour fond clair) : atténué en mode sombre. */
+fun adaptContentBackground(c: Color): Color =
+    if (!KalynoThemeState.isDark || c.alpha < 0.05f || c.luminance() < 0.5f) c
+    else lerp(KalynoSurface, c.copy(alpha = 1f), 0.22f)
+
+/** Couleur de texte venant du contenu admin : les teintes sombres sont éclaircies en mode sombre. */
+fun adaptContentText(c: Color): Color =
+    if (!KalynoThemeState.isDark || c.luminance() > 0.35f) c
+    else lerp(c, Color.White, 0.6f)

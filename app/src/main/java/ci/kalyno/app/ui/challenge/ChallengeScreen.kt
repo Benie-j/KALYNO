@@ -1,6 +1,7 @@
 package ci.kalyno.app.ui.challenge
 
 
+import ci.kalyno.app.ui.theme.KalynoSurface
 import ci.kalyno.app.data.ai.AiExerciseContext
 import ci.kalyno.app.data.ai.KalynoVerdict
 import ci.kalyno.app.data.ai.toDetailText
@@ -468,7 +469,7 @@ private fun ChallengeQuestionCard(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
         contentPadding = 16.dp,
-        background = Color.White,
+        background = KalynoSurface,
         borderColor = KalynoOutline
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {

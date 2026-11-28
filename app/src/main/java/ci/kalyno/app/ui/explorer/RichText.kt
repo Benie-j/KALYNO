@@ -1,5 +1,7 @@
 package ci.kalyno.app.ui.explorer
 
+import ci.kalyno.app.ui.theme.adaptContentText
+import ci.kalyno.app.ui.theme.adaptContentBackground
 import ci.kalyno.app.ui.theme.KalynoHighlight
 import ci.kalyno.app.ui.theme.KalynoDanger
 import androidx.compose.foundation.Canvas
@@ -287,8 +289,8 @@ private fun parseRich(html: String): List<RBlock> {
         when (name) {
             "p" -> { flush(); kind = if (activeBoxBorder != null) RKind.BOX else RKind.P }
             "div" -> {
-                val border = BORDER_RE.find(raw)?.let { hexColor(it.groupValues[1]) }
-                val background = BG_RE.find(raw)?.let { hexColor(it.groupValues[1]) }
+                val border = BORDER_RE.find(raw)?.let { hexColor(it.groupValues[1]) }?.let { adaptContentBackground(it) }
+                val background = BG_RE.find(raw)?.let { hexColor(it.groupValues[1]) }?.let { adaptContentBackground(it) }
                 if (border != null) {
                     flush()
                     activeBoxBorder = border
@@ -319,8 +321,8 @@ private fun parseRich(html: String): List<RBlock> {
             "sub" -> push(SpanStyle(baselineShift = BaselineShift.Subscript, fontSize = 0.75.em))
             "mark" -> push(SpanStyle(background = KalynoHighlight))
             "span", "font" -> {
-                val color = COLOR_RE.find(raw)?.let { hexColor(it.groupValues[1]) }
-                val bg = BG_RE.find(raw)?.let { hexColor(it.groupValues[1]) }
+                val color = COLOR_RE.find(raw)?.let { hexColor(it.groupValues[1]) }?.let { adaptContentText(it) }
+                val bg = BG_RE.find(raw)?.let { hexColor(it.groupValues[1]) }?.let { adaptContentBackground(it) }
                 if (color != null || bg != null) {
                     push(SpanStyle(color = color ?: Color.Unspecified, background = bg ?: Color.Unspecified))
                 } else {

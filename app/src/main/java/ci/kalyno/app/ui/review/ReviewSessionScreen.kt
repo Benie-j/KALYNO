@@ -535,7 +535,7 @@ private fun BackFace(
     KalynoCard(
         modifier = Modifier.fillMaxWidth(),
         contentPadding = 22.dp,
-        background = Color.White,
+        background = KalynoSurface,
         borderColor = if (result == false) KalynoDangerBorder else KalynoOutline
     ) {
         KalynoPill(text = "✅ CORRECTION", container = KalynoCorrectSoft, content = KalynoCorrectText)

@@ -1,5 +1,6 @@
 package ci.kalyno.app.ui.auth
 
+import ci.kalyno.app.ui.theme.KalynoSurface
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -67,7 +68,7 @@ import ci.kalyno.app.ui.theme.KalynoRetryText
 import ci.kalyno.app.ui.theme.KalynoText
 import ci.kalyno.app.ui.theme.KalynoTheme
 
-private val Surface = Color.White
+private val Surface: Color get() = KalynoSurface
 private val ButtonShape = RoundedCornerShape(24.dp)
 private val FieldShape = RoundedCornerShape(24.dp)
 

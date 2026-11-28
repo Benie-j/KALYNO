@@ -303,7 +303,7 @@ fun ActionTile(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     background: Color = KalynoBlueSoft,
-    iconBackground: Color = Color.White,
+    iconBackground: Color = KalynoSurface,
     iconTint: Color = KalynoBlue
 ) {
     val haptic = rememberHaptic()

@@ -1,5 +1,6 @@
 package ci.kalyno.app.ui.badges
 
+import ci.kalyno.app.ui.theme.KalynoSurface
 import ci.kalyno.app.ui.theme.KalynoSurfaceVariant
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -40,7 +41,7 @@ fun BadgeCard(state: BadgeUiState, modifier: Modifier = Modifier) {
     Surface(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
-        color = Color.White,
+        color = KalynoSurface,
         border = BorderStroke(1.dp, if (unlocked) KalynoBlue.copy(alpha = 0.4f) else KalynoOutline)
     ) {
         Column(
