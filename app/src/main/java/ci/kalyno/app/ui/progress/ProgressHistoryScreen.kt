@@ -29,6 +29,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -45,6 +47,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
@@ -61,6 +64,7 @@ import ci.kalyno.app.data.dashboard.MasteredCard
 import ci.kalyno.app.data.dashboard.MasteryTier
 import ci.kalyno.app.ui.components.DriftingBlob
 import ci.kalyno.app.ui.components.KalynoCard
+import ci.kalyno.app.ui.components.KalynoPill
 import ci.kalyno.app.ui.components.KalynoRing
 import ci.kalyno.app.ui.components.MathText
 import ci.kalyno.app.ui.components.ShimmerBlock
@@ -82,6 +86,7 @@ import ci.kalyno.app.ui.theme.KalynoDangerSoft
 import ci.kalyno.app.ui.theme.KalynoMuted
 import ci.kalyno.app.ui.theme.KalynoOutline
 import ci.kalyno.app.ui.theme.KalynoRetryText
+import ci.kalyno.app.ui.theme.KalynoShadow
 import ci.kalyno.app.ui.theme.KalynoTealDark
 import ci.kalyno.app.ui.theme.KalynoText
 import ci.kalyno.app.ui.theme.KalynoYellow
@@ -121,6 +126,7 @@ fun ProgressHistoryScreen(
 
     val summary = state.summary
     val side = Modifier.padding(horizontal = SideMargin)
+    val timeline = remember(state.rows, state.canLoadMore) { buildTimeline(state.rows, state.canLoadMore) }
 
     LazyColumn(
         state = listState,
@@ -152,7 +158,33 @@ fun ProgressHistoryScreen(
             item(key = "tiers") { TierCard(masteredCards, side) }
         }
 
-        // ----- 4. Cartes maîtrisées (aperçu, puis tout voir) -----
+        // ----- 4. Fiches apprises : de vraies cartes à retourner -----
+        if (state.learned.isNotEmpty()) {
+            item(key = "learned-header") {
+                val total = summary?.learnedCards ?: state.learned.size
+                SectionTitle(
+                    iconName = "layers",
+                    title = "Fiches apprises",
+                    subtitle = if (total > state.learned.size) {
+                        "Tes ${state.learned.size} plus récentes · touche une carte pour la retourner"
+                    } else {
+                        "Touche une carte pour la retourner et revoir la réponse"
+                    },
+                    count = total,
+                    modifier = side
+                )
+            }
+            item(key = "learned-row") {
+                LazyRow(
+                    contentPadding = PaddingValues(horizontal = SideMargin, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    items(state.learned, key = { it.id }) { card -> FlipCard(card) }
+                }
+            }
+        }
+
+        // ----- 5. Cartes maîtrisées (aperçu, puis tout voir) -----
         item(key = "mastered-header") {
             Box(side) { MasteredCardsHeader(masteredCards.size) }
         }
@@ -173,17 +205,18 @@ fun ProgressHistoryScreen(
             }
         }
 
-        // ----- 5. Historique du Dojo -----
+        // ----- 6. Historique du Dojo -----
         if (state.neverPlayed) {
             item(key = "empty") { EmptyState(side) }
         } else {
+            item(key = "week") { WeekCard(state.week, side) }
             item(key = "history-title") {
-                Text(
-                    text = "Historique du Dojo",
-                    color = KalynoText,
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    modifier = side.padding(top = 8.dp)
+                SectionTitle(
+                    iconName = "history",
+                    title = "Historique du Dojo",
+                    subtitle = "Chaque réponse, de la plus récente à la plus ancienne",
+                    count = null,
+                    modifier = side.padding(top = 6.dp)
                 )
             }
             item(key = "filters") {
@@ -200,10 +233,10 @@ fun ProgressHistoryScreen(
                     )
                 }
             }
-            items(state.rows, key = { it.key }, contentType = { it::class }) { row ->
-                when (row) {
-                    is HistoryRow.Day -> DayHeader(row.label, side)
-                    is HistoryRow.Attempt -> AttemptCard(row.item, side)
+            items(timeline, key = { it.row.key }, contentType = { it.row::class }) { entry ->
+                when (val row = entry.row) {
+                    is HistoryRow.Day -> DayHeader(row.label, entry.dots)
+                    is HistoryRow.Attempt -> TimelineAttempt(row.item, entry.lineAbove, entry.lineBelow)
                 }
             }
             if (state.canLoadMore) {
@@ -802,34 +835,153 @@ private fun HistoryChip(label: String, selected: Boolean, onClick: () -> Unit) {
 // CHRONOLOGIE
 // ===========================================================================
 
+/** Une ligne de la chronologie, avec ce qu'il faut savoir pour dessiner le fil qui relie les tentatives. */
+private data class TimelineEntry(
+    val row: HistoryRow,
+    val lineAbove: Boolean,
+    val lineBelow: Boolean,
+    /** Résultat de chaque tentative du jour (vrai = succès) ; vide pour une tentative. */
+    val dots: List<Boolean>
+)
+
+private fun buildTimeline(rows: List<HistoryRow>, moreBelow: Boolean): List<TimelineEntry> {
+    val out = ArrayList<TimelineEntry>(rows.size)
+    rows.forEachIndexed { index, row ->
+        when (row) {
+            is HistoryRow.Day -> {
+                val dots = ArrayList<Boolean>()
+                var j = index + 1
+                while (j < rows.size) {
+                    val next = rows[j]
+                    if (next is HistoryRow.Attempt) {
+                        dots += next.item.success
+                        j++
+                    } else {
+                        break
+                    }
+                }
+                out += TimelineEntry(row, lineAbove = false, lineBelow = false, dots = dots)
+            }
+            is HistoryRow.Attempt -> {
+                val previousIsAttempt = rows.getOrNull(index - 1) is HistoryRow.Attempt
+                val next = rows.getOrNull(index + 1)
+                val nextIsAttempt = next is HistoryRow.Attempt
+                out += TimelineEntry(
+                    row = row,
+                    lineAbove = previousIsAttempt,
+                    // Le fil continue vers le bas tant qu'il reste des tentatives (même à charger)
+                    lineBelow = nextIsAttempt || (next == null && moreBelow),
+                    dots = emptyList()
+                )
+            }
+        }
+    }
+    return out
+}
+
+private val TimelineNode = 28.dp
+private val NodeCenterY = 22.dp
+private const val MAX_DAY_DOTS = 10
+
 @Composable
-private fun DayHeader(label: String, modifier: Modifier = Modifier) {
+private fun DayHeader(label: String, dots: List<Boolean>) {
     Row(
-        modifier = modifier
+        modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 8.dp),
+            .padding(start = SideMargin, end = SideMargin, top = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(
-            modifier = Modifier
-                .size(8.dp)
-                .clip(CircleShape)
-                .background(KalynoBlue)
-        )
-        Spacer(Modifier.width(8.dp))
-        Text(
-            text = label,
-            color = KalynoMuted,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.ExtraBold
-        )
+        Box(Modifier.width(TimelineNode), contentAlignment = Alignment.Center) {
+            Box(
+                modifier = Modifier
+                    .size(12.dp)
+                    .clip(CircleShape)
+                    .background(KalynoBlue)
+                    .border(3.dp, KalynoBlueSoft, CircleShape)
+            )
+        }
         Spacer(Modifier.width(10.dp))
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .height(1.dp)
-                .background(KalynoOutline)
-        )
+        Column(Modifier.weight(1f)) {
+            Text(
+                text = label,
+                color = KalynoText,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.ExtraBold
+            )
+            if (dots.isNotEmpty()) {
+                Text(
+                    text = if (dots.size == 1) "1 réponse" else "${dots.size} réponses",
+                    color = KalynoMuted,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+        }
+        // Un point par réponse : vert = succès, rouge doux = échec
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+            dots.take(MAX_DAY_DOTS).forEach { success ->
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .clip(CircleShape)
+                        .background(if (success) KalynoCorrect else KalynoDanger.copy(alpha = 0.55f))
+                )
+            }
+            if (dots.size > MAX_DAY_DOTS) {
+                Text(
+                    text = "+${dots.size - MAX_DAY_DOTS}",
+                    color = KalynoMuted,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.ExtraBold
+                )
+            }
+        }
+    }
+}
+
+/** Une tentative sur le fil du temps : pastille de résultat sur la ligne, carte dépliable à droite. */
+@Composable
+private fun TimelineAttempt(item: AttemptUi, lineAbove: Boolean, lineBelow: Boolean) {
+    val accent = if (item.success) KalynoCorrect else KalynoDanger
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .drawBehind {
+                // Le fil déborde de 6 dp en haut et en bas pour traverser l'espace entre deux cartes
+                val x = (SideMargin + TimelineNode / 2).toPx()
+                val nodeY = NodeCenterY.toPx()
+                val top = if (lineAbove) -6.dp.toPx() else nodeY
+                val bottom = if (lineBelow) size.height + 6.dp.toPx() else nodeY
+                if (bottom > top) {
+                    drawLine(
+                        color = KalynoOutline,
+                        start = Offset(x, top),
+                        end = Offset(x, bottom),
+                        strokeWidth = 2.dp.toPx()
+                    )
+                }
+            }
+    ) {
+        Row(Modifier.padding(horizontal = SideMargin)) {
+            Box(
+                modifier = Modifier
+                    .padding(top = NodeCenterY - TimelineNode / 2)
+                    .size(TimelineNode)
+                    .clip(CircleShape)
+                    .background(accent)
+                    .border(3.dp, KalynoBackground, CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                KalynoSvgIcon(
+                    name = if (item.success) "check" else "x",
+                    size = 14.dp,
+                    tint = Color.White
+                )
+            }
+            Spacer(Modifier.width(10.dp))
+            AttemptCard(item, Modifier.weight(1f))
+        }
     }
 }
 
@@ -838,145 +990,128 @@ private fun AttemptCard(item: AttemptUi, modifier: Modifier = Modifier) {
     var expanded by rememberSaveable(item.id) { mutableStateOf(false) }
     val rotation by animateFloatAsState(if (expanded) 180f else 0f, label = "chevron")
 
-    val accent = if (item.success) KalynoCorrect else KalynoDanger
     val accentSoft = if (item.success) KalynoCorrectSoft else KalynoDangerSoft
     val accentText = if (item.success) KalynoCorrectText else KalynoDanger
-    val railWidth = 5.dp
 
     KalynoCard(
-        modifier = modifier
-            .fillMaxWidth()
-            .animateContentSize(),
+        modifier = modifier.animateContentSize(),
         onClick = { expanded = !expanded },
-        shape = RoundedCornerShape(20.dp),
-        contentPadding = 0.dp
+        shape = RoundedCornerShape(18.dp),
+        contentPadding = 14.dp
     ) {
-        // Liseré de couleur à gauche (vert = succès, rouge doux = échec), dessiné sans mesure intrinsèque
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .drawBehind {
-                    drawRect(
-                        color = accent,
-                        topLeft = Offset.Zero,
-                        size = Size(railWidth.toPx(), size.height)
-                    )
-                }
-                .padding(start = railWidth + 14.dp, top = 14.dp, end = 14.dp, bottom = 14.dp)
+        Row(verticalAlignment = Alignment.Top) {
+            Text(
+                text = item.lessonTitle,
+                color = KalynoText,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.ExtraBold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = item.time,
+                color = KalynoMuted,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium
+            )
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Row(verticalAlignment = Alignment.Top) {
-                Box(
-                    modifier = Modifier
-                        .size(36.dp)
-                        .clip(CircleShape)
-                        .background(accentSoft),
-                    contentAlignment = Alignment.Center
-                ) {
-                    KalynoSvgIcon(
-                        name = if (item.success) "check" else "x",
-                        size = 18.dp,
-                        tint = accentText
-                    )
-                }
-                Spacer(Modifier.width(12.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        text = item.lessonTitle,
-                        color = KalynoText,
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Spacer(Modifier.height(6.dp))
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        StatusBadge(item.success)
-                        if (item.subjectName.isNotBlank()) {
-                            Text(
-                                text = item.subjectName,
-                                color = KalynoBlue,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier
-                                    .weight(1f, fill = false)
-                                    .clip(RoundedCornerShape(50))
-                                    .background(KalynoBlueSoft)
-                                    .padding(horizontal = 10.dp, vertical = 4.dp)
-                            )
-                        }
-                    }
-                }
-                Spacer(Modifier.width(8.dp))
+            StatusBadge(item.success)
+            if (item.subjectName.isNotBlank()) {
                 Text(
-                    text = item.time,
-                    color = KalynoMuted,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium
-                )
-            }
-
-            item.attemptLine?.let {
-                Spacer(Modifier.height(10.dp))
-                Text(
-                    text = it,
-                    color = if (item.success) KalynoCorrectText else KalynoRetryText,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold
-                )
-            }
-
-            Spacer(Modifier.height(12.dp))
-            Text("Question", color = KalynoMuted, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(4.dp))
-            if (expanded) {
-                MathText(text = item.question, color = KalynoText, fontSize = 14.sp, lineHeight = 20.sp)
-            } else {
-                // Aperçu en texte simple : les formules ($…$) ne sont rendues qu'à l'ouverture de la carte
-                Text(
-                    text = item.question.replace("$", ""),
-                    color = KalynoText,
-                    fontSize = 14.sp,
-                    lineHeight = 20.sp,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-
-            if (expanded) {
-                Spacer(Modifier.height(12.dp))
-                AnswerBlock(
-                    label = "Ta réponse",
-                    text = item.studentAnswer
-                        ?: "Non conservée : cette tentative date d'avant la mise à jour de l'historique.",
-                    background = accentSoft,
-                    textColor = accentText
-                )
-                Spacer(Modifier.height(8.dp))
-                AnswerBlock(
-                    label = "Réponse attendue",
-                    text = item.referenceAnswer,
-                    background = KalynoBlueSoft,
-                    textColor = KalynoText
-                )
-            }
-
-            Spacer(Modifier.height(10.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = if (expanded) "Masquer le détail" else "Voir le détail",
+                    text = item.subjectName,
                     color = KalynoBlue,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.ExtraBold
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier
+                        .weight(1f, fill = false)
+                        .clip(RoundedCornerShape(50))
+                        .background(KalynoBlueSoft)
+                        .padding(horizontal = 10.dp, vertical = 4.dp)
                 )
-                Spacer(Modifier.width(4.dp))
-                Box(Modifier.rotate(rotation)) {
-                    KalynoSvgIcon(name = "chevron-down", size = 14.dp, tint = KalynoBlue)
-                }
+            }
+            if (item.isLegacy) {
+                Text(
+                    text = "Ancien",
+                    color = KalynoMuted,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(50))
+                        .background(KalynoOutline.copy(alpha = 0.6f))
+                        .padding(horizontal = 10.dp, vertical = 4.dp)
+                )
+            }
+        }
+
+        item.attemptLine?.let {
+            Spacer(Modifier.height(10.dp))
+            Text(
+                text = it,
+                color = accentText,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(accentSoft)
+                    .padding(horizontal = 10.dp, vertical = 5.dp)
+            )
+        }
+
+        Spacer(Modifier.height(12.dp))
+        Text("Question", color = KalynoMuted, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(4.dp))
+        if (expanded) {
+            MathText(text = item.question, color = KalynoText, fontSize = 14.sp, lineHeight = 20.sp)
+        } else {
+            // Aperçu en texte simple : les formules ($…$) ne sont rendues qu'à l'ouverture de la carte
+            Text(
+                text = item.question.replace("$", ""),
+                color = KalynoText,
+                fontSize = 14.sp,
+                lineHeight = 20.sp,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+
+        if (expanded) {
+            Spacer(Modifier.height(12.dp))
+            AnswerBlock(
+                label = "Ta réponse",
+                text = item.studentAnswer
+                    ?: "Non conservée : cette tentative date d'avant la mise à jour de l'historique.",
+                background = accentSoft,
+                textColor = accentText
+            )
+            Spacer(Modifier.height(8.dp))
+            AnswerBlock(
+                label = "Réponse attendue",
+                text = item.referenceAnswer,
+                background = KalynoBlueSoft,
+                textColor = KalynoText
+            )
+        }
+
+        Spacer(Modifier.height(10.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = if (expanded) "Masquer le détail" else "Voir le détail",
+                color = KalynoBlue,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.ExtraBold
+            )
+            Spacer(Modifier.width(4.dp))
+            Box(Modifier.rotate(rotation)) {
+                KalynoSvgIcon(name = "chevron-down", size = 14.dp, tint = KalynoBlue)
             }
         }
     }
@@ -1050,5 +1185,286 @@ private fun EmptyState(modifier: Modifier = Modifier) {
                 textAlign = TextAlign.Center
             )
         }
+    }
+}
+
+// ===========================================================================
+// TITRES DE SECTION
+// ===========================================================================
+
+@Composable
+private fun SectionTitle(
+    iconName: String,
+    title: String,
+    subtitle: String,
+    count: Int?,
+    modifier: Modifier = Modifier
+) {
+    Row(modifier = modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            modifier = Modifier
+                .size(38.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(KalynoBlueSoft),
+            contentAlignment = Alignment.Center
+        ) {
+            KalynoSvgIcon(name = iconName, size = 20.dp, tint = KalynoBlue)
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(text = title, color = KalynoText, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold)
+            Text(text = subtitle, color = KalynoMuted, fontSize = 12.sp, lineHeight = 16.sp)
+        }
+        if (count != null && count > 0) {
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = count.toString(),
+                color = KalynoBlue,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.ExtraBold,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(KalynoBlueSoft)
+                    .padding(horizontal = 10.dp, vertical = 4.dp)
+            )
+        }
+    }
+}
+
+// ===========================================================================
+// FICHES APPRISES : cartes à retourner
+// ===========================================================================
+
+/**
+ * Une fiche apprise sous forme de vraie carte : recto = question, verso = réponse officielle.
+ * Un toucher la retourne (rotation 3D) ; l'état de retournement est conservé à la rotation de l'écran.
+ */
+@Composable
+private fun FlipCard(card: LearnedCardUi) {
+    val haptic = rememberHaptic()
+    var flipped by rememberSaveable(card.id) { mutableStateOf(false) }
+    val rotation by animateFloatAsState(
+        targetValue = if (flipped) 180f else 0f,
+        animationSpec = tween(durationMillis = 460, easing = FastOutSlowInEasing),
+        label = "flip"
+    )
+    val shape = RoundedCornerShape(22.dp)
+
+    Box(
+        modifier = Modifier
+            .size(width = 268.dp, height = 208.dp)
+            .graphicsLayer {
+                rotationY = rotation
+                cameraDistance = 14f * density
+            }
+            .shadow(4.dp, shape, ambientColor = KalynoShadow, spotColor = KalynoShadow)
+            .clickable {
+                haptic()
+                flipped = !flipped
+            }
+    ) {
+        if (rotation <= 90f) {
+            // Recto
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(shape)
+                    .background(Color.White)
+                    .border(1.dp, KalynoOutline, shape)
+                    .padding(16.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (card.subjectName.isNotBlank()) {
+                        KalynoPill(
+                            text = card.subjectName,
+                            fontSize = 11,
+                            modifier = Modifier.weight(1f, fill = false)
+                        )
+                    }
+                    Spacer(Modifier.weight(1f))
+                    KalynoSvgIcon(name = "check-circle", size = 20.dp, tint = KalynoCorrect)
+                }
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    text = card.question.replace("$", ""),
+                    color = KalynoText,
+                    fontSize = 16.sp,
+                    lineHeight = 22.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    maxLines = 5,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    KalynoSvgIcon(name = "shuffle", size = 14.dp, tint = KalynoMuted)
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        text = "Touche pour voir la réponse",
+                        color = KalynoMuted,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+        } else {
+            // Verso (retourné pour ne pas apparaître en miroir)
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer { rotationY = 180f }
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(shape)
+                        .background(Brush.linearGradient(listOf(KalynoBlue, KalynoTealDark)))
+                        .padding(16.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        KalynoPill(
+                            text = "RÉPONSE",
+                            container = KalynoAmberSoft,
+                            content = KalynoAmberDeep,
+                            fontSize = 11
+                        )
+                        Spacer(Modifier.weight(1f))
+                        Text(
+                            text = "Appris · ${card.learnedOn}",
+                            color = Color.White.copy(alpha = 0.85f),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                            .verticalScroll(rememberScrollState())
+                    ) {
+                        MathText(
+                            text = card.answer,
+                            color = Color.White,
+                            fontSize = 15.sp,
+                            lineHeight = 21.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    val footer = listOfNotNull(card.lessonTitle.takeIf { it.isNotBlank() }, card.effort)
+                        .joinToString(" · ")
+                    if (footer.isNotEmpty()) {
+                        Text(
+                            text = footer,
+                            color = Color.White.copy(alpha = 0.85f),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ===========================================================================
+// SEMAINE AU DOJO
+// ===========================================================================
+
+@Composable
+private fun WeekCard(week: List<DayBarUi>, modifier: Modifier = Modifier) {
+    if (week.isEmpty()) return
+    val totalWeek = week.sumOf { it.total }
+    val activeDays = week.count { it.total > 0 }
+    val maxTotal = (week.maxOfOrNull { it.total } ?: 0).coerceAtLeast(1)
+
+    val subtitle = if (totalWeek == 0) {
+        "Aucune réponse cette semaine : une seule séance suffit pour te relancer."
+    } else {
+        val answers = if (totalWeek == 1) "1 réponse" else "$totalWeek réponses"
+        val days = if (activeDays == 1) "1 jour actif" else "$activeDays jours actifs"
+        "$answers · $days sur 7"
+    }
+
+    KalynoCard(modifier = modifier.fillMaxWidth(), contentPadding = 18.dp) {
+        Text(
+            text = "Ta semaine au Dojo",
+            color = KalynoText,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.ExtraBold
+        )
+        Spacer(Modifier.height(2.dp))
+        Text(text = subtitle, color = KalynoMuted, fontSize = 12.sp, lineHeight = 17.sp)
+        Spacer(Modifier.height(16.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.Bottom
+        ) {
+            week.forEach { day -> WeekBar(day, maxTotal, Modifier.weight(1f)) }
+        }
+    }
+}
+
+private val WeekBarMaxHeight = 72.dp
+
+@Composable
+private fun WeekBar(day: DayBarUi, maxTotal: Int, modifier: Modifier = Modifier) {
+    val fraction by animateFloatAsState(
+        targetValue = day.total.toFloat() / maxTotal,
+        animationSpec = tween(durationMillis = 700, easing = FastOutSlowInEasing),
+        label = "weekBar"
+    )
+    Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+        if (day.total > 0) {
+            Text(
+                text = day.total.toString(),
+                color = if (day.isToday) KalynoBlue else KalynoMuted,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.ExtraBold
+            )
+            Spacer(Modifier.height(3.dp))
+            // Pile : échecs (rouge doux) au-dessus, succès (vert) en dessous
+            Column(
+                modifier = Modifier
+                    .width(20.dp)
+                    .height((WeekBarMaxHeight * fraction).coerceAtLeast(8.dp))
+                    .clip(RoundedCornerShape(8.dp))
+            ) {
+                if (day.failures > 0) {
+                    Box(
+                        Modifier
+                            .weight(day.failures.toFloat())
+                            .fillMaxWidth()
+                            .background(KalynoDanger.copy(alpha = 0.55f))
+                    )
+                }
+                if (day.successes > 0) {
+                    Box(
+                        Modifier
+                            .weight(day.successes.toFloat())
+                            .fillMaxWidth()
+                            .background(KalynoCorrect)
+                    )
+                }
+            }
+        } else {
+            Box(
+                modifier = Modifier
+                    .width(20.dp)
+                    .height(6.dp)
+                    .clip(CircleShape)
+                    .background(KalynoOutline)
+            )
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(
+            text = day.label,
+            color = if (day.isToday) KalynoBlue else KalynoMuted,
+            fontSize = 12.sp,
+            fontWeight = if (day.isToday) FontWeight.ExtraBold else FontWeight.Medium
+        )
     }
 }

@@ -58,6 +58,13 @@ data class AttemptSummaryRow(
     val learnedCards: Int
 )
 
+/** Activité d'une journée locale (jour = nombre de jours depuis 1970, dans le fuseau de l'élève). */
+data class DailyCountRow(
+    val day: Long,
+    val total: Int,
+    val successes: Int
+)
+
 @Dao
 abstract class AttemptDao {
 
@@ -120,4 +127,39 @@ abstract class AttemptDao {
             "WHERE studentId = :studentId AND subjectName <> '' ORDER BY subjectName COLLATE NOCASE"
     )
     abstract fun observeSubjects(studentId: String): Flow<List<String>>
+
+    /**
+     * Fiches apprises : pour chaque fiche réussie au moins une fois, sa dernière réussite
+     * (la plus récente d'abord). [limit] borne la liste affichée.
+     */
+    @Query(
+        """
+        SELECT * FROM dojo_attempts
+        WHERE id IN (
+            SELECT MAX(id) FROM dojo_attempts
+            WHERE studentId = :studentId AND isSuccess = 1
+            GROUP BY flashcardId
+        )
+        ORDER BY attemptedAt DESC, id DESC
+        LIMIT :limit
+        """
+    )
+    abstract fun observeLearned(studentId: String, limit: Int): Flow<List<DojoAttemptEntity>>
+
+    /**
+     * Tentatives et succès par jour depuis [sinceMs]. [offsetMs] = décalage du fuseau de l'élève,
+     * pour que « jour » soit le jour local et non le jour UTC.
+     */
+    @Query(
+        """
+        SELECT ((attemptedAt + :offsetMs) / 86400000) AS day,
+               COUNT(*) AS total,
+               COALESCE(SUM(CASE WHEN isSuccess = 1 THEN 1 ELSE 0 END), 0) AS successes
+        FROM dojo_attempts
+        WHERE studentId = :studentId AND attemptedAt >= :sinceMs
+        GROUP BY day
+        ORDER BY day ASC
+        """
+    )
+    abstract fun observeDailyCounts(studentId: String, sinceMs: Long, offsetMs: Long): Flow<List<DailyCountRow>>
 }
