@@ -409,15 +409,7 @@ private fun ExplorerHome(
             ) { filter ->
                 Column(verticalArrangement = Arrangement.spacedBy(22.dp)) {
                     when (filter) {
-                        ExplorerFilter.FOR_YOU -> {
-                            val visibleIds = visible.map { it.id }.toSet()
-                            ForYouBlock(
-                                picks = ui.forYou?.filter { it.chapter.id in visibleIds },
-                                onStart = onStart,
-                                onOpen = onOpenLesson
-                            )
-                            FreshBlock(chapters = visible, onOpen = onOpenLesson)
-                        }
+                        ExplorerFilter.FOR_YOU -> FreshBlock(chapters = visible, onOpen = onOpenLesson)
 
                         ExplorerFilter.CHALLENGES -> ChallengesBlock(
                             chapters = visible,
