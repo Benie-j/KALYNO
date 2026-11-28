@@ -1,0 +1,607 @@
+diff --git a/app/src/main/java/ci/kalyno/app/ui/exercises/ExerciseGrouping.kt b/app/src/main/java/ci/kalyno/app/ui/exercises/ExerciseGrouping.kt
+new file mode 100644
+index 0000000..4a73e9c
+--- /dev/null
++++ b/app/src/main/java/ci/kalyno/app/ui/exercises/ExerciseGrouping.kt
+@@ -0,0 +1,217 @@
++package ci.kalyno.app.ui.exercises
++
++import ci.kalyno.app.data.LearningChapter
++import ci.kalyno.app.data.LearningSubject
++import org.json.JSONObject
++
++// ===========================================================================
++// Rangement des exercices IA : discipline -> leçon -> séance (si disponible).
++//
++// Aucune donnée inventée : chaque exercice généré porte déjà `subject_id`, `chapter_id` (la leçon)
++// et `source_refs` (les blocs de cours utilisés). Chaque bloc de cours connaît sa séance
++// (`session_id`). Les noms viennent du contenu publié déjà chargé par l'app.
++// ===========================================================================
++
++internal data class ExerciseSessionGroup(
++    val key: String,
++    /** « Séance 2 · Titre » ; null quand l'exercice n'est rattaché à aucune séance. */
++    val label: String?,
++    val items: List<JSONObject>
++)
++
++internal data class ExerciseLessonGroup(
++    val key: String,
++    /** Titre de la leçon ; null quand la leçon n'est pas identifiable. */
++    val title: String?,
++    val done: Int,
++    val total: Int,
++    val sessions: List<ExerciseSessionGroup>
++)
++
++internal data class ExerciseSubjectGroup(
++    val key: String,
++    val name: String,
++    val iconKey: String?,
++    val done: Int,
++    val total: Int,
++    val lessons: List<ExerciseLessonGroup>
++)
++
++private const val UNKNOWN_SUBJECT_KEY = "_autres"
++private const val UNKNOWN_LESSON_KEY = "_lecon"
++private const val NO_SESSION_KEY = "_sans_seance"
++
++private fun JSONObject.stringOrNull(key: String): String? =
++    if (isNull(key)) null else optString(key).trim().takeIf { it.isNotEmpty() }
++
++private class Placement(
++    val subjectKey: String,
++    val subjectName: String,
++    val subjectIcon: String?,
++    val subjectOrder: Int,
++    val lessonKey: String,
++    val lessonTitle: String?,
++    val lessonOrder: Int,
++    val sessionKey: String,
++    val sessionLabel: String?,
++    val sessionOrder: Int
++)
++
++/**
++ * Traduit les identifiants portés par les exercices en noms lisibles (discipline, leçon, séance).
++ * Un exercice dont la leçon n'est pas connue est rangé sous « Autres exercices » : rien ne disparaît.
++ */
++internal class ExerciseCatalog(private val subjects: List<LearningSubject>) {
++
++    private class ChapterRef(val subject: LearningSubject, val subjectOrder: Int, val chapter: LearningChapter, val chapterOrder: Int)
++
++    private val chapterById: Map<String, ChapterRef> = buildMap {
++        subjects.forEachIndexed { si, subject ->
++            subject.chapters.forEachIndexed { ci, chapter ->
++                put(chapter.id, ChapterRef(subject, si, chapter, ci))
++            }
++        }
++    }
++
++    private val subjectById: Map<String, Pair<Int, LearningSubject>> =
++        subjects.withIndex().associate { it.value.id to (it.index to it.value) }
++
++    /** Vrai si l'on sait nommer la leçon de cet exercice. */
++    fun knows(exercise: JSONObject): Boolean {
++        val chapterId = exercise.stringOrNull("chapter_id") ?: return false
++        return chapterById.containsKey(chapterId)
++    }
++
++    private fun place(exercise: JSONObject): Placement {
++        val chapterId = exercise.stringOrNull("chapter_id")
++        val ref = chapterId?.let { chapterById[it] }
++
++        if (ref == null) {
++            // Leçon inconnue : on tente au moins la discipline
++            val subjectId = exercise.stringOrNull("subject_id")
++            val known = subjectId?.let { subjectById[it] }
++            return Placement(
++                subjectKey = subjectId?.takeIf { known != null } ?: UNKNOWN_SUBJECT_KEY,
++                subjectName = known?.second?.name?.takeIf { it.isNotBlank() } ?: "Autres exercices",
++                subjectIcon = known?.second?.iconKey,
++                subjectOrder = known?.first ?: Int.MAX_VALUE,
++                lessonKey = UNKNOWN_LESSON_KEY,
++                lessonTitle = null,
++                lessonOrder = Int.MAX_VALUE,
++                sessionKey = NO_SESSION_KEY,
++                sessionLabel = null,
++                sessionOrder = -1
++            )
++        }
++
++        // Séances visibles par l'élève (une séance masquée par l'admin n'est jamais nommée)
++        val available = ref.chapter.sessions.filter { it.isAvailable }
++        val refs = exercise.optJSONArray("source_refs")
++        val sourceIds = mutableSetOf<String>()
++        if (refs != null) {
++            for (i in 0 until refs.length()) {
++                val id = refs.optString(i)
++                if (id.isNotBlank()) sourceIds.add(id)
++            }
++        }
++        // Séance la plus précoce parmi les blocs de cours réellement utilisés par l'exercice
++        val sessionIndex = ref.chapter.capsules
++            .asSequence()
++            .filter { it.id in sourceIds }
++            .mapNotNull { capsule -> capsule.sessionId }
++            .map { sessionId -> available.indexOfFirst { it.id == sessionId } }
++            .filter { it >= 0 }
++            .minOrNull()
++
++        val session = if (sessionIndex != null) available[sessionIndex] else null
++        val label = if (session != null && sessionIndex != null) {
++            val n = sessionIndex + 1
++            val title = session.title.trim()
++            when {
++                title.isBlank() -> "Séance $n"
++                title.startsWith("Séance", ignoreCase = true) -> title
++                else -> "Séance $n · $title"
++            }
++        } else {
++            null
++        }
++
++        return Placement(
++            subjectKey = ref.subject.id,
++            subjectName = ref.subject.name.ifBlank { "Autres exercices" },
++            subjectIcon = ref.subject.iconKey,
++            subjectOrder = ref.subjectOrder,
++            lessonKey = ref.chapter.id,
++            lessonTitle = ref.chapter.title.takeIf { it.isNotBlank() },
++            lessonOrder = ref.chapterOrder,
++            sessionKey = session?.id ?: NO_SESSION_KEY,
++            sessionLabel = label,
++            sessionOrder = sessionIndex ?: -1
++        )
++    }
++
++    /**
++     * Range les exercices visibles par discipline, puis par leçon, puis par séance.
++     * Les compteurs (terminés / total) portent sur TOUS les exercices de la discipline ou de la leçon,
++     * pour rester stables quand un filtre est actif.
++     */
++    fun group(
++        all: List<JSONObject>,
++        visible: List<JSONObject>,
++        isCompleted: (JSONObject) -> Boolean
++    ): List<ExerciseSubjectGroup> {
++        val allPlaced = all.map { it to place(it) }
++        val subjectTotals = allPlaced.groupBy { it.second.subjectKey }
++        val lessonTotals = allPlaced.groupBy { it.second.subjectKey + "|" + it.second.lessonKey }
++
++        val visiblePlaced = visible.map { it to place(it) }
++
++        return visiblePlaced
++            .groupBy { it.second.subjectKey }
++            .values
++            .sortedBy { it.first().second.subjectOrder }
++            .map { inSubject ->
++                val first = inSubject.first().second
++                val subjectAll = subjectTotals[first.subjectKey].orEmpty()
++
++                val lessons = inSubject
++                    .groupBy { it.second.lessonKey }
++                    .values
++                    .sortedBy { it.first().second.lessonOrder }
++                    .map { inLesson ->
++                        val lp = inLesson.first().second
++                        val lessonAll = lessonTotals[first.subjectKey + "|" + lp.lessonKey].orEmpty()
++                        ExerciseLessonGroup(
++                            key = lp.lessonKey,
++                            title = lp.lessonTitle,
++                            done = lessonAll.count { isCompleted(it.first) },
++                            total = lessonAll.size,
++                            sessions = inLesson
++                                .groupBy { it.second.sessionKey }
++                                .values
++                                .sortedBy { it.first().second.sessionOrder }
++                                .map { inSession ->
++                                    ExerciseSessionGroup(
++                                        key = inSession.first().second.sessionKey,
++                                        label = inSession.first().second.sessionLabel,
++                                        items = inSession.map { it.first }
++                                    )
++                                }
++                        )
++                    }
++
++                ExerciseSubjectGroup(
++                    key = first.subjectKey,
++                    name = first.subjectName,
++                    iconKey = first.subjectIcon,
++                    done = subjectAll.count { isCompleted(it.first) },
++                    total = subjectAll.size,
++                    lessons = lessons
++                )
++            }
++    }
++
++    companion object {
++        val EMPTY = ExerciseCatalog(emptyList())
++    }
++}
+diff --git a/app/src/main/java/ci/kalyno/app/ui/exercises/ExerciseGroupsUi.kt b/app/src/main/java/ci/kalyno/app/ui/exercises/ExerciseGroupsUi.kt
+new file mode 100644
+index 0000000..1f1c07e
+--- /dev/null
++++ b/app/src/main/java/ci/kalyno/app/ui/exercises/ExerciseGroupsUi.kt
+@@ -0,0 +1,258 @@
++package ci.kalyno.app.ui.exercises
++
++import androidx.compose.animation.AnimatedVisibility
++import androidx.compose.animation.animateContentSize
++import androidx.compose.animation.core.animateFloatAsState
++import androidx.compose.animation.core.tween
++import androidx.compose.animation.expandVertically
++import androidx.compose.animation.fadeIn
++import androidx.compose.animation.fadeOut
++import androidx.compose.animation.shrinkVertically
++import androidx.compose.foundation.background
++import androidx.compose.foundation.layout.Arrangement
++import androidx.compose.foundation.layout.Box
++import androidx.compose.foundation.layout.Column
++import androidx.compose.foundation.layout.IntrinsicSize
++import androidx.compose.foundation.layout.Row
++import androidx.compose.foundation.layout.Spacer
++import androidx.compose.foundation.layout.fillMaxHeight
++import androidx.compose.foundation.layout.fillMaxWidth
++import androidx.compose.foundation.layout.height
++import androidx.compose.foundation.layout.padding
++import androidx.compose.foundation.layout.size
++import androidx.compose.foundation.layout.width
++import androidx.compose.foundation.shape.CircleShape
++import androidx.compose.foundation.shape.RoundedCornerShape
++import androidx.compose.material3.Text
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.getValue
++import androidx.compose.runtime.mutableStateMapOf
++import androidx.compose.runtime.remember
++import androidx.compose.ui.Alignment
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.draw.clip
++import androidx.compose.ui.graphics.graphicsLayer
++import androidx.compose.ui.text.font.FontWeight
++import androidx.compose.ui.text.style.TextOverflow
++import androidx.compose.ui.unit.dp
++import androidx.compose.ui.unit.sp
++import ci.kalyno.app.ui.components.KalynoCard
++import ci.kalyno.app.ui.components.KalynoPill
++import ci.kalyno.app.ui.components.KalynoProgressBar
++import ci.kalyno.app.ui.components.entrance
++import ci.kalyno.app.ui.components.rememberHaptic
++import ci.kalyno.app.ui.icons.KalynoSvgIcon
++import ci.kalyno.app.ui.icons.iconAssetFor
++import ci.kalyno.app.ui.theme.KalynoBlue
++import ci.kalyno.app.ui.theme.KalynoBlueSoft
++import ci.kalyno.app.ui.theme.KalynoCorrect
++import ci.kalyno.app.ui.theme.KalynoMuted
++import ci.kalyno.app.ui.theme.KalynoText
++import org.json.JSONObject
++
++// ===========================================================================
++// Liste des exercices rangés : Discipline > Leçon > Séance (si disponible)
++// Palette inchangée. Les disciplines se replient d'un toucher.
++// ===========================================================================
++
++private fun countLabel(count: Int, one: String, many: String): String =
++    if (count == 1) "1 $one" else "$count $many"
++
++@Composable
++internal fun GroupedExerciseList(
++    groups: List<ExerciseSubjectGroup>,
++    filter: String,
++    numberOf: (JSONObject) -> Int,
++    isCompleted: (JSONObject) -> Boolean,
++    onOpen: (JSONObject) -> Unit,
++    modifier: Modifier = Modifier
++) {
++    // true = repliée. Par défaut, une discipline entièrement terminée est repliée (sauf dans l'onglet « Terminés »).
++    val collapsed = remember { mutableStateMapOf<String, Boolean>() }
++
++    Column(
++        modifier = modifier,
++        verticalArrangement = Arrangement.spacedBy(14.dp)
++    ) {
++        groups.forEachIndexed { index, subject ->
++            val defaultCollapsed = filter == "all" && subject.total > 0 && subject.done == subject.total
++            val isCollapsed = collapsed[subject.key] ?: defaultCollapsed
++
++            Column(modifier = Modifier.entrance(index + 3, stepMillis = 60)) {
++                SubjectHeader(
++                    subject = subject,
++                    expanded = !isCollapsed,
++                    onToggle = { collapsed[subject.key] = !isCollapsed }
++                )
++                AnimatedVisibility(
++                    visible = !isCollapsed,
++                    enter = expandVertically(tween(260)) + fadeIn(tween(200)),
++                    exit = shrinkVertically(tween(200)) + fadeOut(tween(120))
++                ) {
++                    Column(
++                        modifier = Modifier.padding(top = 12.dp),
++                        verticalArrangement = Arrangement.spacedBy(16.dp)
++                    ) {
++                        subject.lessons.forEach { lesson ->
++                            LessonBlock(
++                                lesson = lesson,
++                                numberOf = numberOf,
++                                isCompleted = isCompleted,
++                                onOpen = onOpen
++                            )
++                        }
++                    }
++                }
++            }
++        }
++    }
++}
++
++@Composable
++private fun SubjectHeader(
++    subject: ExerciseSubjectGroup,
++    expanded: Boolean,
++    onToggle: () -> Unit
++) {
++    val haptic = rememberHaptic()
++    val rotation by animateFloatAsState(
++        targetValue = if (expanded) 180f else 0f,
++        animationSpec = tween(240),
++        label = "subjectChevron"
++    )
++    val progress = if (subject.total == 0) 0f else subject.done.toFloat() / subject.total
++    val allDone = subject.total > 0 && subject.done == subject.total
++
++    KalynoCard(
++        modifier = Modifier.fillMaxWidth(),
++        onClick = {
++            haptic()
++            onToggle()
++        },
++        shape = RoundedCornerShape(22.dp),
++        contentPadding = 14.dp
++    ) {
++        Row(verticalAlignment = Alignment.CenterVertically) {
++            Box(
++                modifier = Modifier
++                    .size(44.dp)
++                    .clip(RoundedCornerShape(14.dp))
++                    .background(if (allDone) KalynoCorrect.copy(alpha = 0.14f) else KalynoBlueSoft),
++                contentAlignment = Alignment.Center
++            ) {
++                KalynoSvgIcon(
++                    name = if (allDone) "check-circle" else iconAssetFor(subject.iconKey),
++                    size = 22.dp,
++                    tint = if (allDone) KalynoCorrect else KalynoBlue
++                )
++            }
++            Spacer(Modifier.width(12.dp))
++            Column(modifier = Modifier.weight(1f)) {
++                Text(
++                    text = subject.name,
++                    color = KalynoText,
++                    fontSize = 17.sp,
++                    fontWeight = FontWeight.ExtraBold,
++                    maxLines = 1,
++                    overflow = TextOverflow.Ellipsis
++                )
++                Spacer(Modifier.height(2.dp))
++                Text(
++                    text = "${countLabel(subject.total, "exercice", "exercices")} · ${subject.done} terminé" +
++                        if (subject.done > 1) "s" else "",
++                    color = KalynoMuted,
++                    fontSize = 12.sp
++                )
++                Spacer(Modifier.height(8.dp))
++                KalynoProgressBar(
++                    progress = progress,
++                    height = 5.dp,
++                    color = if (allDone) KalynoCorrect else KalynoBlue,
++                    track = KalynoBlueSoft
++                )
++            }
++            Spacer(Modifier.width(10.dp))
++            Box(modifier = Modifier.graphicsLayer { rotationZ = rotation }) {
++                KalynoSvgIcon(name = "chevron-down", size = 20.dp, tint = KalynoBlue)
++            }
++        }
++    }
++}
++
++@Composable
++private fun LessonBlock(
++    lesson: ExerciseLessonGroup,
++    numberOf: (JSONObject) -> Int,
++    isCompleted: (JSONObject) -> Boolean,
++    onOpen: (JSONObject) -> Unit
++) {
++    Row(modifier = Modifier.height(IntrinsicSize.Min)) {
++        // Fil vertical qui rattache les exercices à leur leçon
++        Box(
++            modifier = Modifier
++                .padding(start = 8.dp)
++                .width(3.dp)
++                .fillMaxHeight()
++                .clip(CircleShape)
++                .background(KalynoBlueSoft)
++        )
++        Spacer(Modifier.width(12.dp))
++        Column(
++            modifier = Modifier
++                .weight(1f)
++                .animateContentSize(),
++            verticalArrangement = Arrangement.spacedBy(10.dp)
++        ) {
++            if (lesson.title != null) {
++                Row(verticalAlignment = Alignment.CenterVertically) {
++                    KalynoSvgIcon(name = "book-open", size = 15.dp, tint = KalynoBlue)
++                    Spacer(Modifier.width(7.dp))
++                    Text(
++                        text = lesson.title,
++                        color = KalynoText,
++                        fontSize = 15.sp,
++                        lineHeight = 19.sp,
++                        fontWeight = FontWeight.ExtraBold,
++                        maxLines = 2,
++                        overflow = TextOverflow.Ellipsis,
++                        modifier = Modifier.weight(1f)
++                    )
++                    Spacer(Modifier.width(8.dp))
++                    KalynoPill(text = "${lesson.done}/${lesson.total}", fontSize = 11)
++                }
++            }
++
++            lesson.sessions.forEach { session ->
++                if (session.label != null) {
++                    Row(
++                        verticalAlignment = Alignment.CenterVertically,
++                        modifier = Modifier
++                            .clip(CircleShape)
++                            .background(KalynoBlueSoft)
++                            .padding(horizontal = 10.dp, vertical = 5.dp)
++                    ) {
++                        KalynoSvgIcon(name = "layers", size = 13.dp, tint = KalynoBlue)
++                        Spacer(Modifier.width(6.dp))
++                        Text(
++                            text = session.label,
++                            color = KalynoBlue,
++                            fontSize = 12.sp,
++                            fontWeight = FontWeight.ExtraBold,
++                            maxLines = 1,
++                            overflow = TextOverflow.Ellipsis
++                        )
++                    }
++                }
++                session.items.forEach { exercise ->
++                    ExerciseCard(
++                        number = numberOf(exercise),
++                        exercise = exercise,
++                        done = isCompleted(exercise),
++                        onClick = { onOpen(exercise) },
++                        modifier = Modifier.fillMaxWidth()
++                    )
++                }
++            }
++        }
++    }
++}
+diff --git a/app/src/main/java/ci/kalyno/app/ui/exercises/ExercisesUi.kt b/app/src/main/java/ci/kalyno/app/ui/exercises/ExercisesUi.kt
+index 6272167..5348fc6 100644
+--- a/app/src/main/java/ci/kalyno/app/ui/exercises/ExercisesUi.kt
++++ b/app/src/main/java/ci/kalyno/app/ui/exercises/ExercisesUi.kt
+@@ -294,7 +294,8 @@ internal fun ExerciseListContent(
+     onFilterChange: (String) -> Unit,
+     isCompleted: (JSONObject) -> Boolean,
+     onRefresh: () -> Unit,
+-    onOpen: (JSONObject) -> Unit
++    onOpen: (JSONObject) -> Unit,
++    catalog: ExerciseCatalog = ExerciseCatalog.EMPTY
+ ) {
+     val haptic = rememberHaptic()
+     val completedCount = exercises.count { isCompleted(it) }
+@@ -498,17 +499,13 @@ internal fun ExerciseListContent(
+                 onRefresh = onRefresh
+             )
+ 
+-            else -> Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+-                visible.forEachIndexed { index, exercise ->
+-                    ExerciseCard(
+-                        number = exercises.indexOf(exercise) + 1,
+-                        exercise = exercise,
+-                        done = isCompleted(exercise),
+-                        onClick = { onOpen(exercise) },
+-                        modifier = Modifier.entrance(index + 3, stepMillis = 60)
+-                    )
+-                }
+-            }
++            else -> GroupedExerciseList(
++                groups = catalog.group(exercises, visible, isCompleted),
++                filter = filter,
++                numberOf = { exercises.indexOf(it) + 1 },
++                isCompleted = isCompleted,
++                onOpen = onOpen
++            )
+         }
+     }
+ }
+@@ -585,7 +582,7 @@ private fun SegmentedFilter(
+ 
+ /** Un défi présenté comme un ticket : numéro, type, titre, aperçu de l'énoncé, difficulté. */
+ @Composable
+-private fun ExerciseCard(
++internal fun ExerciseCard(
+     number: Int,
+     exercise: JSONObject,
+     done: Boolean,
+diff --git a/app/src/main/java/ci/kalyno/app/ui/exercises/GeneratedExercisesScreen.kt b/app/src/main/java/ci/kalyno/app/ui/exercises/GeneratedExercisesScreen.kt
+index 3dfb793..1a481bf 100644
+--- a/app/src/main/java/ci/kalyno/app/ui/exercises/GeneratedExercisesScreen.kt
++++ b/app/src/main/java/ci/kalyno/app/ui/exercises/GeneratedExercisesScreen.kt
+@@ -23,6 +23,8 @@ import androidx.compose.ui.graphics.Color
+ import ci.kalyno.app.ui.theme.KalynoLightBlue
+ import ci.kalyno.app.ui.theme.KalynoYellow
+ 
++import ci.kalyno.app.data.SupabaseLearningRepository
++import ci.kalyno.app.ui.explorer.LearningContentCache
+ import ci.kalyno.app.ui.explorer.RichText
+ import android.content.Context
+ import ci.kalyno.app.data.SupabaseConfig
+@@ -143,7 +145,7 @@ private class GeneratedExerciseApi(private val context: Context) {
+ }
+ 
+ @Composable
+-fun GeneratedExercisesScreen() {
++fun GeneratedExercisesScreen(levelId: String? = null) {
+     val context = LocalContext.current
+     val api = remember { GeneratedExerciseApi(context) }
+     val scope = rememberCoroutineScope()
+@@ -208,6 +210,26 @@ fun GeneratedExercisesScreen() {
+         refresh()
+     }
+ 
++    // Noms des disciplines, leçons et séances : cache local d'abord, réseau seulement si une leçon reste inconnue
++    var catalog by remember { mutableStateOf(ExerciseCatalog.EMPTY) }
++    var catalogFetched by remember { mutableStateOf(false) }
++
++    LaunchedEffect(levelId) {
++        val level = levelId ?: return@LaunchedEffect
++        val cached = withContext(Dispatchers.IO) { LearningContentCache(context).read(level) }
++        if (!cached.isNullOrEmpty()) catalog = ExerciseCatalog(cached)
++    }
++
++    LaunchedEffect(levelId, exercises, catalog) {
++        val level = levelId ?: return@LaunchedEffect
++        if (catalogFetched || exercises.isEmpty() || exercises.all { catalog.knows(it) }) return@LaunchedEffect
++        catalogFetched = true
++        val fresh = withContext(Dispatchers.IO) {
++            runCatching { SupabaseLearningRepository().loadPublishedContent(level) }.getOrNull()
++        }
++        if (!fresh.isNullOrEmpty()) catalog = ExerciseCatalog(fresh)
++    }
++
+     fun openExercise(exercise: JSONObject) {
+         selected = exercise
+         result = null
+@@ -310,7 +332,8 @@ fun GeneratedExercisesScreen() {
+             onFilterChange = { filter = it },
+             isCompleted = { isCompleted(it) },
+             onRefresh = { refresh() },
+-            onOpen = { openExercise(it) }
++            onOpen = { openExercise(it) },
++            catalog = catalog
+         )
+     } else {
+         val currentId = current.optString("id")
+diff --git a/app/src/main/java/ci/kalyno/app/ui/main/MainScreen.kt b/app/src/main/java/ci/kalyno/app/ui/main/MainScreen.kt
+index cf09875..d7e7b13 100644
+--- a/app/src/main/java/ci/kalyno/app/ui/main/MainScreen.kt
++++ b/app/src/main/java/ci/kalyno/app/ui/main/MainScreen.kt
+@@ -199,7 +199,7 @@ fun MainScreen(
+                         onRetry = viewModel::retry,
+                         onStartFreeExercises = viewModel::startFreeExercises
+                     )
+-                    2 -> GeneratedExercisesScreen()
++                    2 -> GeneratedExercisesScreen(levelId = levelId)
+                     3 -> ExplorerScreen(
+                         levelId = levelId,
+                         onStartChapter = viewModel::startCustomSession

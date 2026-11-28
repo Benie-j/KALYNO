@@ -1,0 +1,12 @@
+diff --git a/app/src/main/java/ci/kalyno/app/ui/exercises/ExerciseGroupsUi.kt b/app/src/main/java/ci/kalyno/app/ui/exercises/ExerciseGroupsUi.kt
+index 8e12260..1f1c07e 100644
+--- a/app/src/main/java/ci/kalyno/app/ui/exercises/ExerciseGroupsUi.kt
++++ b/app/src/main/java/ci/kalyno/app/ui/exercises/ExerciseGroupsUi.kt
+@@ -25,6 +25,7 @@ import androidx.compose.foundation.shape.CircleShape
+ import androidx.compose.foundation.shape.RoundedCornerShape
+ import androidx.compose.material3.Text
+ import androidx.compose.runtime.Composable
++import androidx.compose.runtime.getValue
+ import androidx.compose.runtime.mutableStateMapOf
+ import androidx.compose.runtime.remember
+ import androidx.compose.ui.Alignment
