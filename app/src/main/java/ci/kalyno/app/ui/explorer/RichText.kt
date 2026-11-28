@@ -162,11 +162,22 @@ private fun unwrapMath(html: String): String {
     }
 }
 
-private fun normalizeTex(tex: String): String = tex
-    .replace('\u00A0', ' ').replace("\u200B", "")
-    .replace('\u2212', '-')
-    .replace("\u25A2", "")
-    .trim()
+private val DUPLICATED_TEX_COMMAND_RE =
+    Regex("""\\\\(?=(?:dfrac|tfrac|frac|left|right)\b)""")
+
+private fun normalizeTex(tex: String): String {
+    val compatible = java.text.Normalizer.normalize(
+        tex,
+        java.text.Normalizer.Form.NFKC
+    )
+
+    return DUPLICATED_TEX_COMMAND_RE.replace(compatible) { "\\" }
+        .replace('\u00A0', ' ')
+        .replace("\u200B", "")
+        .replace('\u2212', '-')
+        .replace("\u25A2", "")
+        .trim()
+}
 
 private fun hexColor(h: String): Color? {
     val full = when (h.length) {
