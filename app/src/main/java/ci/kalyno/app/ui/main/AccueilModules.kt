@@ -275,6 +275,17 @@ internal fun ResumeModule(lesson: LastLessonUi, onClick: () -> Unit, modifier: M
                     maxLines = 3,
                     overflow = TextOverflow.Ellipsis
                 )
+                lesson.sessionTitle?.let { session ->
+                    Spacer(Modifier.height(3.dp))
+                    Text(
+                        text = session,
+                        color = KalynoMuted,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
                 Spacer(Modifier.height(6.dp))
                 Text(
                     text = detail,

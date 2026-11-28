@@ -48,8 +48,12 @@ object MasteryCalculator {
             .distinctBy { it.cardId }
             .sortedWith(compareByDescending<MasteredCard> { it.tier }.thenByDescending { it.repetitions })
 
-    /** Notions maîtrisées : cartes maîtrisées regroupées par matière et chapitre. */
-    fun notions(rows: List<MasteredCardRow>, now: Long): List<MasteredNotion> =
+    /** Notions maîtrisées : cartes maîtrisées regroupées par matière et chapitre (leçon), avec leurs séances. */
+    fun notions(
+        rows: List<MasteredCardRow>,
+        now: Long,
+        sessionLabels: Map<String, SessionLabel> = emptyMap()
+    ): List<MasteredNotion> =
         rows.filter { tierOf(it.repetitions) != null }
             .groupBy { "${it.subjectId}::${it.chapitre}" }
             .mapNotNull { (key, group) ->
@@ -65,8 +69,24 @@ object MasteryCalculator {
                     domain = group.first().subjectName,
                     masteredCards = group.size,
                     tier = tier,
-                    score = score
+                    score = score,
+                    sessions = sessionsOf(group, sessionLabels)
                 )
             }
             .sortedWith(compareByDescending<MasteredNotion> { it.tier }.thenByDescending { it.masteredCards })
+
+    /** Cartes maîtrisées d'une leçon rangées par séance, dans l'ordre des séances ; vide si aucune séance n'est connue. */
+    private fun sessionsOf(group: List<MasteredCardRow>, labels: Map<String, SessionLabel>): List<MasteredNotionSession> {
+        val known = group
+            .filter { row -> row.sessionId?.let { labels.containsKey(it) } == true }
+            .groupBy { it.sessionId!! }
+            .map { (id, list) ->
+                val label = labels.getValue(id)
+                MasteredNotionSession(label.label, label.order, list.size)
+            }
+            .sortedBy { it.order }
+        if (known.isEmpty()) return emptyList()
+        val rest = group.size - known.sumOf { it.masteredCards }
+        return if (rest > 0) known + MasteredNotionSession(null, Int.MAX_VALUE, rest) else known
+    }
 }

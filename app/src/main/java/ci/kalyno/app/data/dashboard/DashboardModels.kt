@@ -87,8 +87,16 @@ data class MasteredNotion(
     val domain: String,
     val masteredCards: Int,
     val tier: MasteryTier,
-    val score: Float?
+    val score: Float?,
+    /** Séances où des cartes de cette leçon sont maîtrisées (vide si la leçon n'a pas de séances). */
+    val sessions: List<MasteredNotionSession> = emptyList()
 )
+
+/** Une séance d'une notion maîtrisée : [label] null = cartes de la leçon sans séance connue. */
+data class MasteredNotionSession(val label: String?, val order: Int, val masteredCards: Int)
+
+/** Libellé et rang d'une séance (« Séance 2 · Les fractions »), tiré du contenu publié. */
+data class SessionLabel(val order: Int, val label: String)
 
 /**
  * Une carte individuelle jugée maîtrisée par le moteur (au moins MasteryCalculator.MASTERED_REPETITIONS
@@ -175,5 +183,7 @@ data class LastLessonUi(
     val progress: Float,
     val discoveredCards: Int = 0,
     val totalCards: Int = 0,
-    val completed: Boolean = false
+    val completed: Boolean = false,
+    /** Dernière séance réellement ouverte dans cette leçon (libellé), null si aucune. */
+    val sessionTitle: String? = null
 )

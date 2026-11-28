@@ -47,6 +47,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ci.kalyno.app.data.dashboard.MasteredCard
+import ci.kalyno.app.data.dashboard.MasteredNotion
+import ci.kalyno.app.data.dashboard.MasteredNotionSession
+import ci.kalyno.app.data.dashboard.MasteryTier
 import ci.kalyno.app.ui.components.DriftingBlob
 import ci.kalyno.app.ui.components.KalynoCard
 import ci.kalyno.app.ui.components.KalynoIconEmptyState
@@ -59,6 +62,8 @@ import ci.kalyno.app.ui.theme.KalynoAmberSoft
 import ci.kalyno.app.ui.theme.KalynoBackground
 import ci.kalyno.app.ui.theme.KalynoBlue
 import ci.kalyno.app.ui.theme.KalynoBlueSoft
+import ci.kalyno.app.ui.theme.KalynoCorrectSoft
+import ci.kalyno.app.ui.theme.KalynoCorrectText
 import ci.kalyno.app.ui.theme.KalynoMuted
 import ci.kalyno.app.ui.theme.KalynoOutline
 import ci.kalyno.app.ui.theme.KalynoTealDark
@@ -669,6 +674,121 @@ private fun StatusSegment(
                     maxLines = 1
                 )
             }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// 4. Notions maîtrisées : matière > leçon > séance (si la leçon en a)
+// ---------------------------------------------------------------------------
+
+private fun MasteryTier.notionLabel(): String = when (this) {
+    MasteryTier.SOLIDE -> "Solide"
+    MasteryTier.AVANCEE -> "Avancée"
+    MasteryTier.EXPERTE -> "Experte"
+}
+
+@Composable
+internal fun MasteredNotionsDetailScreen(notions: List<MasteredNotion>, onBack: () -> Unit) {
+    val groups = remember(notions) { groupBySubjectAndLesson(notions, { it.domain }, { it.label }) }
+
+    GroupedDetail(
+        prefix = "notions",
+        groups = groups,
+        header = {
+            DetailHeader(
+                icon = "graduation-cap",
+                title = "Notions maîtrisées",
+                count = notions.size,
+                countLabel = if (notions.size == 1) "notion validée par ton moteur de révision" else "notions validées par ton moteur de révision",
+                onBack = onBack
+            )
+        },
+        emptyContent = {
+            KalynoIconEmptyState(
+                icon = "graduation-cap",
+                title = "Aucune notion maîtrisée",
+                text = "Une notion apparaît ici dès qu'une de ses cartes est validée par 3 répétitions réussies."
+            )
+        },
+        subjectSubtitle = { subject -> plural(subject.lessons.size, "notion", "notions") },
+        lessonSubtitle = { lesson ->
+            plural(lesson.items.sumOf { it.masteredCards }, "carte maîtrisée", "cartes maîtrisées")
+        },
+        lessonContent = { lessonKey, lesson ->
+            lesson.items.forEach { notion ->
+                val detail = notion.tier.notionLabel() +
+                    (notion.score?.let { " · rétention ${(it * 100).toInt()} %" } ?: "")
+                if (notion.sessions.isEmpty()) {
+                    item(key = "$lessonKey-${notion.key}") {
+                        NotionRow(
+                            title = "Leçon complète",
+                            subtitle = detail,
+                            count = notion.masteredCards,
+                            modifier = Modifier.padding(start = LessonIndent, end = DetailMargin)
+                        )
+                    }
+                } else {
+                    items(notion.sessions, key = { "$lessonKey-${notion.key}-${it.order}" }) { session: MasteredNotionSession ->
+                        NotionRow(
+                            title = session.label ?: "Autres cartes de la leçon",
+                            subtitle = detail,
+                            count = session.masteredCards,
+                            modifier = Modifier.padding(start = LessonIndent, end = DetailMargin)
+                        )
+                    }
+                }
+            }
+        }
+    )
+}
+
+@Composable
+private fun NotionRow(title: String, subtitle: String, count: Int, modifier: Modifier = Modifier) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(Color.White)
+            .border(1.dp, KalynoOutline, RoundedCornerShape(16.dp))
+            .padding(horizontal = 14.dp, vertical = 12.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(34.dp)
+                .clip(CircleShape)
+                .background(KalynoCorrectSoft),
+            contentAlignment = Alignment.Center
+        ) {
+            KalynoSvgIcon(name = "check-circle", size = 18.dp, tint = KalynoCorrectText)
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(
+                text = title,
+                color = KalynoText,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.ExtraBold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(text = subtitle, color = KalynoMuted, fontSize = 12.sp)
+        }
+        Spacer(Modifier.width(10.dp))
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(10.dp))
+                .background(KalynoCorrectSoft)
+                .padding(horizontal = 10.dp, vertical = 4.dp)
+        ) {
+            Text(
+                text = plural(count, "carte", "cartes"),
+                color = KalynoCorrectText,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.ExtraBold
+            )
         }
     }
 }

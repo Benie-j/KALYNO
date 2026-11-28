@@ -286,6 +286,7 @@ class ExplorerViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun onSessionClick(sessionId: String) {
+        _state.value.openLessonId?.let { prefs.saveLastSessionId(studentId, it, sessionId) }
         _state.update { it.copy(openSessionId = sessionId) }
     }
 
@@ -380,6 +381,9 @@ class ExplorerViewModel(app: Application) : AndroidViewModel(app) {
         prefs.saveLastLessonId(studentId, chapter.id)
         _state.update { it.copy(openLessonId = chapter.id, openSessionId = null) }
     }
+
+    /** Dernière leçon réellement ouverte par l'élève (sert à « Mission du jour »). */
+    fun lastConsultedLessonId(): String? = prefs.lastLessonId(studentId)
 
     /** Gère le retour système / flèche. Renvoie false si on est déjà sur l'accueil Explorer. */
     fun onBack(): Boolean {

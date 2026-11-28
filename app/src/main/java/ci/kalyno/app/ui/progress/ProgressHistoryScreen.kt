@@ -68,6 +68,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import ci.kalyno.app.data.dashboard.MasteredCard
+import ci.kalyno.app.data.dashboard.MasteredNotion
 import ci.kalyno.app.data.dashboard.MasteryTier
 import ci.kalyno.app.ui.components.DriftingBlob
 import ci.kalyno.app.ui.components.KalynoCard
@@ -101,7 +102,7 @@ import ci.kalyno.app.ui.theme.KalynoYellow
 private val SideMargin = 16.dp
 
 /** Les quatre écrans de « Ma progression » : l'accueil et les trois écrans détaillés. */
-private enum class ProgressSection { HUB, HISTORY, CARDS, SHEETS }
+private enum class ProgressSection { HUB, HISTORY, CARDS, SHEETS, NOTIONS }
 
 /**
  * « Ma progression » : un accueil (rétention, bilan, semaine) et trois cartes cliquables qui ouvrent chacune
@@ -115,6 +116,7 @@ fun ProgressHistoryScreen(
     onBack: () -> Unit,
     masteredCount: Int? = null,
     masteredCards: List<MasteredCard> = emptyList(),
+    masteredNotions: List<MasteredNotion> = emptyList(),
     viewModel: ProgressHistoryViewModel = viewModel()
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -152,6 +154,11 @@ fun ProgressHistoryScreen(
                 onBack = { section = ProgressSection.HUB }
             )
 
+            ProgressSection.NOTIONS -> MasteredNotionsDetailScreen(
+                notions = masteredNotions,
+                onBack = { section = ProgressSection.HUB }
+            )
+
             ProgressSection.SHEETS -> SheetsDetailScreen(
                 viewModel = viewModel,
                 onBack = { section = ProgressSection.HUB }
@@ -184,7 +191,8 @@ private fun ProgressHub(
         ProgressHero(
             retentionScore = retentionScore,
             masteredCount = masteredCount,
-            onBack = onBack
+            onBack = onBack,
+            onOpenNotions = { onOpen(ProgressSection.NOTIONS) }
         )
 
         // ----- 2. Les trois portes d'entrée vers le détail -----
@@ -327,7 +335,8 @@ private fun retentionVerdict(percent: Int?): String = when {
 private fun ProgressHero(
     retentionScore: Float?,
     masteredCount: Int?,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onOpenNotions: () -> Unit = {}
 ) {
     val haptic = rememberHaptic()
     val retention = retentionScore?.coerceIn(0f, 1f)
@@ -472,6 +481,10 @@ private fun ProgressHero(
                         .entrance(3)
                         .clip(CircleShape)
                         .background(Color.White.copy(alpha = 0.14f))
+                        .clickable {
+                            haptic()
+                            onOpenNotions()
+                        }
                         .padding(horizontal = 14.dp, vertical = 7.dp)
                 ) {
                     KalynoSvgIcon(name = "graduation-cap", size = 16.dp, tint = Color.White)
@@ -482,6 +495,8 @@ private fun ProgressHero(
                         fontSize = 13.sp,
                         fontWeight = FontWeight.ExtraBold
                     )
+                    Spacer(Modifier.width(6.dp))
+                    KalynoSvgIcon(name = "chevron-right", size = 14.dp, tint = Color.White)
                 }
             }
         }

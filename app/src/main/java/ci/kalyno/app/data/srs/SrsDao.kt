@@ -151,6 +151,7 @@ interface SrsDao {
             s.name AS subjectName,
             f.chapitre AS chapitre,
             f.question AS question,
+            f.sessionId AS sessionId,
             p.repetitions AS repetitions,
             p.stability AS stability,
             p.lastReviewedAt AS lastReviewedAt
@@ -177,7 +178,9 @@ data class MasteredCardRow(
     val question: String,
     val repetitions: Int,
     val stability: Double,
-    val lastReviewedAt: Long?
+    val lastReviewedAt: Long?,
+    /** Séance de la carte (null = carte sans séance). */
+    val sessionId: String? = null
 )
 
 /** Ligne minimale pour le calcul de la grille KPI (notions maitrisees, retention). */

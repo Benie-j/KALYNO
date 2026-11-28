@@ -174,7 +174,7 @@ internal fun DailyMissionHero(
             onAction = { onContinue(continueChapter) }
         }
         else -> {
-            headline = "Tout est à jour"
+            headline = if (progress <= 0f) "Prêt à démarrer ?" else "Tout est à jour"
             sub = "Choisis une matière plus bas et lance un nouveau parcours."
             action = null
             onAction = null

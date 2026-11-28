@@ -47,6 +47,14 @@ class AppPrefs(context: Context) {
 
     fun lastLessonId(studentId: String): String? = prefs.getString("$KEY_LAST_LESSON_ID.$studentId", null)
 
+    /** Dernière séance ouverte dans une leçon : « Reprendre l'aventure » l'affiche sous le titre de la leçon. */
+    fun saveLastSessionId(studentId: String, lessonId: String, sessionId: String) {
+        prefs.edit().putString("last_session_id.$studentId.$lessonId", sessionId).apply()
+    }
+
+    fun lastSessionId(studentId: String, lessonId: String): String? =
+        prefs.getString("last_session_id.$studentId.$lessonId", null)
+
     val lastLessonSubjectName: String? get() = prefs.getString(KEY_LAST_LESSON_SUBJECT, null)
     val lastLessonSubjectEmoji: String? get() = prefs.getString(KEY_LAST_LESSON_EMOJI, null)
     val lastLessonChapterTitle: String? get() = prefs.getString(KEY_LAST_LESSON_CHAPTER, null)

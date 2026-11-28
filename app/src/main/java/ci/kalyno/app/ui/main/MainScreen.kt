@@ -87,6 +87,8 @@ fun MainScreen(
     LaunchedEffect(levelId, nickname) { viewModel.load(levelId, nickname) }
 
     var tab by rememberSaveable { mutableStateOf(0) }
+    // Retour sur l'Accueil : « Reprendre l'aventure » reflète la dernière leçon réellement consultée
+    LaunchedEffect(tab) { if (tab == 0) viewModel.refreshLastLesson() }
     var progressOpen by rememberSaveable { mutableStateOf(false) }
     var myReportsOpen by rememberSaveable { mutableStateOf(false) }
     var faqOpen by rememberSaveable { mutableStateOf(false) }
@@ -147,7 +149,8 @@ fun MainScreen(
             retentionScore = state.retentionScore,
             onBack = { progressOpen = false },
             masteredCount = state.masteredCount,
-            masteredCards = state.masteredCards
+            masteredCards = state.masteredCards,
+            masteredNotions = state.masteredNotions
         )
     } else {
         BackHandler(enabled = tab != 0) { tab = 0 }

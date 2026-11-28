@@ -282,9 +282,11 @@ private fun ExplorerHome(
     }
     val picks = ui.forYou.orEmpty()
     val dueTotal = picks.sumOf { it.dueCount }
-    val continueChapter = remember(ui.chapters) {
-        ui.chapters.firstOrNull { it.discovered > 0 && !it.isFinished() }
-            ?: ui.chapters.firstOrNull { !it.isFinished() }
+    // Mission du jour : la leçon réellement consultée en dernier, jamais « la première du catalogue »
+    val lastConsultedId = remember(ui.chapters, ui.route) { viewModel.lastConsultedLessonId() }
+    val continueChapter = remember(ui.chapters, lastConsultedId) {
+        ui.chapters.firstOrNull { it.id == lastConsultedId && !it.isFinished() }
+            ?: ui.chapters.firstOrNull { it.discovered > 0 && !it.isFinished() }
     }
 
     Column(

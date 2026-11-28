@@ -165,6 +165,21 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Recalcule « Reprendre l'aventure » à chaque retour sur l'Accueil : la dernière leçon a pu changer dans l'Explorer. */
+    fun refreshLastLesson() {
+        val level = loadedLevel ?: return
+        viewModelScope.launch {
+            val lesson = try {
+                repository.currentLastLesson(level, studentId)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                return@launch
+            }
+            _state.update { it.copy(lastLesson = lesson ?: it.lastLesson) }
+        }
+    }
+
     /** Pioche une autre citation que celle affichée, parmi celles gardées sur le téléphone. */
     fun shuffleQuote() {
         val level = loadedLevel ?: return

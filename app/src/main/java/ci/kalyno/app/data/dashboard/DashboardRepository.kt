@@ -64,6 +64,9 @@ class DashboardRepository(context: Context) {
         val freeNew: Int = 0
     )
 
+    /** Libellés des séances connus au dernier chargement (sert aussi au rafraîchissement de « Reprendre l'aventure »). */
+    @Volatile private var sessionLabelsCache: Map<String, SessionLabel> = emptyMap()
+
     /**
      * 1) charge le contenu publié par l'admin (Supabase) et le synchronise dans Room,
      * 2) calcule les révisions urgentes avec le moteur SRS (fonctionne aussi hors ligne),
@@ -234,7 +237,25 @@ class DashboardRepository(context: Context) {
         // contenant au moins une carte maîtrisée : masteredCount compte les notions, la liste détaillée
         // affiche les cartes une à une (les deux chiffres sont volontairement distincts).
         val masteredRows = srs.masteredDetails(studentId, MasteryCalculator.MASTERED_REPETITIONS)
-        val masteredNotions = MasteryCalculator.notions(masteredRows, now)
+        // Séance de chaque carte : « Séance N · titre », tirée du contenu publié (ancien cache si hors ligne)
+        val sessionLabels: Map<String, SessionLabel> = content
+            ?.flatMap { s -> s.chapters }
+            ?.flatMap { ch ->
+                ch.sessions.mapIndexed { index, session ->
+                    val number = index + 1
+                    val title = session.title.trim()
+                    val label = when {
+                        title.isEmpty() -> "Séance $number"
+                        title.startsWith("séance", ignoreCase = true) -> title
+                        else -> "Séance $number · $title"
+                    }
+                    session.id to SessionLabel(number, label)
+                }
+            }
+            ?.toMap()
+            ?: sessionLabelsCache
+        sessionLabelsCache = sessionLabels
+        val masteredNotions = MasteryCalculator.notions(masteredRows, now, sessionLabels)
         val masteredCards = MasteryCalculator.cards(masteredRows, now)
         val masteredCount = masteredNotions.size
 
@@ -262,7 +283,7 @@ class DashboardRepository(context: Context) {
             masteredNotions = masteredNotions,
             masteredCards = masteredCards,
             retentionScore = retentionScore,
-            lastLesson = lastLessonOf(studentId, subjectNames, introduced),
+            lastLesson = lastLessonOf(studentId, subjectNames, introduced, sessionLabels),
             freeItems = freeItems,
             freeTotal = freeEntities.size,
             freeNew = freeEntities.count { it.id !in introduced }
@@ -278,7 +299,8 @@ class DashboardRepository(context: Context) {
     private suspend fun lastLessonOf(
         studentId: String,
         subjectNames: Map<String, String>,
-        introduced: Set<String>
+        introduced: Set<String>,
+        sessionLabels: Map<String, SessionLabel> = emptyMap()
     ): LastLessonUi? {
         val ref = prefs.lastLessonId(studentId)?.let { dao.lessonRef(it) }
             ?: prefs.lastLessonChapterTitle?.let { title ->
@@ -295,8 +317,16 @@ class DashboardRepository(context: Context) {
             progress = if (cardIds.isEmpty()) 0f else (discovered.toFloat() / cardIds.size).coerceIn(0f, 1f),
             discoveredCards = discovered,
             totalCards = cardIds.size,
-            completed = ref.id in lessonProgress.completedIds(studentId)
+            completed = ref.id in lessonProgress.completedIds(studentId),
+            sessionTitle = prefs.lastSessionId(studentId, ref.id)?.let { sessionLabels[it]?.label }
         )
+    }
+
+    /** Dernière leçon consultée, recalculée à la demande (retour sur l'Accueil) sans relancer toute la synchronisation. */
+    suspend fun currentLastLesson(levelId: String, studentId: String): LastLessonUi? = withContext(Dispatchers.IO) {
+        val subjectNames = dao.subjectsForLevel(levelId).associate { it.id to it.name }
+        val introduced = dao.progressedCardIds(studentId).toSet()
+        lastLessonOf(studentId, subjectNames, introduced, sessionLabelsCache)
     }
 
     /**
