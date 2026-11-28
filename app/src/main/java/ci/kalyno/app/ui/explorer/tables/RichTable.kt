@@ -45,7 +45,10 @@ internal fun RichTextWithTables(
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         for (seg in segments) {
             when (seg) {
-                is HtmlSegment.Html -> RichText(seg.html, color, fontSize, lineHeight, fontWeight, fontStyle)
+                is HtmlSegment.Html -> RichText(
+                    seg.html, color, fontSize, lineHeight,
+                    fontWeight, fontStyle, allowKatex = allowKatex
+                )
                 is HtmlSegment.Table -> RichTable(seg.raw, color, fontSize, lineHeight)
             }
         }

@@ -476,8 +476,11 @@ fun RichText(
     val renderedHtml = remember(html) { normalizePowerNotation(html) }
 
     // Tableaux : rendu natif (voir ui/explorer/tables).
-    if (allowKatex && containsTable(renderedHtml)) {
-        RichTextWithTables(renderedHtml, color, fontSize, lineHeight, fontWeight, fontStyle)
+    if (containsTable(renderedHtml)) {
+        RichTextWithTables(
+            renderedHtml, color, fontSize, lineHeight,
+            fontWeight, fontStyle, allowKatex
+        )
         return
     }
     if (allowKatex && KATEX_ENABLED && renderedHtml.contains('$') && katexAvailable()) {

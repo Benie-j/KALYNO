@@ -251,7 +251,8 @@ private fun IntroBlock(block: LessonBlock, modifier: Modifier = Modifier) {
                 color = KalynoMuted,
                 fontSize = 17.sp,
                 lineHeight = 27.sp,
-                fontStyle = FontStyle.Italic
+                fontStyle = FontStyle.Italic,
+                allowKatex = false
             )
         }
     }
@@ -279,7 +280,10 @@ private fun TextBlock(block: LessonBlock, modifier: Modifier = Modifier) {
             )
         }
         block.paragraphs.forEach {
-            RichText(it, KalynoText, 16.sp, 26.sp)
+            RichText(
+                it, KalynoText, 16.sp, 26.sp,
+                allowKatex = false
+            )
         }
     }
 }
@@ -341,7 +345,8 @@ private fun AccentBlock(
                     KalynoText,
                     if (emphasizeBody) 18.sp else 15.sp,
                     if (emphasizeBody) 28.sp else 23.sp,
-                    if (emphasizeBody) FontWeight.SemiBold else FontWeight.Normal
+                    if (emphasizeBody) FontWeight.SemiBold else FontWeight.Normal,
+                    allowKatex = false
                 )
             }
         }
