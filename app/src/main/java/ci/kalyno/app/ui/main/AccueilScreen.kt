@@ -1,5 +1,18 @@
 package ci.kalyno.app.ui.main
 
+import ci.kalyno.app.ui.components.rememberHaptic
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.Role
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberSaveable
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.clickable
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -131,6 +144,16 @@ fun AccueilScreen(
     nickname: String = "",
     onOpenExplorer: () -> Unit = {}
 ) {
+    // Détail de la série : s'ouvre en touchant la flamme à côté de la salutation
+    var showStreak by rememberSaveable { mutableStateOf(false) }
+    if (showStreak) {
+        StreakDetailsSheet(
+            streak = state.streak,
+            doneToday = state.streakDoneToday,
+            onDismiss = { showStreak = false }
+        )
+    }
+
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
@@ -159,6 +182,7 @@ fun AccueilScreen(
                 HomeTopBar(
                     streak = state.streak,
                     nickname = nickname.ifBlank { state.nickname },
+                    onStreakClick = { showStreak = true },
                     modifier = Modifier.entrance(0)
                 )
 
@@ -255,8 +279,21 @@ private fun greeting(): String {
 }
 
 @Composable
-private fun HomeTopBar(streak: Int, nickname: String, modifier: Modifier = Modifier) {
+private fun HomeTopBar(
+    streak: Int,
+    nickname: String,
+    onStreakClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
     val streakLabel = if (streak <= 1) "Série de $streak jour" else "Série de $streak jours"
+    val haptic = rememberHaptic()
+    val chipInteraction = remember { MutableInteractionSource() }
+    val chipPressed by chipInteraction.collectIsPressedAsState()
+    val chipScale by animateFloatAsState(
+        targetValue = if (chipPressed) 0.92f else 1f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
+        label = "streakChipScale"
+    )
     val shownStreak = rememberCountUp(streak, durationMillis = 900)
     // La flamme respire quand une série est en cours ; immobile sinon
     val pulse = rememberPulse(min = 1f, max = 1.16f, durationMillis = 800)
@@ -317,9 +354,25 @@ private fun HomeTopBar(streak: Int, nickname: String, modifier: Modifier = Modif
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
-                .semantics(mergeDescendants = true) { contentDescription = streakLabel }
+                .graphicsLayer {
+                    scaleX = chipScale
+                    scaleY = chipScale
+                }
+                .semantics(mergeDescendants = true) {
+                    contentDescription = "$streakLabel. Voir le détail"
+                    role = Role.Button
+                }
                 .clip(CircleShape)
                 .background(KalynoAmberSoft)
+                .border(1.dp, KalynoYellow.copy(alpha = 0.35f), CircleShape)
+                .clickable(
+                    interactionSource = chipInteraction,
+                    indication = null,
+                    onClickLabel = "Voir le détail de ma série"
+                ) {
+                    haptic()
+                    onStreakClick()
+                }
                 .padding(horizontal = 14.dp, vertical = 9.dp)
         ) {
             Box(
@@ -342,77 +395,6 @@ private fun HomeTopBar(streak: Int, nickname: String, modifier: Modifier = Modif
 }
 
 // ---------- 2. Hero : la session du jour (le déclencheur d'habitude) ----------
-
-/** Paliers de série : ceux des badges de série du catalogue (une seule source de vérité). */
-private val streakGoals: List<BadgeDef> by lazy {
-    BadgeCatalog.all
-        .filter { it.category == BadgeCategory.STREAK }
-        .sortedBy { it.targetValue }
-}
-
-/** Un jour de la semaine glissante : actif = couvert par la série en cours. */
-private data class WeekDay(val label: String, val active: Boolean, val today: Boolean)
-
-/**
- * Les 7 derniers jours (aujourd'hui à droite), déduits de la série : une série de N jours couvre
- * les N derniers jours jusqu'à aujourd'hui si la session du jour est faite, jusqu'à hier sinon.
- * Même calendrier que [StreakLogic] (numéro de jour UTC), donc jamais de décalage avec la série.
- */
-private fun weekOf(streak: Int, doneToday: Boolean): List<WeekDay> {
-    val today = LocalDate.ofEpochDay(StreakLogic.dayOf(System.currentTimeMillis()))
-    val lastActive = if (doneToday) today else today.minusDays(1)
-    return (6 downTo 0).map { back ->
-        val day = today.minusDays(back.toLong())
-        val fromLast = ChronoUnit.DAYS.between(day, lastActive)
-        WeekDay(
-            label = day.dayOfWeek.getDisplayName(TextStyle.NARROW, Locale.FRENCH).uppercase(Locale.FRENCH),
-            active = streak > 0 && fromLast >= 0 && fromLast < streak,
-            today = back == 0
-        )
-    }
-}
-
-@Composable
-private fun WeekStrip(days: List<WeekDay>, modifier: Modifier = Modifier) {
-    // Le cercle d'aujourd'hui palpite tant que la session du jour n'est pas faite
-    val pulse = rememberPulse(min = 1f, max = 1.12f, durationMillis = 900)
-    Row(
-        modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        days.forEach { day ->
-            val waiting = day.today && !day.active
-            val dotScale = if (waiting) pulse else 1f
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    text = day.label,
-                    color = Color.White.copy(alpha = if (day.today) 1f else 0.7f),
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.ExtraBold
-                )
-                Spacer(Modifier.height(6.dp))
-                Box(
-                    modifier = Modifier
-                        .graphicsLayer {
-                            scaleX = dotScale
-                            scaleY = dotScale
-                        }
-                        .size(34.dp)
-                        .clip(CircleShape)
-                        .background(if (day.active) KalynoYellow else Color.White.copy(alpha = 0.14f))
-                        .then(if (waiting) Modifier.border(2.dp, Color.White, CircleShape) else Modifier),
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (day.active) {
-                        KalynoSvgIcon(name = "flame", size = 18.dp, tint = Color.White)
-                    } else if (waiting) {
-                        KalynoSvgIcon(name = "flame", size = 16.dp, tint = Color.White.copy(alpha = 0.8f))
-                    }
-                }
-            }
-        }
-    }
-}
 
 @Composable
 private fun SessionHero(
@@ -452,10 +434,6 @@ private fun SessionHero(
         }
     }
 
-    val streak = state.streak
-    val week = remember(streak, state.streakDoneToday) { weekOf(streak, state.streakDoneToday) }
-    val goal = streakGoals.firstOrNull { it.targetValue > streak }
-    val previousTarget = streakGoals.lastOrNull { it.targetValue <= streak }?.targetValue ?: 0
     val shape = RoundedCornerShape(28.dp)
 
     Box(
@@ -514,52 +492,6 @@ private fun SessionHero(
                 container = Color.White,
                 content = KalynoBlue
             )
-
-            // Série : la semaine en un coup d'œil, puis un objectif proche pour ne pas la casser
-            Spacer(Modifier.height(20.dp))
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(1.dp)
-                    .background(Color.White.copy(alpha = 0.18f))
-            )
-            Spacer(Modifier.height(16.dp))
-            WeekStrip(days = week)
-            Spacer(Modifier.height(14.dp))
-            val statusLine = when {
-                streak <= 0 -> "Termine une session aujourd'hui pour lancer ta série."
-                state.streakDoneToday -> "Série de $streak validée aujourd'hui."
-                else -> "Une session aujourd'hui et ta série passe à ${streak + 1}."
-            }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                KalynoSvgIcon(name = "flame", size = 16.dp, tint = KalynoYellow)
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    text = statusLine,
-                    color = Color.White,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    lineHeight = 18.sp
-                )
-            }
-            if (goal != null && streak > 0) {
-                val left = goal.targetValue - streak
-                val unit = if (left == 1) "jour" else "jours"
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    text = "Encore $left $unit pour débloquer « ${goal.title} ».",
-                    color = Color.White.copy(alpha = 0.85f),
-                    fontSize = 12.sp,
-                    lineHeight = 17.sp
-                )
-                Spacer(Modifier.height(8.dp))
-                KalynoProgressBar(
-                    progress = (streak - previousTarget).toFloat() / (goal.targetValue - previousTarget).toFloat(),
-                    height = 6.dp,
-                    color = KalynoYellow,
-                    track = Color.White.copy(alpha = 0.22f)
-                )
-            }
         }
     }
 }

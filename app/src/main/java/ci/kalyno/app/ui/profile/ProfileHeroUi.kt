@@ -1,5 +1,6 @@
 package ci.kalyno.app.ui.profile
 
+import ci.kalyno.app.data.badges.StreakGoals
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -54,12 +55,6 @@ import kotlin.math.roundToInt
 // Profil v3 : carte héros + chiffres réels + prochain palier de série.
 // Palette inchangée. Aucune donnée inventée : tout vient de l'état réel du compte.
 // ===========================================================================
-
-/** Paliers de série (en jours) : le prochain donne un objectif concret pour revenir demain. */
-private val STREAK_MILESTONES = listOf(3, 7, 14, 30, 60, 100, 180, 365)
-
-private fun plural(count: Int, one: String, many: String): String =
-    if (count == 1) "1 $one" else "$count $many"
 
 // ---------------------------------------------------------------------------
 // Carte héros
@@ -292,11 +287,14 @@ private fun StatTile(
 // Prochain palier de série
 // ---------------------------------------------------------------------------
 
-/** Objectif concret : « encore N jours » vers le prochain palier (3, 7, 14, 30, 60, 100…). */
+/**
+ * Objectif concret : « encore N jours » vers le prochain badge de série. Même source que la fiche
+ * de série de l'Accueil ([StreakGoals]) : les deux écrans affichent toujours le même objectif.
+ */
 @Composable
 internal fun StreakMilestoneCard(streak: Int, modifier: Modifier = Modifier) {
-    val next = STREAK_MILESTONES.firstOrNull { it > streak }
-    val previous = STREAK_MILESTONES.lastOrNull { it <= streak } ?: 0
+    val goal = StreakGoals.next(streak)
+    val daysLeft = StreakGoals.daysLeft(streak)
     val flame = rememberPulse(min = 1f, max = 1.16f, durationMillis = 800)
 
     KalynoCard(
@@ -324,14 +322,14 @@ internal fun StreakMilestoneCard(streak: Int, modifier: Modifier = Modifier) {
             Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "PROCHAIN PALIER",
+                    text = if (goal != null) "PROCHAIN BADGE" else "BADGES DE SÉRIE",
                     color = KalynoMuted,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.ExtraBold,
                     letterSpacing = 1.sp
                 )
                 Text(
-                    text = if (next != null) plural(next, "jour", "jours") else "Série de légende",
+                    text = goal?.title ?: "Série de légende",
                     color = KalynoText,
                     fontSize = 19.sp,
                     fontWeight = FontWeight.ExtraBold
@@ -341,9 +339,9 @@ internal fun StreakMilestoneCard(streak: Int, modifier: Modifier = Modifier) {
 
         Spacer(Modifier.height(14.dp))
 
-        if (next != null) {
+        if (goal != null) {
             KalynoProgressBar(
-                progress = (streak - previous).toFloat() / (next - previous).toFloat(),
+                progress = StreakGoals.progress(streak),
                 height = 8.dp,
                 color = KalynoYellow,
                 track = KalynoAmberSoft
@@ -352,8 +350,8 @@ internal fun StreakMilestoneCard(streak: Int, modifier: Modifier = Modifier) {
             Text(
                 text = when {
                     streak == 0 -> "Révise aujourd'hui pour lancer ta série."
-                    next - streak == 1 -> "Encore 1 jour pour atteindre le palier. Reviens demain !"
-                    else -> "Encore ${next - streak} jours pour atteindre le palier. Tu es sur la bonne voie."
+                    daysLeft == 1 -> "Encore 1 jour pour débloquer ce badge. Reviens demain !"
+                    else -> "Encore $daysLeft jours pour débloquer ce badge. Tu es sur la bonne voie."
                 },
                 color = KalynoMuted,
                 fontSize = 13.sp,
@@ -361,7 +359,7 @@ internal fun StreakMilestoneCard(streak: Int, modifier: Modifier = Modifier) {
             )
         } else {
             Text(
-                text = "Tu as dépassé tous les paliers. Chaque jour de plus est une victoire.",
+                text = "Tu as débloqué tous les badges de série. Chaque jour de plus est une victoire.",
                 color = KalynoMuted,
                 fontSize = 13.sp,
                 lineHeight = 18.sp
