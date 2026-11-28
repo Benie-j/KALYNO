@@ -1,8 +1,10 @@
 package ci.kalyno.app.ui.profile
 
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -43,6 +45,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -151,31 +154,47 @@ fun ProfileScreen(
 
         // ----- C. Mon compte -----
         SettingsGroup(title = "MON COMPTE", modifier = Modifier.entrance(index = 4)) {
+            CloudStatusItem(userEmail = userEmail, onLoginClick = onLoginClick)
             SettingsItem(
                 icon = Icons.Default.School,
                 title = "Changer de classe",
                 subtitle = Levels.label(levelId),
                 iconBackground = KalynoBlueSoft,
-                onClick = onChangeLevel
+                onClick = onChangeLevel,
+                showDivider = false
             )
-            CloudStatusItem(userEmail = userEmail, onLoginClick = onLoginClick)
         }
 
         // ----- D. Aide & assistance -----
         SettingsGroup(title = "AIDE & ASSISTANCE", modifier = Modifier.entrance(index = 5)) {
-            SettingsItem(
-                icon = Icons.Default.Lightbulb,
-                title = "Centre d'aide & FAQ",
-                subtitle = "Comprendre l'Active Recall et le SRS",
-                iconBackground = KalynoBlueSoft,
-                onClick = onOpenHelp
-            )
-            SettingsItem(
-                icon = Icons.Default.ChatBubbleOutline,
-                title = "Contacter l'assistance",
-                subtitle = "Échange avec l'équipe KALYNO",
-                iconBackground = SkyBubble,
-                onClick = onContactSupport
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                ActionTile(
+                    icon = Icons.Default.Lightbulb,
+                    title = "Centre d'aide & FAQ",
+                    subtitle = "Comprendre l'Active Recall et le SRS",
+                    background = KalynoBlueSoft,
+                    onClick = onOpenHelp,
+                    modifier = Modifier.weight(1f)
+                )
+                ActionTile(
+                    icon = Icons.Default.ChatBubbleOutline,
+                    title = "Contacter l'assistance",
+                    subtitle = "Échange avec l'équipe KALYNO",
+                    background = SkyBubble,
+                    onClick = onContactSupport,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(1.dp)
+                    .background(KalynoOutline.copy(alpha = 0.7f))
             )
             SettingsItem(
                 icon = Icons.Default.BugReport,
@@ -201,14 +220,15 @@ fun ProfileScreen(
             )
         }
 
-        // ----- E. Légal -----
+        // ----- E. Légal (volontairement plus discret) -----
         SettingsGroup(title = "LÉGAL", modifier = Modifier.entrance(index = 6)) {
             SettingsItem(
                 icon = Icons.Default.Description,
                 title = "Conditions Générales d'Utilisation",
                 iconBackground = SlateBubble,
                 iconTint = KalynoMuted,
-                onClick = onOpenTerms
+                onClick = onOpenTerms,
+                compact = true
             )
             SettingsItem(
                 icon = Icons.Default.Lock,
@@ -216,7 +236,8 @@ fun ProfileScreen(
                 iconBackground = SlateBubble,
                 iconTint = KalynoMuted,
                 onClick = onOpenPrivacy,
-                showDivider = false
+                showDivider = false,
+                compact = true
             )
         }
 
@@ -298,14 +319,23 @@ private fun CloudStatusItem(userEmail: String?, onLoginClick: () -> Unit) {
             iconBackground = KalynoCorrectSoft,
             iconTint = KalynoCorrect,
             trailing = {
-                Icon(
-                    imageVector = Icons.Default.CheckCircle,
-                    contentDescription = "Synchronisation active",
-                    tint = KalynoCorrect,
-                    modifier = Modifier.size(26.dp)
-                )
-            },
-            showDivider = false
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(KalynoCorrectSoft)
+                        .padding(start = 6.dp, end = 12.dp, top = 4.dp, bottom = 4.dp)
+                ) {
+                    PulseDot(color = KalynoCorrect, size = 7.dp)
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        text = "Actif",
+                        color = KalynoCorrect,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.ExtraBold
+                    )
+                }
+            }
         )
     } else {
         SettingsItem(
@@ -315,7 +345,18 @@ private fun CloudStatusItem(userEmail: String?, onLoginClick: () -> Unit) {
             iconBackground = SlateBubble,
             iconTint = KalynoMuted,
             onClick = onLoginClick,
-            showDivider = false
+            trailing = {
+                Text(
+                    text = "Se connecter",
+                    color = KalynoAmberDeep,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(KalynoAmberSoft)
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                )
+            }
         )
     }
 }
@@ -385,15 +426,21 @@ private fun NicknameEditDialog(
 @Composable
 private fun LogoutButton(label: String, onClick: () -> Unit) {
     val haptic = rememberHaptic()
+    val interaction = remember { MutableInteractionSource() }
     val shape = RoundedCornerShape(16.dp)
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .height(54.dp)
+            .pressScale(interaction)
             .clip(shape)
             .background(Color.White)
             .border(1.5.dp, KalynoDangerBorder, shape)
-            .clickable(role = Role.Button) {
+            .clickable(
+                interactionSource = interaction,
+                indication = LocalIndication.current,
+                role = Role.Button
+            ) {
                 haptic()
                 onClick()
             },
