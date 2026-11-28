@@ -161,6 +161,8 @@ fun GeneratedExercisesScreen(levelId: String? = null) {
     var reasoningAnswer by remember { mutableStateOf("") }
     var tableAnswers by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     var filter by remember { mutableStateOf("all") }
+    // Disciplines dépliées : tout est plié par défaut ; l'état survit à l'ouverture d'un exercice
+    var expandedSubjects by remember { mutableStateOf(setOf<String>()) }
 
     val cache = remember {
         context.getSharedPreferences("generated_exercises_cache", Context.MODE_PRIVATE)
@@ -206,7 +208,8 @@ fun GeneratedExercisesScreen(levelId: String? = null) {
     }
 
     LaunchedEffect(Unit) {
-        exercises = loadCache()
+        // Lecture du cache hors du fil principal : l'écran s'ouvre sans attendre
+        exercises = withContext(Dispatchers.IO) { loadCache() }
         refresh()
     }
 
@@ -333,7 +336,12 @@ fun GeneratedExercisesScreen(levelId: String? = null) {
             isCompleted = { isCompleted(it) },
             onRefresh = { refresh() },
             onOpen = { openExercise(it) },
-            catalog = catalog
+            catalog = catalog,
+            expandedSubjects = expandedSubjects,
+            onToggleSubject = { key ->
+                expandedSubjects =
+                    if (key in expandedSubjects) expandedSubjects - key else expandedSubjects + key
+            }
         )
     } else {
         val currentId = current.optString("id")

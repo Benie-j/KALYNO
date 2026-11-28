@@ -61,33 +61,31 @@ private fun countLabel(count: Int, one: String, many: String): String =
 @Composable
 internal fun GroupedExerciseList(
     groups: List<ExerciseSubjectGroup>,
-    filter: String,
+    expanded: Set<String>,
+    onToggle: (String) -> Unit,
     numberOf: (JSONObject) -> Int,
     isCompleted: (JSONObject) -> Boolean,
     onOpen: (JSONObject) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    // true = repliée. Par défaut, une discipline entièrement terminée est repliée (sauf dans l'onglet « Terminés »).
-    val collapsed = remember { mutableStateMapOf<String, Boolean>() }
-
+    // Tout est plié par défaut : aucune carte n'est construite tant que la discipline n'est pas dépliée.
     Column(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         groups.forEachIndexed { index, subject ->
-            val defaultCollapsed = filter == "all" && subject.total > 0 && subject.done == subject.total
-            val isCollapsed = collapsed[subject.key] ?: defaultCollapsed
+            val isExpanded = subject.key in expanded
 
-            Column(modifier = Modifier.entrance(index + 3, stepMillis = 60)) {
+            Column(modifier = Modifier.entrance(index + 3, stepMillis = 40)) {
                 SubjectHeader(
                     subject = subject,
-                    expanded = !isCollapsed,
-                    onToggle = { collapsed[subject.key] = !isCollapsed }
+                    expanded = isExpanded,
+                    onToggle = { onToggle(subject.key) }
                 )
                 AnimatedVisibility(
-                    visible = !isCollapsed,
-                    enter = expandVertically(tween(260)) + fadeIn(tween(200)),
-                    exit = shrinkVertically(tween(200)) + fadeOut(tween(120))
+                    visible = isExpanded,
+                    enter = expandVertically(tween(180)) + fadeIn(tween(140)),
+                    exit = shrinkVertically(tween(140)) + fadeOut(tween(90))
                 ) {
                     Column(
                         modifier = Modifier.padding(top = 12.dp),
@@ -198,9 +196,7 @@ private fun LessonBlock(
         )
         Spacer(Modifier.width(12.dp))
         Column(
-            modifier = Modifier
-                .weight(1f)
-                .animateContentSize(),
+            modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             if (lesson.title != null) {

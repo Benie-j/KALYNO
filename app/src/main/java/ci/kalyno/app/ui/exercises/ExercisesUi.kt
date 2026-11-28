@@ -41,8 +41,10 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -270,15 +272,31 @@ private fun ThinkingDots(color: Color = KalynoBlue) {
 }
 
 @Composable
-private fun rememberSpin(): Float {
+private fun rememberSpin(): State<Float> {
     val transition = rememberInfiniteTransition(label = "spin")
-    val angle by transition.animateFloat(
+    return transition.animateFloat(
         initialValue = 0f,
         targetValue = 360f,
         animationSpec = infiniteRepeatable(tween(durationMillis = 900, easing = LinearEasing)),
         label = "spinAngle"
     )
-    return angle
+}
+
+/**
+ * Aperçu léger d'un énoncé pour la liste : texte brut, sans HTML ni WebView KaTeX.
+ * L'énoncé complet (formules comprises) reste affiché en entier dans l'écran de résolution.
+ */
+private fun plainPreview(raw: String): String {
+    var s = raw
+    s = s.replace(Regex("<br\\s*/?>|</p>|</li>", RegexOption.IGNORE_CASE), " ")
+    s = s.replace(Regex("<[^>]+>"), "")
+    s = s.replace("&nbsp;", " ").replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")
+    s = s.replace(Regex("\\\\frac\\{([^{}]*)\\}\\{([^{}]*)\\}"), "$1/$2")
+    s = s.replace(Regex("\\\\sqrt\\{([^{}]*)\\}"), "√($1)")
+    s = s.replace("\\times", "×").replace("\\div", "÷").replace("\\cdot", "·")
+        .replace("\\left", "").replace("\\right", "").replace("\\,", " ")
+    s = s.replace("$", "").replace("{", "").replace("}", "")
+    return s.replace(Regex("\\s+"), " ").trim()
 }
 
 // ===========================================================================
@@ -295,7 +313,9 @@ internal fun ExerciseListContent(
     isCompleted: (JSONObject) -> Boolean,
     onRefresh: () -> Unit,
     onOpen: (JSONObject) -> Unit,
-    catalog: ExerciseCatalog = ExerciseCatalog.EMPTY
+    catalog: ExerciseCatalog = ExerciseCatalog.EMPTY,
+    expandedSubjects: Set<String> = emptySet(),
+    onToggleSubject: (String) -> Unit = {}
 ) {
     val haptic = rememberHaptic()
     val completedCount = exercises.count { isCompleted(it) }
@@ -340,7 +360,7 @@ internal fun ExerciseListContent(
                 )
             }
             Spacer(Modifier.width(8.dp))
-            val angle = if (loading) rememberSpin() else 0f
+            val spin: State<Float>? = if (loading) rememberSpin() else null
             Box(
                 modifier = Modifier
                     .size(46.dp)
@@ -352,7 +372,7 @@ internal fun ExerciseListContent(
                     .border(1.dp, KalynoOutline, CircleShape),
                 contentAlignment = Alignment.Center
             ) {
-                Box(modifier = Modifier.graphicsLayer { rotationZ = angle }) {
+                Box(modifier = Modifier.graphicsLayer { rotationZ = spin?.value ?: 0f }) {
                     KalynoSvgIcon(
                         name = "refresh-cw",
                         size = 20.dp,
@@ -500,8 +520,9 @@ internal fun ExerciseListContent(
             )
 
             else -> GroupedExerciseList(
-                groups = catalog.group(exercises, visible, isCompleted),
-                filter = filter,
+                groups = remember(exercises, filter, catalog) { catalog.group(exercises, visible, isCompleted) },
+                expanded = expandedSubjects,
+                onToggle = onToggleSubject,
                 numberOf = { exercises.indexOf(it) + 1 },
                 isCompleted = isCompleted,
                 onOpen = onOpen
@@ -594,7 +615,6 @@ internal fun ExerciseCard(
     val accent = if (done) KalynoCorrect else KalynoBlue
     val title = exercise.optString("title").ifBlank { "Défi $number" }
     val statement = exercise.optString("statement")
-    val longStatement = statement.length > 110
 
     KalynoCard(
         modifier = modifier,
@@ -668,30 +688,14 @@ internal fun ExerciseCard(
                     overflow = TextOverflow.Ellipsis
                 )
                 Spacer(Modifier.height(4.dp))
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 58.dp)
-                        .clipToBounds()
-                ) {
-                    RichText(
-                        html = statement,
-                        color = KalynoMuted,
-                        fontSize = 13.sp,
-                        lineHeight = 18.sp
-                    )
-                    if (longStatement) {
-                        Box(
-                            modifier = Modifier
-                                .align(Alignment.BottomCenter)
-                                .fillMaxWidth()
-                                .height(22.dp)
-                                .background(
-                                    Brush.verticalGradient(listOf(Color.Transparent, Color.White))
-                                )
-                        )
-                    }
-                }
+                Text(
+                    text = remember(statement) { plainPreview(statement) },
+                    color = KalynoMuted,
+                    fontSize = 13.sp,
+                    lineHeight = 18.sp,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis
+                )
                 Spacer(Modifier.height(10.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
