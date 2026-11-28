@@ -427,6 +427,7 @@ private fun DisciplineRow(
         label = "rowIconBg"
     )
     val iconTint by animateColorAsState(if (selected) Color.White else KalynoBlue, tween(120), label = "rowIcon")
+    val percent = rememberCountUp((progress.coerceIn(0f, 1f) * 100).roundToInt(), durationMillis = 700)
 
     KalynoCard(
         modifier = modifier.fillMaxWidth(),
@@ -462,7 +463,7 @@ private fun DisciplineRow(
                 )
                 Spacer(Modifier.height(2.dp))
                 Text(
-                    text = "${plural(discipline.lessonCount, "leçon", "leçons")} · ${(progress * 100).roundToInt()}%",
+                    text = "${plural(discipline.lessonCount, "leçon", "leçons")} · $percent%",
                     color = meta,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Medium,

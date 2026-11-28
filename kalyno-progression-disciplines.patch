@@ -1,0 +1,165 @@
+diff --git a/app/src/main/java/ci/kalyno/app/ui/explorer/ExplorerHomeUi.kt b/app/src/main/java/ci/kalyno/app/ui/explorer/ExplorerHomeUi.kt
+index de33c8b..82087d5 100644
+--- a/app/src/main/java/ci/kalyno/app/ui/explorer/ExplorerHomeUi.kt
++++ b/app/src/main/java/ci/kalyno/app/ui/explorer/ExplorerHomeUi.kt
+@@ -427,6 +427,7 @@ private fun DisciplineRow(
+         label = "rowIconBg"
+     )
+     val iconTint by animateColorAsState(if (selected) Color.White else KalynoBlue, tween(120), label = "rowIcon")
++    val percent = rememberCountUp((progress.coerceIn(0f, 1f) * 100).roundToInt(), durationMillis = 700)
+ 
+     KalynoCard(
+         modifier = modifier.fillMaxWidth(),
+@@ -462,7 +463,7 @@ private fun DisciplineRow(
+                 )
+                 Spacer(Modifier.height(2.dp))
+                 Text(
+-                    text = "${plural(discipline.lessonCount, "leçon", "leçons")} · ${(progress * 100).roundToInt()}%",
++                    text = "${plural(discipline.lessonCount, "leçon", "leçons")} · $percent%",
+                     color = meta,
+                     fontSize = 12.sp,
+                     fontWeight = FontWeight.Medium,
+diff --git a/app/src/main/java/ci/kalyno/app/ui/explorer/ExplorerScreen.kt b/app/src/main/java/ci/kalyno/app/ui/explorer/ExplorerScreen.kt
+index c6bd4ac..a0991f9 100644
+--- a/app/src/main/java/ci/kalyno/app/ui/explorer/ExplorerScreen.kt
++++ b/app/src/main/java/ci/kalyno/app/ui/explorer/ExplorerScreen.kt
+@@ -274,11 +274,10 @@ private fun ExplorerHome(
+         val total = ui.chapters.sumOf { it.questionCount }
+         if (total == 0) 0f else ui.chapters.sumOf { it.discovered }.toFloat() / total
+     }
+-    val progressByDiscipline = remember(ui.chapters) {
+-        ui.chapters.groupBy { it.subjectId }.mapValues { (_, list) ->
+-            val total = list.sumOf { it.questionCount }
+-            if (total == 0) 0f else list.sumOf { it.discovered }.toFloat() / total
+-        }
++    // Progression des disciplines : statuts réels des leçons et séances terminées (Room, synchronisés avec Supabase)
++    val progressByDiscipline = remember(ui.chapters, ui.completedLessonIds, ui.completedSessionIds) {
++        disciplineProgressOf(ui.chapters, ui.completedLessonIds, ui.completedSessionIds)
++            .mapValues { it.value.fraction }
+     }
+     val picks = ui.forYou.orEmpty()
+     val dueTotal = picks.sumOf { it.dueCount }
+diff --git a/app/src/main/java/ci/kalyno/app/ui/explorer/LessonSessions.kt b/app/src/main/java/ci/kalyno/app/ui/explorer/LessonSessions.kt
+index b049f8e..99524b1 100644
+--- a/app/src/main/java/ci/kalyno/app/ui/explorer/LessonSessions.kt
++++ b/app/src/main/java/ci/kalyno/app/ui/explorer/LessonSessions.kt
+@@ -98,6 +98,39 @@ fun unlockedItemsOf(chapter: ExplorerChapter, completedLessons: Set<String>, com
+         .toList()
+ }
+ 
++/**
++ * Progression réelle d'une discipline, calculée sur les statuts « terminé » de l'élève (Room, synchronisés avec Supabase) :
++ * une unité = une séance publiée, ou la leçon entière pour les anciennes leçons sans séances.
++ */
++data class DisciplineProgress(val doneUnits: Int, val totalUnits: Int) {
++    val fraction: Float get() = if (totalUnits <= 0) 0f else (doneUnits.toFloat() / totalUnits).coerceIn(0f, 1f)
++}
++
++/**
++ * Même règle que [unlockedItemsOf] : une leçon avec séances ne compte que ses séances publiées et terminées ;
++ * une leçon sans séances compte pour une unité, terminée quand l'élève a appuyé sur « Terminer ».
++ */
++fun disciplineProgressOf(
++    chapters: List<ExplorerChapter>,
++    completedLessons: Set<String>,
++    completedSessions: Set<String>
++): Map<String, DisciplineProgress> =
++    chapters.groupBy { it.subjectId }.mapValues { (_, lessons) ->
++        var done = 0
++        var total = 0
++        for (chapter in lessons) {
++            if (chapter.sessions.isEmpty()) {
++                total += 1
++                if (chapter.id in completedLessons) done += 1
++            } else {
++                val available = chapter.availableSessions()
++                total += available.size
++                done += available.count { it.id in completedSessions }
++            }
++        }
++        DisciplineProgress(doneUnits = done, totalUnits = total)
++    }
++
+ /** Lignes d'UNE séance : son en-tête puis ses blocs, rien d'autre. */
+ fun buildSessionRows(chapter: ExplorerChapter, sessionId: String): List<LessonRow> {
+     val visible = chapter.availableSessions()
+diff --git a/app/src/test/java/ci/kalyno/app/ui/explorer/DisciplineProgressTest.kt b/app/src/test/java/ci/kalyno/app/ui/explorer/DisciplineProgressTest.kt
+new file mode 100644
+index 0000000..fc51bda
+--- /dev/null
++++ b/app/src/test/java/ci/kalyno/app/ui/explorer/DisciplineProgressTest.kt
+@@ -0,0 +1,74 @@
++package ci.kalyno.app.ui.explorer
++
++import ci.kalyno.app.data.LearningCapsule
++import ci.kalyno.app.data.LearningSession
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++class DisciplineProgressTest {
++
++    private fun block(id: String, sessionId: String?) =
++        LearningCapsule(id = id, title = id, body = "", minutes = 3, cards = emptyList(), kind = "text", sessionId = sessionId)
++
++    private fun lesson(
++        id: String,
++        subject: String = "maths",
++        sessions: List<LearningSession> = emptyList(),
++        capsules: List<LearningCapsule> = emptyList()
++    ) = ExplorerChapter(
++        id = id, subjectId = subject, subjectName = subject, subjectEmoji = "", title = id,
++        minutes = 5, discovered = 0, capsules = capsules, items = emptyList(), sessions = sessions
++    )
++
++    @Test fun anciennesLeconsCompteesParLecon() {
++        val result = disciplineProgressOf(
++            chapters = listOf(lesson("l1"), lesson("l2")),
++            completedLessons = setOf("l1"),
++            completedSessions = emptySet()
++        )
++        assertEquals(DisciplineProgress(1, 2), result["maths"])
++        assertEquals(0.5f, result.getValue("maths").fraction, 0.0001f)
++    }
++
++    @Test fun leconAvecSeancesCompteSesSeancesPubliees() {
++        val chapter = lesson(
++            id = "l1",
++            sessions = listOf(
++                LearningSession("s1", "Séance 1", isAvailable = true),
++                LearningSession("s2", "Séance 2", isAvailable = true),
++                LearningSession("s3", "Séance 3", isAvailable = false),
++                LearningSession("s4", "Séance 4 vide", isAvailable = true)
++            ),
++            capsules = listOf(block("b1", "s1"), block("b2", "s2"), block("b3", "s3"))
++        )
++        val result = disciplineProgressOf(listOf(chapter), emptySet(), setOf("s1", "s3"))
++        // s3 non publiée et s4 sans bloc ne comptent pas : 1 séance terminée sur 2
++        assertEquals(DisciplineProgress(1, 2), result["maths"])
++    }
++
++    @Test fun leconTermineeNeValidePasSesSeances() {
++        val chapter = lesson(
++            id = "l1",
++            sessions = listOf(LearningSession("s1", "Séance 1")),
++            capsules = listOf(block("b1", "s1"))
++        )
++        val result = disciplineProgressOf(listOf(chapter), setOf("l1"), emptySet())
++        assertEquals(DisciplineProgress(0, 1), result["maths"])
++    }
++
++    @Test fun progressionParDiscipline() {
++        val result = disciplineProgressOf(
++            chapters = listOf(lesson("a1", "maths"), lesson("b1", "svt"), lesson("b2", "svt")),
++            completedLessons = setOf("a1", "b2"),
++            completedSessions = emptySet()
++        )
++        assertEquals(1f, result.getValue("maths").fraction, 0.0001f)
++        assertEquals(0.5f, result.getValue("svt").fraction, 0.0001f)
++    }
++
++    @Test fun rienAFaireDonneZeroPourCent() {
++        assertTrue(disciplineProgressOf(emptyList(), emptySet(), emptySet()).isEmpty())
++        assertEquals(0f, DisciplineProgress(0, 0).fraction, 0.0001f)
++    }
++}

@@ -274,11 +274,10 @@ private fun ExplorerHome(
         val total = ui.chapters.sumOf { it.questionCount }
         if (total == 0) 0f else ui.chapters.sumOf { it.discovered }.toFloat() / total
     }
-    val progressByDiscipline = remember(ui.chapters) {
-        ui.chapters.groupBy { it.subjectId }.mapValues { (_, list) ->
-            val total = list.sumOf { it.questionCount }
-            if (total == 0) 0f else list.sumOf { it.discovered }.toFloat() / total
-        }
+    // Progression des disciplines : statuts réels des leçons et séances terminées (Room, synchronisés avec Supabase)
+    val progressByDiscipline = remember(ui.chapters, ui.completedLessonIds, ui.completedSessionIds) {
+        disciplineProgressOf(ui.chapters, ui.completedLessonIds, ui.completedSessionIds)
+            .mapValues { it.value.fraction }
     }
     val picks = ui.forYou.orEmpty()
     val dueTotal = picks.sumOf { it.dueCount }

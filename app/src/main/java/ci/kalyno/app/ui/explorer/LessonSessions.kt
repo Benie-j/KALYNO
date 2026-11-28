@@ -98,6 +98,39 @@ fun unlockedItemsOf(chapter: ExplorerChapter, completedLessons: Set<String>, com
         .toList()
 }
 
+/**
+ * Progression réelle d'une discipline, calculée sur les statuts « terminé » de l'élève (Room, synchronisés avec Supabase) :
+ * une unité = une séance publiée, ou la leçon entière pour les anciennes leçons sans séances.
+ */
+data class DisciplineProgress(val doneUnits: Int, val totalUnits: Int) {
+    val fraction: Float get() = if (totalUnits <= 0) 0f else (doneUnits.toFloat() / totalUnits).coerceIn(0f, 1f)
+}
+
+/**
+ * Même règle que [unlockedItemsOf] : une leçon avec séances ne compte que ses séances publiées et terminées ;
+ * une leçon sans séances compte pour une unité, terminée quand l'élève a appuyé sur « Terminer ».
+ */
+fun disciplineProgressOf(
+    chapters: List<ExplorerChapter>,
+    completedLessons: Set<String>,
+    completedSessions: Set<String>
+): Map<String, DisciplineProgress> =
+    chapters.groupBy { it.subjectId }.mapValues { (_, lessons) ->
+        var done = 0
+        var total = 0
+        for (chapter in lessons) {
+            if (chapter.sessions.isEmpty()) {
+                total += 1
+                if (chapter.id in completedLessons) done += 1
+            } else {
+                val available = chapter.availableSessions()
+                total += available.size
+                done += available.count { it.id in completedSessions }
+            }
+        }
+        DisciplineProgress(doneUnits = done, totalUnits = total)
+    }
+
 /** Lignes d'UNE séance : son en-tête puis ses blocs, rien d'autre. */
 fun buildSessionRows(chapter: ExplorerChapter, sessionId: String): List<LessonRow> {
     val visible = chapter.availableSessions()
