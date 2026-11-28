@@ -214,6 +214,7 @@ fun MainScreen(
                             levelId = levelId,
                             nickname = nickname,
                             streak = state.streak,
+                            streakGoals = state.streakGoals,
                             userEmail = if (signedIn) (accountLabel ?: "Compte connecté") else null,
                             onNicknameChange = onNicknameChange,
                             onChangeLevel = onChangeLevel,

@@ -1,5 +1,6 @@
 package ci.kalyno.app.ui.profile
 
+import ci.kalyno.app.data.badges.StreakGoalState
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -115,7 +116,8 @@ fun ProfileScreen(
     onOpenPrivacy: () -> Unit,
     retentionScore: Float? = null,
     masteredCount: Int? = null,
-    onOpenProgress: (() -> Unit)? = null
+    onOpenProgress: (() -> Unit)? = null,
+    streakGoals: List<StreakGoalState> = emptyList()
 ) {
     var showLogoutDialog by rememberSaveable { mutableStateOf(false) }
     var showNicknameDialog by rememberSaveable { mutableStateOf(false) }
@@ -147,7 +149,7 @@ fun ProfileScreen(
             retentionScore = retentionScore,
             modifier = Modifier.entrance(index = 1)
         )
-        StreakMilestoneCard(streak = streak, modifier = Modifier.entrance(index = 2))
+        StreakMilestoneCard(streak = streak, goals = streakGoals, modifier = Modifier.entrance(index = 2))
         if (onOpenProgress != null) {
             ProgressLinkCard(onClick = onOpenProgress, modifier = Modifier.entrance(index = 3))
         }

@@ -169,7 +169,9 @@ data class DashboardUiState(
     /** Les 7 derniers jours de citations (aujourd'hui en premier), pour la bottom sheet. */
     val quoteWeek: List<QuoteDay> = emptyList(),
     /** Citations épinglées par l'élève (Room), de la plus récente à la plus ancienne. */
-    val favoriteQuotes: List<FavoriteQuote> = emptyList()
+    val favoriteQuotes: List<FavoriteQuote> = emptyList(),
+    /** Objectifs de série (badges 1/7/30 jours) avec leur état : atteints, prochain, à venir. */
+    val streakGoals: List<ci.kalyno.app.data.badges.StreakGoalState> = emptyList()
 )
 
 /**

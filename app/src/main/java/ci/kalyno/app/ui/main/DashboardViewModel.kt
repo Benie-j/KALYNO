@@ -128,8 +128,11 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
             }
             try {
                 val snapshot = repository.load(levelId, studentId)
+                val goals = runCatching { badges.streakGoalStates(studentId, streakStore.current()) }
+                    .getOrDefault(emptyList())
                 _state.update {
                     it.copy(
+                        streakGoals = goals,
                         loading = false,
                         error = null,
                         streak = streakStore.current(),
@@ -270,6 +273,10 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
             _state.update { it.copy(session = null) }
             loadedLevel?.let { refresh(it) }
             runCatching { badges.refresh(studentId) } // recalcule en silence ; la modale vit dans BadgesViewModel (écran Profil)
+            // Relit les objectifs de série : un objectif tout juste atteint apparaît avec sa date
+            val goals = runCatching { badges.streakGoalStates(studentId, streakStore.current()) }
+                .getOrDefault(emptyList())
+            _state.update { it.copy(streakGoals = goals) }
         }
     }
 }

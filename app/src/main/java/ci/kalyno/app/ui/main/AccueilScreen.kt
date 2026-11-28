@@ -150,6 +150,7 @@ fun AccueilScreen(
         StreakDetailsSheet(
             streak = state.streak,
             doneToday = state.streakDoneToday,
+            goals = state.streakGoals,
             onDismiss = { showStreak = false }
         )
     }

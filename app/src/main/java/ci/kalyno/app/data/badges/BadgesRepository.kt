@@ -23,6 +23,15 @@ class BadgesRepository(private val context: Context) {
     private val prefs = AppPrefs(context)
     private val streak = StreakStore(context)
 
+    /**
+     * Objectifs de série avec leur date de déblocage. Lecture seule : ne persiste rien, donc la modale
+     * de déblocage (écran Profil) n'est jamais court-circuitée.
+     */
+    suspend fun streakGoalStates(studentId: String, streak: Int): List<StreakGoalState> {
+        val unlocked = dao.unlocksFor(studentId).associate { it.badgeId to it.unlockedAt }
+        return StreakGoals.states(streak, unlocked)
+    }
+
     /** Calcule l'état de tous les badges et persiste les nouveaux déblocages. Retourne ceux fraîchement débloqués (pour la modale). */
     suspend fun refresh(studentId: String): Pair<List<BadgeUiState>, List<BadgeDef>> {
         val existing = dao.unlocksFor(studentId).associateBy { it.badgeId }

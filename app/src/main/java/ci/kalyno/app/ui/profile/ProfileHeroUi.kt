@@ -1,5 +1,8 @@
 package ci.kalyno.app.ui.profile
 
+import androidx.compose.runtime.remember
+import ci.kalyno.app.ui.main.reachedLabel
+import ci.kalyno.app.data.badges.StreakGoalState
 import ci.kalyno.app.data.badges.StreakGoals
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -288,13 +291,20 @@ private fun StatTile(
 // ---------------------------------------------------------------------------
 
 /**
- * Objectif concret : « encore N jours » vers le prochain badge de série. Même source que la fiche
- * de série de l'Accueil ([StreakGoals]) : les deux écrans affichent toujours le même objectif.
+ * Objectifs de série : le prochain badge (« encore N jours ») puis les objectifs déjà atteints, avec
+ * leur date. Même source que la fiche de série de l'Accueil ([StreakGoals] et les mêmes états) :
+ * les deux écrans affichent toujours exactement les mêmes objectifs.
  */
 @Composable
-internal fun StreakMilestoneCard(streak: Int, modifier: Modifier = Modifier) {
-    val goal = StreakGoals.next(streak)
-    val daysLeft = StreakGoals.daysLeft(streak)
+internal fun StreakMilestoneCard(
+    streak: Int,
+    modifier: Modifier = Modifier,
+    goals: List<StreakGoalState> = emptyList()
+) {
+    val states = remember(streak, goals) { goals.ifEmpty { StreakGoals.states(streak) } }
+    val goal = StreakGoals.next(states)
+    val daysLeft = StreakGoals.daysLeft(streak, goal)
+    val reached = states.filter { it.reached }
     val flame = rememberPulse(min = 1f, max = 1.16f, durationMillis = 800)
 
     KalynoCard(
@@ -322,26 +332,32 @@ internal fun StreakMilestoneCard(streak: Int, modifier: Modifier = Modifier) {
             Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = if (goal != null) "PROCHAIN BADGE" else "BADGES DE SÉRIE",
+                    text = if (goal != null) "PROCHAIN BADGE" else "OBJECTIFS DE SÉRIE",
                     color = KalynoMuted,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.ExtraBold,
                     letterSpacing = 1.sp
                 )
                 Text(
-                    text = goal?.title ?: "Série de légende",
+                    text = goal?.title ?: "Tous atteints",
                     color = KalynoText,
                     fontSize = 19.sp,
                     fontWeight = FontWeight.ExtraBold
                 )
             }
+            Text(
+                text = "${reached.size} / ${states.size}",
+                color = KalynoAmberDeep,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.ExtraBold
+            )
         }
 
         Spacer(Modifier.height(14.dp))
 
         if (goal != null) {
             KalynoProgressBar(
-                progress = StreakGoals.progress(streak),
+                progress = StreakGoals.progress(streak, goal),
                 height = 8.dp,
                 color = KalynoYellow,
                 track = KalynoAmberSoft
@@ -359,11 +375,57 @@ internal fun StreakMilestoneCard(streak: Int, modifier: Modifier = Modifier) {
             )
         } else {
             Text(
-                text = "Tu as débloqué tous les badges de série. Chaque jour de plus est une victoire.",
+                text = "Tu as atteint tous les objectifs de série. Chaque jour de plus est une victoire.",
                 color = KalynoMuted,
                 fontSize = 13.sp,
                 lineHeight = 18.sp
             )
+        }
+
+        if (reached.isNotEmpty()) {
+            Spacer(Modifier.height(16.dp))
+            Text(
+                text = "OBJECTIFS ATTEINTS",
+                color = KalynoAmberDeep,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.ExtraBold,
+                letterSpacing = 1.sp
+            )
+            Spacer(Modifier.height(10.dp))
+            reached.forEachIndexed { index, item ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(26.dp)
+                            .clip(CircleShape)
+                            .background(KalynoYellow),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        KalynoSvgIcon(name = "check", size = 14.dp, tint = Color.White)
+                    }
+                    Spacer(Modifier.width(10.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = item.def.title,
+                            color = KalynoText,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.ExtraBold
+                        )
+                        Text(
+                            text = reachedLabel(item.reachedAt),
+                            color = KalynoMuted,
+                            fontSize = 12.sp
+                        )
+                    }
+                    Text(
+                        text = "${item.def.targetValue} j",
+                        color = KalynoAmberDeep,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.ExtraBold
+                    )
+                }
+                if (index < reached.size - 1) Spacer(Modifier.height(10.dp))
+            }
         }
     }
 }

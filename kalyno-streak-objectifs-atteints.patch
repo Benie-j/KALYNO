@@ -1,0 +1,554 @@
+diff --git a/app/src/main/java/ci/kalyno/app/data/badges/BadgesRepository.kt b/app/src/main/java/ci/kalyno/app/data/badges/BadgesRepository.kt
+index 1ca0de6..9873f59 100644
+--- a/app/src/main/java/ci/kalyno/app/data/badges/BadgesRepository.kt
++++ b/app/src/main/java/ci/kalyno/app/data/badges/BadgesRepository.kt
+@@ -23,6 +23,15 @@ class BadgesRepository(private val context: Context) {
+     private val prefs = AppPrefs(context)
+     private val streak = StreakStore(context)
+ 
++    /**
++     * Objectifs de série avec leur date de déblocage. Lecture seule : ne persiste rien, donc la modale
++     * de déblocage (écran Profil) n'est jamais court-circuitée.
++     */
++    suspend fun streakGoalStates(studentId: String, streak: Int): List<StreakGoalState> {
++        val unlocked = dao.unlocksFor(studentId).associate { it.badgeId to it.unlockedAt }
++        return StreakGoals.states(streak, unlocked)
++    }
++
+     /** Calcule l'état de tous les badges et persiste les nouveaux déblocages. Retourne ceux fraîchement débloqués (pour la modale). */
+     suspend fun refresh(studentId: String): Pair<List<BadgeUiState>, List<BadgeDef>> {
+         val existing = dao.unlocksFor(studentId).associateBy { it.badgeId }
+diff --git a/app/src/main/java/ci/kalyno/app/data/badges/StreakGoals.kt b/app/src/main/java/ci/kalyno/app/data/badges/StreakGoals.kt
+index 93611dd..1862d43 100644
+--- a/app/src/main/java/ci/kalyno/app/data/badges/StreakGoals.kt
++++ b/app/src/main/java/ci/kalyno/app/data/badges/StreakGoals.kt
+@@ -1,11 +1,20 @@
+ package ci.kalyno.app.data.badges
+ 
++/** Un objectif de série : le badge visé, s'il est atteint, et à quelle date il l'a été. */
++data class StreakGoalState(
++    val def: BadgeDef,
++    val reached: Boolean,
++    /** Date de déblocage enregistrée ; null si l'objectif vient d'être atteint ou n'est pas encore enregistré. */
++    val reachedAt: Long?
++)
++
+ /**
+  * Objectifs de série : une seule source de vérité pour l'Accueil et le Profil.
+  *
+  * Les paliers sont ceux des badges de série du [BadgeCatalog] (aujourd'hui 1, 7 et 30 jours) :
+- * ajouter un badge de série au catalogue met à jour partout l'objectif affiché, sans liste à
+- * maintenir à côté.
++ * ajouter un badge de série au catalogue met à jour partout les objectifs affichés, sans liste à
++ * maintenir à côté. Un objectif atteint le reste même si la série est ensuite interrompue
++ * (il est lu dans les déblocages enregistrés).
+  */
+ object StreakGoals {
+ 
+@@ -16,20 +25,33 @@ object StreakGoals {
+             .sortedBy { it.targetValue }
+     }
+ 
+-    /** Prochain badge à débloquer, ou null si tous le sont déjà. */
+-    fun next(streak: Int): BadgeDef? = all.firstOrNull { it.targetValue > streak }
++    /**
++     * État de chaque objectif. [unlockedAt] = déblocages enregistrés (id du badge -> date) ; à défaut,
++     * un objectif est considéré atteint dès que la série en cours le couvre.
++     */
++    fun states(streak: Int, unlockedAt: Map<String, Long> = emptyMap()): List<StreakGoalState> =
++        all.map { def ->
++            val at = unlockedAt[def.id]
++            StreakGoalState(
++                def = def,
++                reached = at != null || streak >= def.targetValue,
++                reachedAt = at
++            )
++        }
+ 
+-    /** Palier déjà atteint le plus récent (0 si aucun). */
+-    fun previousTarget(streak: Int): Int =
+-        all.lastOrNull { it.targetValue <= streak }?.targetValue ?: 0
++    /** Prochain objectif à atteindre, ou null si tous le sont. */
++    fun next(states: List<StreakGoalState>): BadgeDef? = states.firstOrNull { !it.reached }?.def
+ 
+-    /** Jours restants avant le prochain badge (0 si tous sont débloqués). */
+-    fun daysLeft(streak: Int): Int = (next(streak)?.targetValue ?: streak) - streak
++    /** Jours restants avant [goal] (0 si tous les objectifs sont atteints). */
++    fun daysLeft(streak: Int, goal: BadgeDef?): Int =
++        if (goal == null) 0 else (goal.targetValue - streak).coerceAtLeast(0)
+ 
+-    /** Avancement (0..1) entre le dernier palier atteint et le prochain badge. */
+-    fun progress(streak: Int): Float {
+-        val goal = next(streak) ?: return 1f
+-        val from = previousTarget(streak)
++    /** Avancement (0..1) depuis le dernier palier couvert par la série jusqu'à [goal]. */
++    fun progress(streak: Int, goal: BadgeDef?): Float {
++        if (goal == null) return 1f
++        val from = all
++            .lastOrNull { it.targetValue <= streak && it.targetValue < goal.targetValue }
++            ?.targetValue ?: 0
+         val span = (goal.targetValue - from).coerceAtLeast(1)
+         return ((streak - from).toFloat() / span).coerceIn(0f, 1f)
+     }
+diff --git a/app/src/main/java/ci/kalyno/app/data/dashboard/DashboardModels.kt b/app/src/main/java/ci/kalyno/app/data/dashboard/DashboardModels.kt
+index 806d668..0cb5279 100644
+--- a/app/src/main/java/ci/kalyno/app/data/dashboard/DashboardModels.kt
++++ b/app/src/main/java/ci/kalyno/app/data/dashboard/DashboardModels.kt
+@@ -169,7 +169,9 @@ data class DashboardUiState(
+     /** Les 7 derniers jours de citations (aujourd'hui en premier), pour la bottom sheet. */
+     val quoteWeek: List<QuoteDay> = emptyList(),
+     /** Citations épinglées par l'élève (Room), de la plus récente à la plus ancienne. */
+-    val favoriteQuotes: List<FavoriteQuote> = emptyList()
++    val favoriteQuotes: List<FavoriteQuote> = emptyList(),
++    /** Objectifs de série (badges 1/7/30 jours) avec leur état : atteints, prochain, à venir. */
++    val streakGoals: List<ci.kalyno.app.data.badges.StreakGoalState> = emptyList()
+ )
+ 
+ /**
+diff --git a/app/src/main/java/ci/kalyno/app/ui/main/AccueilScreen.kt b/app/src/main/java/ci/kalyno/app/ui/main/AccueilScreen.kt
+index 168790a..5d04eb9 100644
+--- a/app/src/main/java/ci/kalyno/app/ui/main/AccueilScreen.kt
++++ b/app/src/main/java/ci/kalyno/app/ui/main/AccueilScreen.kt
+@@ -150,6 +150,7 @@ fun AccueilScreen(
+         StreakDetailsSheet(
+             streak = state.streak,
+             doneToday = state.streakDoneToday,
++            goals = state.streakGoals,
+             onDismiss = { showStreak = false }
+         )
+     }
+diff --git a/app/src/main/java/ci/kalyno/app/ui/main/DashboardViewModel.kt b/app/src/main/java/ci/kalyno/app/ui/main/DashboardViewModel.kt
+index 8695f69..e42aac7 100644
+--- a/app/src/main/java/ci/kalyno/app/ui/main/DashboardViewModel.kt
++++ b/app/src/main/java/ci/kalyno/app/ui/main/DashboardViewModel.kt
+@@ -128,8 +128,11 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
+             }
+             try {
+                 val snapshot = repository.load(levelId, studentId)
++                val goals = runCatching { badges.streakGoalStates(studentId, streakStore.current()) }
++                    .getOrDefault(emptyList())
+                 _state.update {
+                     it.copy(
++                        streakGoals = goals,
+                         loading = false,
+                         error = null,
+                         streak = streakStore.current(),
+@@ -270,6 +273,10 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
+             _state.update { it.copy(session = null) }
+             loadedLevel?.let { refresh(it) }
+             runCatching { badges.refresh(studentId) } // recalcule en silence ; la modale vit dans BadgesViewModel (écran Profil)
++            // Relit les objectifs de série : un objectif tout juste atteint apparaît avec sa date
++            val goals = runCatching { badges.streakGoalStates(studentId, streakStore.current()) }
++                .getOrDefault(emptyList())
++            _state.update { it.copy(streakGoals = goals) }
+         }
+     }
+ }
+diff --git a/app/src/main/java/ci/kalyno/app/ui/main/MainScreen.kt b/app/src/main/java/ci/kalyno/app/ui/main/MainScreen.kt
+index e5d963c..bd41e79 100644
+--- a/app/src/main/java/ci/kalyno/app/ui/main/MainScreen.kt
++++ b/app/src/main/java/ci/kalyno/app/ui/main/MainScreen.kt
+@@ -214,6 +214,7 @@ fun MainScreen(
+                             levelId = levelId,
+                             nickname = nickname,
+                             streak = state.streak,
++                            streakGoals = state.streakGoals,
+                             userEmail = if (signedIn) (accountLabel ?: "Compte connecté") else null,
+                             onNicknameChange = onNicknameChange,
+                             onChangeLevel = onChangeLevel,
+diff --git a/app/src/main/java/ci/kalyno/app/ui/main/StreakDetailsSheet.kt b/app/src/main/java/ci/kalyno/app/ui/main/StreakDetailsSheet.kt
+index 0952fac..dc5748e 100644
+--- a/app/src/main/java/ci/kalyno/app/ui/main/StreakDetailsSheet.kt
++++ b/app/src/main/java/ci/kalyno/app/ui/main/StreakDetailsSheet.kt
+@@ -1,5 +1,10 @@
+ package ci.kalyno.app.ui.main
+ 
++import java.time.format.DateTimeFormatter
++import java.time.ZoneId
++import java.time.Instant
++import ci.kalyno.app.ui.components.entrance
++import ci.kalyno.app.data.badges.StreakGoalState
+ import androidx.compose.foundation.background
+ import androidx.compose.foundation.border
+ import androidx.compose.foundation.layout.Arrangement
+@@ -53,6 +58,13 @@ import java.time.format.TextStyle
+ import java.time.temporal.ChronoUnit
+ import java.util.Locale
+ 
++/** « Objectif atteint · 12 nov. 2026 » ; sans date enregistrée : « Objectif atteint ». */
++internal fun reachedLabel(at: Long?): String {
++    if (at == null) return "Objectif atteint"
++    val date = Instant.ofEpochMilli(at).atZone(ZoneId.systemDefault()).toLocalDate()
++    return "Objectif atteint · " + date.format(DateTimeFormatter.ofPattern("d MMM yyyy", Locale.FRENCH))
++}
++
+ /** Un jour de la semaine glissante : actif = couvert par la série en cours. */
+ internal data class WeekDay(val label: String, val active: Boolean, val today: Boolean)
+ 
+@@ -126,12 +138,16 @@ private fun WeekStrip(days: List<WeekDay>, modifier: Modifier = Modifier) {
+ internal fun StreakDetailsSheet(
+     streak: Int,
+     doneToday: Boolean,
++    goals: List<StreakGoalState>,
+     onDismiss: () -> Unit
+ ) {
+     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+     val scope = rememberCoroutineScope()
+     val week = remember(streak, doneToday) { weekOf(streak, doneToday) }
+-    val goal = StreakGoals.next(streak)
++    // Mêmes états que la carte du Profil ; à défaut de données enregistrées, déduits de la série
++    val states = remember(streak, goals) { goals.ifEmpty { StreakGoals.states(streak) } }
++    val nextGoal = StreakGoals.next(states)
++    val reachedCount = states.count { it.reached }
+     val shown = rememberCountUp(streak, durationMillis = 900)
+     val flame = rememberPulse(min = 1f, max = 1.14f, durationMillis = 800)
+ 
+@@ -214,61 +230,46 @@ internal fun StreakDetailsSheet(
+                 WeekStrip(days = week)
+             }
+ 
+-            Spacer(Modifier.height(14.dp))
+-            Column(
+-                modifier = Modifier
+-                    .fillMaxWidth()
+-                    .clip(RoundedCornerShape(20.dp))
+-                    .background(KalynoAmberSoft)
+-                    .padding(16.dp)
++            Spacer(Modifier.height(20.dp))
++            Row(
++                modifier = Modifier.fillMaxWidth(),
++                verticalAlignment = Alignment.CenterVertically,
++                horizontalArrangement = Arrangement.SpaceBetween
+             ) {
+-                Row(verticalAlignment = Alignment.CenterVertically) {
+-                    Box(
+-                        modifier = Modifier
+-                            .size(42.dp)
+-                            .clip(CircleShape)
+-                            .background(Color.White),
+-                        contentAlignment = Alignment.Center
+-                    ) {
+-                        KalynoSvgIcon(name = "trophy", size = 22.dp, tint = KalynoAmberDeep)
+-                    }
+-                    Spacer(Modifier.width(12.dp))
+-                    Column(modifier = Modifier.weight(1f)) {
+-                        Text(
+-                            text = if (goal != null) "PROCHAIN BADGE" else "TOUS LES BADGES DE SÉRIE",
+-                            color = KalynoAmberDeep,
+-                            fontSize = 11.sp,
+-                            fontWeight = FontWeight.ExtraBold,
+-                            letterSpacing = 1.2.sp
+-                        )
+-                        Text(
+-                            text = goal?.title ?: "Série de légende",
+-                            color = KalynoText,
+-                            fontSize = 18.sp,
+-                            fontWeight = FontWeight.ExtraBold
+-                        )
+-                    }
+-                }
+-                Spacer(Modifier.height(14.dp))
+-                KalynoProgressBar(
+-                    progress = StreakGoals.progress(streak),
+-                    height = 8.dp,
+-                    color = KalynoYellow,
+-                    track = Color.White
++                Text(
++                    text = "TES OBJECTIFS",
++                    color = KalynoMuted,
++                    fontSize = 11.sp,
++                    fontWeight = FontWeight.ExtraBold,
++                    letterSpacing = 1.2.sp
++                )
++                Text(
++                    text = "$reachedCount / ${states.size} atteints",
++                    color = KalynoAmberDeep,
++                    fontSize = 12.sp,
++                    fontWeight = FontWeight.ExtraBold
+                 )
++            }
++            if (nextGoal == null) {
+                 Spacer(Modifier.height(8.dp))
+-                val left = StreakGoals.daysLeft(streak)
+                 Text(
+-                    text = if (goal != null) {
+-                        "Encore $left ${if (left == 1) "jour" else "jours"} pour le débloquer."
+-                    } else {
+-                        "Tu les as tous débloqués. Chaque jour de plus est une victoire."
+-                    },
+-                    color = KalynoMuted,
++                    text = "Tous les objectifs sont atteints. Chaque jour de plus est une victoire.",
++                    color = KalynoText,
+                     fontSize = 13.sp,
+-                    lineHeight = 18.sp
++                    lineHeight = 18.sp,
++                    modifier = Modifier.fillMaxWidth()
+                 )
+             }
++            Spacer(Modifier.height(10.dp))
++            states.forEachIndexed { index, goal ->
++                GoalRow(
++                    goal = goal,
++                    streak = streak,
++                    isNext = nextGoal != null && goal.def.id == nextGoal.id,
++                    modifier = Modifier.entrance(index)
++                )
++                if (index < states.size - 1) Spacer(Modifier.height(10.dp))
++            }
+ 
+             Spacer(Modifier.height(20.dp))
+             KalynoPrimaryButton(
+@@ -282,3 +283,88 @@ internal fun StreakDetailsSheet(
+         }
+     }
+ }
++
++/**
++ * Une ligne d'objectif : atteint (coche + date), en cours (progression + jours restants) ou à venir.
++ */
++@Composable
++private fun GoalRow(
++    goal: StreakGoalState,
++    streak: Int,
++    isNext: Boolean,
++    modifier: Modifier = Modifier
++) {
++    val def = goal.def
++    val shape = RoundedCornerShape(18.dp)
++    val left = StreakGoals.daysLeft(streak, def)
++    val borderColor = when {
++        goal.reached -> KalynoYellow.copy(alpha = 0.5f)
++        isNext -> KalynoYellow
++        else -> KalynoOutline
++    }
++
++    Column(
++        modifier = modifier
++            .fillMaxWidth()
++            .clip(shape)
++            .background(if (goal.reached) KalynoAmberSoft else Color.White)
++            .border(if (isNext) 2.dp else 1.dp, borderColor, shape)
++            .padding(14.dp)
++    ) {
++        Row(verticalAlignment = Alignment.CenterVertically) {
++            Box(
++                modifier = Modifier
++                    .size(42.dp)
++                    .clip(CircleShape)
++                    .background(if (goal.reached) KalynoYellow else KalynoBackground)
++                    .then(if (goal.reached) Modifier else Modifier.border(1.dp, KalynoOutline, CircleShape)),
++                contentAlignment = Alignment.Center
++            ) {
++                if (goal.reached) {
++                    KalynoSvgIcon(name = "check", size = 22.dp, tint = Color.White)
++                } else {
++                    Text(
++                        text = def.targetValue.toString(),
++                        color = if (isNext) KalynoAmberDeep else KalynoMuted,
++                        fontSize = 15.sp,
++                        fontWeight = FontWeight.ExtraBold
++                    )
++                }
++            }
++            Spacer(Modifier.width(12.dp))
++            Column(modifier = Modifier.weight(1f)) {
++                Text(
++                    text = def.title,
++                    color = KalynoText,
++                    fontSize = 16.sp,
++                    fontWeight = FontWeight.ExtraBold
++                )
++                Text(
++                    text = when {
++                        goal.reached -> reachedLabel(goal.reachedAt)
++                        isNext -> "Encore $left ${if (left == 1) "jour" else "jours"}"
++                        else -> "À ${def.targetValue} jours d'affilée"
++                    },
++                    color = if (goal.reached) KalynoAmberDeep else KalynoMuted,
++                    fontSize = 12.sp,
++                    fontWeight = FontWeight.SemiBold
++                )
++            }
++            Text(
++                text = "${def.targetValue} j",
++                color = if (goal.reached) KalynoAmberDeep else KalynoMuted,
++                fontSize = 12.sp,
++                fontWeight = FontWeight.ExtraBold
++            )
++        }
++        if (isNext) {
++            Spacer(Modifier.height(12.dp))
++            KalynoProgressBar(
++                progress = StreakGoals.progress(streak, def),
++                height = 7.dp,
++                color = KalynoYellow,
++                track = KalynoAmberSoft
++            )
++        }
++    }
++}
+diff --git a/app/src/main/java/ci/kalyno/app/ui/profile/ProfileHeroUi.kt b/app/src/main/java/ci/kalyno/app/ui/profile/ProfileHeroUi.kt
+index ff73139..45df5a1 100644
+--- a/app/src/main/java/ci/kalyno/app/ui/profile/ProfileHeroUi.kt
++++ b/app/src/main/java/ci/kalyno/app/ui/profile/ProfileHeroUi.kt
+@@ -1,5 +1,8 @@
+ package ci.kalyno.app.ui.profile
+ 
++import androidx.compose.runtime.remember
++import ci.kalyno.app.ui.main.reachedLabel
++import ci.kalyno.app.data.badges.StreakGoalState
+ import ci.kalyno.app.data.badges.StreakGoals
+ import androidx.compose.foundation.background
+ import androidx.compose.foundation.clickable
+@@ -288,13 +291,20 @@ private fun StatTile(
+ // ---------------------------------------------------------------------------
+ 
+ /**
+- * Objectif concret : « encore N jours » vers le prochain badge de série. Même source que la fiche
+- * de série de l'Accueil ([StreakGoals]) : les deux écrans affichent toujours le même objectif.
++ * Objectifs de série : le prochain badge (« encore N jours ») puis les objectifs déjà atteints, avec
++ * leur date. Même source que la fiche de série de l'Accueil ([StreakGoals] et les mêmes états) :
++ * les deux écrans affichent toujours exactement les mêmes objectifs.
+  */
+ @Composable
+-internal fun StreakMilestoneCard(streak: Int, modifier: Modifier = Modifier) {
+-    val goal = StreakGoals.next(streak)
+-    val daysLeft = StreakGoals.daysLeft(streak)
++internal fun StreakMilestoneCard(
++    streak: Int,
++    modifier: Modifier = Modifier,
++    goals: List<StreakGoalState> = emptyList()
++) {
++    val states = remember(streak, goals) { goals.ifEmpty { StreakGoals.states(streak) } }
++    val goal = StreakGoals.next(states)
++    val daysLeft = StreakGoals.daysLeft(streak, goal)
++    val reached = states.filter { it.reached }
+     val flame = rememberPulse(min = 1f, max = 1.16f, durationMillis = 800)
+ 
+     KalynoCard(
+@@ -322,26 +332,32 @@ internal fun StreakMilestoneCard(streak: Int, modifier: Modifier = Modifier) {
+             Spacer(Modifier.width(12.dp))
+             Column(modifier = Modifier.weight(1f)) {
+                 Text(
+-                    text = if (goal != null) "PROCHAIN BADGE" else "BADGES DE SÉRIE",
++                    text = if (goal != null) "PROCHAIN BADGE" else "OBJECTIFS DE SÉRIE",
+                     color = KalynoMuted,
+                     fontSize = 11.sp,
+                     fontWeight = FontWeight.ExtraBold,
+                     letterSpacing = 1.sp
+                 )
+                 Text(
+-                    text = goal?.title ?: "Série de légende",
++                    text = goal?.title ?: "Tous atteints",
+                     color = KalynoText,
+                     fontSize = 19.sp,
+                     fontWeight = FontWeight.ExtraBold
+                 )
+             }
++            Text(
++                text = "${reached.size} / ${states.size}",
++                color = KalynoAmberDeep,
++                fontSize = 13.sp,
++                fontWeight = FontWeight.ExtraBold
++            )
+         }
+ 
+         Spacer(Modifier.height(14.dp))
+ 
+         if (goal != null) {
+             KalynoProgressBar(
+-                progress = StreakGoals.progress(streak),
++                progress = StreakGoals.progress(streak, goal),
+                 height = 8.dp,
+                 color = KalynoYellow,
+                 track = KalynoAmberSoft
+@@ -359,12 +375,58 @@ internal fun StreakMilestoneCard(streak: Int, modifier: Modifier = Modifier) {
+             )
+         } else {
+             Text(
+-                text = "Tu as débloqué tous les badges de série. Chaque jour de plus est une victoire.",
++                text = "Tu as atteint tous les objectifs de série. Chaque jour de plus est une victoire.",
+                 color = KalynoMuted,
+                 fontSize = 13.sp,
+                 lineHeight = 18.sp
+             )
+         }
++
++        if (reached.isNotEmpty()) {
++            Spacer(Modifier.height(16.dp))
++            Text(
++                text = "OBJECTIFS ATTEINTS",
++                color = KalynoAmberDeep,
++                fontSize = 11.sp,
++                fontWeight = FontWeight.ExtraBold,
++                letterSpacing = 1.sp
++            )
++            Spacer(Modifier.height(10.dp))
++            reached.forEachIndexed { index, item ->
++                Row(verticalAlignment = Alignment.CenterVertically) {
++                    Box(
++                        modifier = Modifier
++                            .size(26.dp)
++                            .clip(CircleShape)
++                            .background(KalynoYellow),
++                        contentAlignment = Alignment.Center
++                    ) {
++                        KalynoSvgIcon(name = "check", size = 14.dp, tint = Color.White)
++                    }
++                    Spacer(Modifier.width(10.dp))
++                    Column(modifier = Modifier.weight(1f)) {
++                        Text(
++                            text = item.def.title,
++                            color = KalynoText,
++                            fontSize = 14.sp,
++                            fontWeight = FontWeight.ExtraBold
++                        )
++                        Text(
++                            text = reachedLabel(item.reachedAt),
++                            color = KalynoMuted,
++                            fontSize = 12.sp
++                        )
++                    }
++                    Text(
++                        text = "${item.def.targetValue} j",
++                        color = KalynoAmberDeep,
++                        fontSize = 12.sp,
++                        fontWeight = FontWeight.ExtraBold
++                    )
++                }
++                if (index < reached.size - 1) Spacer(Modifier.height(10.dp))
++            }
++        }
+     }
+ }
+ 
+diff --git a/app/src/main/java/ci/kalyno/app/ui/profile/ProfileScreen.kt b/app/src/main/java/ci/kalyno/app/ui/profile/ProfileScreen.kt
+index 4f5ca29..5112c49 100644
+--- a/app/src/main/java/ci/kalyno/app/ui/profile/ProfileScreen.kt
++++ b/app/src/main/java/ci/kalyno/app/ui/profile/ProfileScreen.kt
+@@ -1,5 +1,6 @@
+ package ci.kalyno.app.ui.profile
+ 
++import ci.kalyno.app.data.badges.StreakGoalState
+ import androidx.compose.foundation.LocalIndication
+ import androidx.compose.foundation.background
+ import androidx.compose.foundation.border
+@@ -115,7 +116,8 @@ fun ProfileScreen(
+     onOpenPrivacy: () -> Unit,
+     retentionScore: Float? = null,
+     masteredCount: Int? = null,
+-    onOpenProgress: (() -> Unit)? = null
++    onOpenProgress: (() -> Unit)? = null,
++    streakGoals: List<StreakGoalState> = emptyList()
+ ) {
+     var showLogoutDialog by rememberSaveable { mutableStateOf(false) }
+     var showNicknameDialog by rememberSaveable { mutableStateOf(false) }
+@@ -147,7 +149,7 @@ fun ProfileScreen(
+             retentionScore = retentionScore,
+             modifier = Modifier.entrance(index = 1)
+         )
+-        StreakMilestoneCard(streak = streak, modifier = Modifier.entrance(index = 2))
++        StreakMilestoneCard(streak = streak, goals = streakGoals, modifier = Modifier.entrance(index = 2))
+         if (onOpenProgress != null) {
+             ProgressLinkCard(onClick = onOpenProgress, modifier = Modifier.entrance(index = 3))
+         }

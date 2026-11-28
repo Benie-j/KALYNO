@@ -1,5 +1,10 @@
 package ci.kalyno.app.ui.main
 
+import java.time.format.DateTimeFormatter
+import java.time.ZoneId
+import java.time.Instant
+import ci.kalyno.app.ui.components.entrance
+import ci.kalyno.app.data.badges.StreakGoalState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -52,6 +57,13 @@ import java.time.LocalDate
 import java.time.format.TextStyle
 import java.time.temporal.ChronoUnit
 import java.util.Locale
+
+/** « Objectif atteint · 12 nov. 2026 » ; sans date enregistrée : « Objectif atteint ». */
+internal fun reachedLabel(at: Long?): String {
+    if (at == null) return "Objectif atteint"
+    val date = Instant.ofEpochMilli(at).atZone(ZoneId.systemDefault()).toLocalDate()
+    return "Objectif atteint · " + date.format(DateTimeFormatter.ofPattern("d MMM yyyy", Locale.FRENCH))
+}
 
 /** Un jour de la semaine glissante : actif = couvert par la série en cours. */
 internal data class WeekDay(val label: String, val active: Boolean, val today: Boolean)
@@ -126,12 +138,16 @@ private fun WeekStrip(days: List<WeekDay>, modifier: Modifier = Modifier) {
 internal fun StreakDetailsSheet(
     streak: Int,
     doneToday: Boolean,
+    goals: List<StreakGoalState>,
     onDismiss: () -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
     val week = remember(streak, doneToday) { weekOf(streak, doneToday) }
-    val goal = StreakGoals.next(streak)
+    // Mêmes états que la carte du Profil ; à défaut de données enregistrées, déduits de la série
+    val states = remember(streak, goals) { goals.ifEmpty { StreakGoals.states(streak) } }
+    val nextGoal = StreakGoals.next(states)
+    val reachedCount = states.count { it.reached }
     val shown = rememberCountUp(streak, durationMillis = 900)
     val flame = rememberPulse(min = 1f, max = 1.14f, durationMillis = 800)
 
@@ -214,60 +230,45 @@ internal fun StreakDetailsSheet(
                 WeekStrip(days = week)
             }
 
-            Spacer(Modifier.height(14.dp))
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(KalynoAmberSoft)
-                    .padding(16.dp)
+            Spacer(Modifier.height(20.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(42.dp)
-                            .clip(CircleShape)
-                            .background(Color.White),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        KalynoSvgIcon(name = "trophy", size = 22.dp, tint = KalynoAmberDeep)
-                    }
-                    Spacer(Modifier.width(12.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = if (goal != null) "PROCHAIN BADGE" else "TOUS LES BADGES DE SÉRIE",
-                            color = KalynoAmberDeep,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            letterSpacing = 1.2.sp
-                        )
-                        Text(
-                            text = goal?.title ?: "Série de légende",
-                            color = KalynoText,
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.ExtraBold
-                        )
-                    }
-                }
-                Spacer(Modifier.height(14.dp))
-                KalynoProgressBar(
-                    progress = StreakGoals.progress(streak),
-                    height = 8.dp,
-                    color = KalynoYellow,
-                    track = Color.White
-                )
-                Spacer(Modifier.height(8.dp))
-                val left = StreakGoals.daysLeft(streak)
                 Text(
-                    text = if (goal != null) {
-                        "Encore $left ${if (left == 1) "jour" else "jours"} pour le débloquer."
-                    } else {
-                        "Tu les as tous débloqués. Chaque jour de plus est une victoire."
-                    },
+                    text = "TES OBJECTIFS",
                     color = KalynoMuted,
-                    fontSize = 13.sp,
-                    lineHeight = 18.sp
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    letterSpacing = 1.2.sp
                 )
+                Text(
+                    text = "$reachedCount / ${states.size} atteints",
+                    color = KalynoAmberDeep,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.ExtraBold
+                )
+            }
+            if (nextGoal == null) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = "Tous les objectifs sont atteints. Chaque jour de plus est une victoire.",
+                    color = KalynoText,
+                    fontSize = 13.sp,
+                    lineHeight = 18.sp,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+            Spacer(Modifier.height(10.dp))
+            states.forEachIndexed { index, goal ->
+                GoalRow(
+                    goal = goal,
+                    streak = streak,
+                    isNext = nextGoal != null && goal.def.id == nextGoal.id,
+                    modifier = Modifier.entrance(index)
+                )
+                if (index < states.size - 1) Spacer(Modifier.height(10.dp))
             }
 
             Spacer(Modifier.height(20.dp))
@@ -278,6 +279,91 @@ internal fun StreakDetailsSheet(
                         if (!sheetState.isVisible) onDismiss()
                     }
                 }
+            )
+        }
+    }
+}
+
+/**
+ * Une ligne d'objectif : atteint (coche + date), en cours (progression + jours restants) ou à venir.
+ */
+@Composable
+private fun GoalRow(
+    goal: StreakGoalState,
+    streak: Int,
+    isNext: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val def = goal.def
+    val shape = RoundedCornerShape(18.dp)
+    val left = StreakGoals.daysLeft(streak, def)
+    val borderColor = when {
+        goal.reached -> KalynoYellow.copy(alpha = 0.5f)
+        isNext -> KalynoYellow
+        else -> KalynoOutline
+    }
+
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(if (goal.reached) KalynoAmberSoft else Color.White)
+            .border(if (isNext) 2.dp else 1.dp, borderColor, shape)
+            .padding(14.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .size(42.dp)
+                    .clip(CircleShape)
+                    .background(if (goal.reached) KalynoYellow else KalynoBackground)
+                    .then(if (goal.reached) Modifier else Modifier.border(1.dp, KalynoOutline, CircleShape)),
+                contentAlignment = Alignment.Center
+            ) {
+                if (goal.reached) {
+                    KalynoSvgIcon(name = "check", size = 22.dp, tint = Color.White)
+                } else {
+                    Text(
+                        text = def.targetValue.toString(),
+                        color = if (isNext) KalynoAmberDeep else KalynoMuted,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.ExtraBold
+                    )
+                }
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = def.title,
+                    color = KalynoText,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.ExtraBold
+                )
+                Text(
+                    text = when {
+                        goal.reached -> reachedLabel(goal.reachedAt)
+                        isNext -> "Encore $left ${if (left == 1) "jour" else "jours"}"
+                        else -> "À ${def.targetValue} jours d'affilée"
+                    },
+                    color = if (goal.reached) KalynoAmberDeep else KalynoMuted,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+            Text(
+                text = "${def.targetValue} j",
+                color = if (goal.reached) KalynoAmberDeep else KalynoMuted,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.ExtraBold
+            )
+        }
+        if (isNext) {
+            Spacer(Modifier.height(12.dp))
+            KalynoProgressBar(
+                progress = StreakGoals.progress(streak, def),
+                height = 7.dp,
+                color = KalynoYellow,
+                track = KalynoAmberSoft
             )
         }
     }
