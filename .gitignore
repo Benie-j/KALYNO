@@ -9,3 +9,4 @@ local.properties
 *.orig
 
 app/google-services.json
+.kalyno-patch-backup/

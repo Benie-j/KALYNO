@@ -73,11 +73,11 @@ import ci.kalyno.app.ui.theme.KalynoText
 import ci.kalyno.app.ui.theme.KalynoYellow
 
 /**
- * Les quatre modules de la grille, dans l'ordre d'affichage. Sur téléphone, Reprendre et Révisions
- * occupent toute la largeur (contenu riche) ; Progression et Citation se partagent une ligne.
+ * Les trois modules de la grille, dans l'ordre d'affichage. Sur téléphone, Révisions occupe toute
+ * la largeur (contenu riche) ; Progression et Citation se partagent une ligne. La reprise de la
+ * dernière leçon est portée par la carte « Ta session du jour » (SessionHero).
  */
 private enum class HomeModule(val fullWidth: Boolean) {
-    RESUME(true),
     URGENT(true),
     PROGRESS(false),
     QUOTE(false)
@@ -193,7 +193,6 @@ fun AccueilScreen(
                 state.error?.let { KalynoErrorCard(message = it, onRetry = onRetry) }
 
                 val modules = buildList {
-                    if (state.lastLesson != null) add(HomeModule.RESUME)
                     add(HomeModule.URGENT)
                     add(HomeModule.PROGRESS)
                     if (state.dailyQuote != null || !state.quoteReady) add(HomeModule.QUOTE)
@@ -227,13 +226,6 @@ fun AccueilScreen(
                                     onReview = onReviewUrgent,
                                     modifier = slot
                                 )
-                                HomeModule.RESUME -> state.lastLesson?.let { lesson ->
-                                    ResumeModule(
-                                        lesson = lesson,
-                                        onClick = { onResumeLastLesson(lesson) },
-                                        modifier = slot
-                                    )
-                                }
                                 HomeModule.PROGRESS -> ProgressModule(
                                     masteredCount = state.masteredCount,
                                     retentionScore = state.retentionScore,
@@ -447,7 +439,8 @@ private fun SessionHero(
         }
         lastLesson != null -> {
             title = "Tout est à jour"
-            subtitle = "Enchaîne avec « ${lastLesson.chapterTitle} »."
+            subtitle = "Enchaîne avec « ${lastLesson.chapterTitle} »" +
+                (lastLesson.sessionTitle?.let { " · $it" } ?: "") + "."
             cta = "Reprendre l'aventure"
             action = { onResume(lastLesson) }
         }
