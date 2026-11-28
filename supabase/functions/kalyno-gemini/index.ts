@@ -4,7 +4,7 @@
 // SUPABASE_URL et SUPABASE_ANON_KEY sont fournis automatiquement par Supabase.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 
-const DEFAULT_MODEL = "gemini-3.6-flash";
+const DEFAULT_MODEL = "gemini-3.1-flash-lite";
 const DEFAULT_GROQ_MODEL = "openai/gpt-oss-120b"; // llama-3.3-70b-versatile est arrêté chez Groq depuis août 2026
 const MAX_BODY_BYTES = 24_000;
 const MAX_FIELD = 2_000;
@@ -96,7 +96,7 @@ const groqConfigured = (): boolean => !!Deno.env.get("GROQ_API_KEY");
 async function callGemini(req: AiRequest, timeoutMs: number): Promise<string> {
   const key = Deno.env.get("GEMINI_API_KEY");
   if (!key) throw new KalynoError("not_configured", false, 500);
-  const model = (Deno.env.get("GEMINI_MODEL") ?? DEFAULT_MODEL).trim() || DEFAULT_MODEL;
+  const model = DEFAULT_MODEL;
   const payload = {
     systemInstruction: { parts: [{ text: req.system }] },
     contents: req.turns.map((t) => ({ role: t.role, parts: [{ text: t.text }] })),
