@@ -262,16 +262,40 @@ class DashboardRepository(context: Context) {
             masteredNotions = masteredNotions,
             masteredCards = masteredCards,
             retentionScore = retentionScore,
-            lastLesson = prefs.lastLessonChapterTitle?.let { chapterTitle ->
-                LastLessonUi(
-                    subjectName = prefs.lastLessonSubjectName.orEmpty(),
-                    chapterTitle = chapterTitle,
-                    progress = prefs.lastLessonProgress
-                )
-            },
+            lastLesson = lastLessonOf(studentId, subjectNames, introduced),
             freeItems = freeItems,
             freeTotal = freeEntities.size,
             freeNew = freeEntities.count { it.id !in introduced }
+        )
+    }
+
+    /**
+     * Leçon à reprendre, calculée en direct : la dernière ouverte par cet élève, retrouvée dans Room
+     * (titre, matière, cartes) puis comparée à ses cartes déjà introduites. Null si la leçon n'existe
+     * plus (dépubliée), n'est pas de sa classe, ou si l'élève n'en a encore ouvert aucune.
+     * Les élèves qui avaient déjà ouvert une leçon avant cette version sont retrouvés par son titre.
+     */
+    private suspend fun lastLessonOf(
+        studentId: String,
+        subjectNames: Map<String, String>,
+        introduced: Set<String>
+    ): LastLessonUi? {
+        val ref = prefs.lastLessonId(studentId)?.let { dao.lessonRef(it) }
+            ?: prefs.lastLessonChapterTitle?.let { title ->
+                dao.lessonRefsByTitle(title).firstOrNull { it.subjectId in subjectNames }
+            }
+            ?: return null
+        val subjectName = subjectNames[ref.subjectId] ?: return null
+        val cardIds = dao.flashcardIdsOfLesson(ref.id)
+        val discovered = cardIds.count { it in introduced }
+        return LastLessonUi(
+            lessonId = ref.id,
+            subjectName = subjectName,
+            chapterTitle = ref.title,
+            progress = if (cardIds.isEmpty()) 0f else (discovered.toFloat() / cardIds.size).coerceIn(0f, 1f),
+            discoveredCards = discovered,
+            totalCards = cardIds.size,
+            completed = ref.id in lessonProgress.completedIds(studentId)
         )
     }
 

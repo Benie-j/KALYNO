@@ -18,8 +18,20 @@ data class SubjectActivity(
     val lastIntroducedAt: Long
 )
 
+/** Une leçon publiée, telle qu'elle est rangée dans Room (sert à « Reprendre l'aventure »). */
+data class LessonRef(val id: String, val subjectId: String, val title: String)
+
 @Dao
 interface DashboardDao {
+
+    @Query("SELECT id, subjectId, title FROM catalog_lessons WHERE id = :lessonId LIMIT 1")
+    suspend fun lessonRef(lessonId: String): LessonRef?
+
+    @Query("SELECT id, subjectId, title FROM catalog_lessons WHERE title = :title")
+    suspend fun lessonRefsByTitle(title: String): List<LessonRef>
+
+    @Query("SELECT id FROM flashcards WHERE lessonId = :lessonId")
+    suspend fun flashcardIdsOfLesson(lessonId: String): List<String>
 
     // @Upsert (et non REPLACE) : REPLACE supprimerait en cascade la progression SRS des cartes.
     @Upsert

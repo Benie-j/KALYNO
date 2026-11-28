@@ -44,6 +44,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import ci.kalyno.app.ui.dojo.DojoScreen
 import ci.kalyno.app.ui.exercises.GeneratedExercisesScreen
 import ci.kalyno.app.ui.faq.FaqScreen
+import ci.kalyno.app.ui.explorer.ExplorerDeepLink
 import ci.kalyno.app.ui.explorer.ExplorerScreen
 import ci.kalyno.app.ui.profile.ProfileLinks
 import ci.kalyno.app.ui.profile.ProfileScreen
@@ -179,7 +180,11 @@ fun MainScreen(
                         onStartMission = viewModel::startMission,
                         onReviewUrgent = viewModel::startUrgentReview,
                         onRetry = viewModel::retry,
-                        onResumeLastLesson = { tab = 3 }, // ouvre l'onglet Explorer
+                        onResumeLastLesson = { lesson ->
+                            // Ouvre l'onglet Explorer directement sur la leçon à reprendre
+                            ExplorerDeepLink.openLessonId.value = lesson.lessonId
+                            tab = 3
+                        },
                         nickname = nickname,
                         onOpenExplorer = { tab = 3 },
                         onShuffleQuote = viewModel::shuffleQuote,

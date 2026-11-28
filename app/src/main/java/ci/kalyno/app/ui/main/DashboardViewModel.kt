@@ -28,6 +28,7 @@ import ci.kalyno.app.data.dashboard.KalynoDatabase
 import ci.kalyno.app.data.dashboard.QuoteFavoriteEntity
 import ci.kalyno.app.data.dashboard.favoriteKey
 import ci.kalyno.app.data.dashboard.ExamSchedule
+import ci.kalyno.app.data.dashboard.HomeMessages
 import ci.kalyno.app.data.srs.SrsEngine
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -41,9 +42,12 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     private val studentId = StudentId.get(app)
     private val exams = ExamSchedule(app)
     private val quotes = DailyQuotes(app)
+    private val homeMessages = HomeMessages(app)
     private val favoritesDao = KalynoDatabase.get(app).quoteFavoriteDao()
 
-    private val _state = MutableStateFlow(DashboardUiState(streak = streakStore.current()))
+    private val _state = MutableStateFlow(
+        DashboardUiState(streak = streakStore.current(), streakDoneToday = streakStore.doneToday())
+    )
     val state: StateFlow<DashboardUiState> = _state.asStateFlow()
 
     init {
@@ -74,18 +78,21 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                 examDaysLeft = cachedExamDays(levelId),
                 examLabel = exams.label(levelId),
                 dailyQuote = cachedQuote,
+                heroMessage = homeMessages.today(levelId),
                 shuffledQuote = null,
                 quoteWeek = quotes.week(levelId)
             )
         }
         refresh(levelId)
         refreshQuote(levelId)
+        refreshHomeMessage(levelId)
     }
 
     fun retry() {
         loadedLevel?.let {
             refresh(it)
             refreshQuote(it)
+            refreshHomeMessage(it)
         }
     }
 
@@ -101,10 +108,24 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    private fun refreshHomeMessage(levelId: String) {
+        viewModelScope.launch {
+            val message = withContext(Dispatchers.IO) { homeMessages.refresh(levelId) }
+            _state.update { it.copy(heroMessage = message) }
+        }
+    }
+
     private fun refresh(levelId: String) {
         loadJob?.cancel()
         loadJob = viewModelScope.launch {
-            _state.update { it.copy(loading = true, error = null, streak = streakStore.current()) }
+            _state.update {
+                it.copy(
+                    loading = true,
+                    error = null,
+                    streak = streakStore.current(),
+                    streakDoneToday = streakStore.doneToday()
+                )
+            }
             try {
                 val snapshot = repository.load(levelId, studentId)
                 _state.update {
@@ -112,6 +133,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                         loading = false,
                         error = null,
                         streak = streakStore.current(),
+                        streakDoneToday = streakStore.doneToday(),
                         mission = snapshot.mission,
                         missionStatus = snapshot.missionStatus,
                         urgentTotal = snapshot.urgentTotal,

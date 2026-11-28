@@ -27,7 +27,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import java.time.LocalDate
 import java.time.LocalTime
+import java.time.format.DateTimeFormatter
+import java.time.format.TextStyle
+import java.time.temporal.ChronoUnit
+import java.util.Locale
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -40,6 +46,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import ci.kalyno.app.data.StreakLogic
+import ci.kalyno.app.data.badges.BadgeCatalog
+import ci.kalyno.app.data.badges.BadgeCategory
+import ci.kalyno.app.data.badges.BadgeDef
 import ci.kalyno.app.data.dashboard.DailyQuote
 import ci.kalyno.app.data.dashboard.DashboardUiState
 import ci.kalyno.app.data.dashboard.LastLessonUi
@@ -62,8 +72,39 @@ import ci.kalyno.app.ui.theme.KalynoTealDark
 import ci.kalyno.app.ui.theme.KalynoText
 import ci.kalyno.app.ui.theme.KalynoYellow
 
-/** Les quatre modules stratégiques de la grille, dans l'ordre d'affichage. */
-private enum class HomeModule { QUOTE, URGENT, RESUME, PROGRESS }
+/**
+ * Les quatre modules de la grille, dans l'ordre d'affichage. Sur téléphone, Reprendre et Révisions
+ * occupent toute la largeur (contenu riche) ; Progression et Citation se partagent une ligne.
+ */
+private enum class HomeModule(val fullWidth: Boolean) {
+    RESUME(true),
+    URGENT(true),
+    PROGRESS(false),
+    QUOTE(false)
+}
+
+/** Répartit les modules en lignes : [columns] colonnes, sauf les modules pleine largeur sur téléphone. */
+private fun homeRows(modules: List<HomeModule>, columns: Int, wide: Boolean): List<List<HomeModule>> {
+    val rows = mutableListOf<List<HomeModule>>()
+    val pending = mutableListOf<HomeModule>()
+    fun flush() {
+        if (pending.isNotEmpty()) {
+            rows.add(pending.toList())
+            pending.clear()
+        }
+    }
+    modules.forEach { module ->
+        if (module.fullWidth && !wide) {
+            flush()
+            rows.add(listOf(module))
+        } else {
+            pending.add(module)
+            if (pending.size == columns) flush()
+        }
+    }
+    flush()
+    return rows
+}
 
 /**
  * Écran d'Accueil (Command Center).
@@ -71,7 +112,9 @@ private enum class HomeModule { QUOTE, URGENT, RESUME, PROGRESS }
  * - Adaptatif : 2 modules par ligne, 1 seule colonne sous 340 dp, contenu centré et plafonné
  *   à 840 dp sur tablette / pliable pour ne jamais s'étirer.
  * - Aucune mention de classe ou de niveau (rôle du Profil), aucun emoji, aucune donnée en dur :
- *   tout vient de [DashboardUiState].
+ *   tout vient de [DashboardUiState] (série, révisions, examen, citation, message du coach publiés
+ *   par l'admin) ou du catalogue de badges (paliers de série). Seules les phrases du coach ont un
+ *   repli écrit dans l'appli, utilisé quand l'admin n'en a publié aucune.
  *
  * [onStartMission] est conservé pour ne pas toucher à MainScreen ; l'Accueil ne l'utilise plus.
  */
@@ -141,17 +184,23 @@ fun AccueilScreen(
                     }
                 }
 
+                if (state.examDaysLeft == null) {
+                    state.heroMessage?.takeIf { it.isNotBlank() }?.let {
+                        CoachNote(text = it, modifier = Modifier.entrance(2))
+                    }
+                }
+
                 state.error?.let { KalynoErrorCard(message = it, onRetry = onRetry) }
 
                 val modules = buildList {
-                    if (state.dailyQuote != null || !state.quoteReady) add(HomeModule.QUOTE)
-                    add(HomeModule.URGENT)
                     if (state.lastLesson != null) add(HomeModule.RESUME)
+                    add(HomeModule.URGENT)
                     add(HomeModule.PROGRESS)
+                    if (state.dailyQuote != null || !state.quoteReady) add(HomeModule.QUOTE)
                 }
 
-                // Grille maison : lignes de [columns] modules, de même hauteur dans une ligne.
-                modules.chunked(columns).forEach { rowModules ->
+                // Grille maison : modules pleine largeur ou par paires, de même hauteur dans une ligne.
+                homeRows(modules, columns, wide).forEach { rowModules ->
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -189,7 +238,6 @@ fun AccueilScreen(
                                     masteredCount = state.masteredCount,
                                     retentionScore = state.retentionScore,
                                     masteredNotions = state.masteredNotions,
-                                    urgentTopics = state.urgentTopics,
                                     loading = state.loading,
                                     onOpenDetail = onOpenProgress,
                                     modifier = slot
@@ -203,7 +251,7 @@ fun AccueilScreen(
     }
 }
 
-// ---------- 1. En-tête : salutation + série ----------
+// ---------- 1. En-tête : avatar + date + salutation + série ----------
 
 private fun greeting(): String {
     val hour = LocalTime.now().hour
@@ -221,26 +269,53 @@ private fun HomeTopBar(streak: Int, nickname: String, modifier: Modifier = Modif
     // La flamme respire quand une série est en cours ; immobile sinon
     val pulse = rememberPulse(min = 1f, max = 1.16f, durationMillis = 800)
     val flameScale = if (streak > 0) pulse else 1f
+    // Date du jour, calculée sur le téléphone (jamais écrite en dur)
+    val dateLabel = remember {
+        LocalDate.now()
+            .format(DateTimeFormatter.ofPattern("EEEE d MMMM", Locale.FRENCH))
+            .uppercase(Locale.FRENCH)
+    }
+    val initial = nickname.trim().take(1).uppercase()
 
     Row(
         modifier = modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
+        verticalAlignment = Alignment.CenterVertically
     ) {
+        Box(
+            modifier = Modifier
+                .size(46.dp)
+                .clip(CircleShape)
+                .background(KalynoBlue),
+            contentAlignment = Alignment.Center
+        ) {
+            if (initial.isEmpty()) {
+                KalynoSvgIcon(name = "user-round", size = 22.dp, tint = Color.White)
+            } else {
+                Text(
+                    text = initial,
+                    color = Color.White,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.ExtraBold
+                )
+            }
+        }
+        Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = "KALYNO",
-                color = KalynoBlue,
-                fontSize = 12.sp,
+                text = dateLabel,
+                color = KalynoMuted,
+                fontSize = 11.sp,
                 fontWeight = FontWeight.ExtraBold,
-                letterSpacing = 2.sp
+                letterSpacing = 1.2.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
             Spacer(Modifier.height(2.dp))
             Text(
                 text = if (nickname.isBlank()) greeting() else "${greeting()}, $nickname",
                 color = KalynoText,
-                fontSize = 24.sp,
-                lineHeight = 28.sp,
+                fontSize = 22.sp,
+                lineHeight = 26.sp,
                 fontWeight = FontWeight.ExtraBold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -276,8 +351,76 @@ private fun HomeTopBar(streak: Int, nickname: String, modifier: Modifier = Modif
 
 // ---------- 2. Hero : la session du jour (le déclencheur d'habitude) ----------
 
-/** Paliers de série qui donnent un but proche à atteindre. */
-private val STREAK_MILESTONES = listOf(3, 7, 14, 30, 60, 100, 200, 365)
+/** Paliers de série : ceux des badges de série du catalogue (une seule source de vérité). */
+private val streakGoals: List<BadgeDef> by lazy {
+    BadgeCatalog.all
+        .filter { it.category == BadgeCategory.STREAK }
+        .sortedBy { it.targetValue }
+}
+
+/** Un jour de la semaine glissante : actif = couvert par la série en cours. */
+private data class WeekDay(val label: String, val active: Boolean, val today: Boolean)
+
+/**
+ * Les 7 derniers jours (aujourd'hui à droite), déduits de la série : une série de N jours couvre
+ * les N derniers jours jusqu'à aujourd'hui si la session du jour est faite, jusqu'à hier sinon.
+ * Même calendrier que [StreakLogic] (numéro de jour UTC), donc jamais de décalage avec la série.
+ */
+private fun weekOf(streak: Int, doneToday: Boolean): List<WeekDay> {
+    val today = LocalDate.ofEpochDay(StreakLogic.dayOf(System.currentTimeMillis()))
+    val lastActive = if (doneToday) today else today.minusDays(1)
+    return (6 downTo 0).map { back ->
+        val day = today.minusDays(back.toLong())
+        val fromLast = ChronoUnit.DAYS.between(day, lastActive)
+        WeekDay(
+            label = day.dayOfWeek.getDisplayName(TextStyle.NARROW, Locale.FRENCH).uppercase(Locale.FRENCH),
+            active = streak > 0 && fromLast >= 0 && fromLast < streak,
+            today = back == 0
+        )
+    }
+}
+
+@Composable
+private fun WeekStrip(days: List<WeekDay>, modifier: Modifier = Modifier) {
+    // Le cercle d'aujourd'hui palpite tant que la session du jour n'est pas faite
+    val pulse = rememberPulse(min = 1f, max = 1.12f, durationMillis = 900)
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        days.forEach { day ->
+            val waiting = day.today && !day.active
+            val dotScale = if (waiting) pulse else 1f
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = day.label,
+                    color = Color.White.copy(alpha = if (day.today) 1f else 0.7f),
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.ExtraBold
+                )
+                Spacer(Modifier.height(6.dp))
+                Box(
+                    modifier = Modifier
+                        .graphicsLayer {
+                            scaleX = dotScale
+                            scaleY = dotScale
+                        }
+                        .size(34.dp)
+                        .clip(CircleShape)
+                        .background(if (day.active) KalynoYellow else Color.White.copy(alpha = 0.14f))
+                        .then(if (waiting) Modifier.border(2.dp, Color.White, CircleShape) else Modifier),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (day.active) {
+                        KalynoSvgIcon(name = "flame", size = 18.dp, tint = Color.White)
+                    } else if (waiting) {
+                        KalynoSvgIcon(name = "flame", size = 16.dp, tint = Color.White.copy(alpha = 0.8f))
+                    }
+                }
+            }
+        }
+    }
+}
 
 @Composable
 private fun SessionHero(
@@ -317,7 +460,9 @@ private fun SessionHero(
     }
 
     val streak = state.streak
-    val nextMilestone = STREAK_MILESTONES.firstOrNull { it > streak }
+    val week = remember(streak, state.streakDoneToday) { weekOf(streak, state.streakDoneToday) }
+    val goal = streakGoals.firstOrNull { it.targetValue > streak }
+    val previousTarget = streakGoals.lastOrNull { it.targetValue <= streak }?.targetValue ?: 0
     val shape = RoundedCornerShape(28.dp)
 
     Box(
@@ -377,32 +522,46 @@ private fun SessionHero(
                 content = KalynoBlue
             )
 
-            // Série : un objectif proche donne envie de ne pas la casser
-            Spacer(Modifier.height(18.dp))
-            val streakLine = when {
-                streak <= 0 -> "Lance ta série aujourd'hui : un jour, puis un autre."
-                nextMilestone == null -> "$streak jours d'affilée : tu es une légende."
-                else -> {
-                    val left = (nextMilestone ?: streak) - streak
-                    val unit = if (left == 1) "jour" else "jours"
-                    "Série de $streak : encore $left $unit pour atteindre $nextMilestone."
-                }
+            // Série : la semaine en un coup d'œil, puis un objectif proche pour ne pas la casser
+            Spacer(Modifier.height(20.dp))
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(1.dp)
+                    .background(Color.White.copy(alpha = 0.18f))
+            )
+            Spacer(Modifier.height(16.dp))
+            WeekStrip(days = week)
+            Spacer(Modifier.height(14.dp))
+            val statusLine = when {
+                streak <= 0 -> "Termine une session aujourd'hui pour lancer ta série."
+                state.streakDoneToday -> "Série de $streak validée aujourd'hui."
+                else -> "Une session aujourd'hui et ta série passe à ${streak + 1}."
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 KalynoSvgIcon(name = "flame", size = 16.dp, tint = KalynoYellow)
                 Spacer(Modifier.width(8.dp))
                 Text(
-                    text = streakLine,
+                    text = statusLine,
                     color = Color.White,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold,
                     lineHeight = 18.sp
                 )
             }
-            if (nextMilestone != null && streak > 0) {
+            if (goal != null && streak > 0) {
+                val left = goal.targetValue - streak
+                val unit = if (left == 1) "jour" else "jours"
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = "Encore $left $unit pour débloquer « ${goal.title} ».",
+                    color = Color.White.copy(alpha = 0.85f),
+                    fontSize = 12.sp,
+                    lineHeight = 17.sp
+                )
                 Spacer(Modifier.height(8.dp))
                 KalynoProgressBar(
-                    progress = streak.toFloat() / nextMilestone.toFloat(),
+                    progress = (streak - previousTarget).toFloat() / (goal.targetValue - previousTarget).toFloat(),
                     height = 6.dp,
                     color = KalynoYellow,
                     track = Color.White.copy(alpha = 0.22f)
@@ -471,10 +630,44 @@ private fun ExamStrip(
     }
 }
 
+/** Message du coach publié par l'admin, affiché seul quand aucune date d'examen n'est publiée. */
+@Composable
+private fun CoachNote(text: String, modifier: Modifier = Modifier) {
+    val shape = RoundedCornerShape(24.dp)
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(Color.White)
+            .border(1.dp, KalynoOutline, shape)
+            .padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .clip(RoundedCornerShape(14.dp))
+                .background(KalynoBlueSoft),
+            contentAlignment = Alignment.Center
+        ) {
+            KalynoSvgIcon(name = "sparkles", size = 20.dp, tint = KalynoBlue)
+        }
+        Spacer(Modifier.width(12.dp))
+        Text(
+            text = text,
+            color = KalynoText,
+            fontSize = 14.sp,
+            lineHeight = 19.sp,
+            fontWeight = FontWeight.Medium,
+            modifier = Modifier.weight(1f)
+        )
+    }
+}
+
 /**
- * Message du coach : priorité au texte publié par l'admin ([DashboardUiState.heroMessage]).
- * À défaut, une phrase générée côté client selon l'activité de l'élève — pas une donnée
- * éducative, juste une tournure motivante en nouchi léger, jamais la même à chaque relance
+ * Message du coach : priorité au texte publié par l'admin ([DashboardUiState.heroMessage], table
+ * `home_messages`). À défaut, une phrase générée côté client selon l'activité de l'élève — pas une
+ * donnée éducative, juste une tournure motivante en nouchi léger, jamais la même à chaque relance
  * d'écran pour un même état (choisie sur le jour courant).
  */
 private fun coachLine(state: DashboardUiState): String? {

@@ -377,6 +377,7 @@ class ExplorerViewModel(app: Application) : AndroidViewModel(app) {
             progress = chapter.progress
         )
         prefs.markLessonOpened(chapter.id)
+        prefs.saveLastLessonId(studentId, chapter.id)
         _state.update { it.copy(openLessonId = chapter.id, openSessionId = null) }
     }
 

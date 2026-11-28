@@ -124,6 +124,11 @@ class LessonProgressRepository private constructor(context: Context) {
         CloudSyncScheduler.request(cloud, studentId)
     }
 
+    /** Ids des leçons que l'élève a validées avec « Terminer ». */
+    suspend fun completedIds(studentId: String): Set<String> = withContext(Dispatchers.IO) {
+        dao.completedLessonIds(studentId).toHashSet()
+    }
+
     /** Ids des cartes que le Dojo a le droit de proposer à cet élève. */
     suspend fun unlockedCardIds(studentId: String): Set<String> = withContext(Dispatchers.IO) {
         dao.relinkCards() // répare d'abord les liens carte -> leçon manquants

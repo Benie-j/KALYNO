@@ -124,6 +124,8 @@ data class DashboardUiState(
     val error: String? = null,
     val nickname: String = "",
     val streak: Int = 0,
+    /** Vrai si l'élève a déjà terminé une session aujourd'hui (la série du jour est validée). */
+    val streakDoneToday: Boolean = false,
     val mission: MissionUi? = null,
     val missionStatus: MissionStatus = MissionStatus.EMPTY,
     val urgentTotal: Int = 0,
@@ -136,7 +138,7 @@ data class DashboardUiState(
     /** Jours avant l'examen publié par l'admin ; null tant qu'aucune date n'est publiée. */
     val examDaysLeft: Int? = null,
     val session: ReviewSession? = null,
-    /** Message de motivation publie par l'admin (banniere heros). Null = rien a afficher. */
+    /** Message du coach publié par l'admin (table `home_messages`), message du jour. Null = rien à afficher. */
     val heroMessage: String? = null,
     /** Nombre de notions (chapitres) maitrisees = masteredNotions.size. Null = pas encore calcule. */
     val masteredCount: Int? = null,
@@ -162,8 +164,16 @@ data class DashboardUiState(
     val favoriteQuotes: List<FavoriteQuote> = emptyList()
 )
 
+/**
+ * Dernière leçon ouverte par l'élève, calculée en direct à partir de Room (jamais mémorisée figée) :
+ * [discoveredCards] sur [totalCards] cartes déjà introduites, [completed] = validée avec « Terminer ».
+ */
 data class LastLessonUi(
+    val lessonId: String,
     val subjectName: String,
     val chapterTitle: String,
-    val progress: Float
+    val progress: Float,
+    val discoveredCards: Int = 0,
+    val totalCards: Int = 0,
+    val completed: Boolean = false
 )

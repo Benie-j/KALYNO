@@ -40,6 +40,13 @@ class AppPrefs(context: Context) {
             .apply()
     }
 
+    /** Identifiant de la dernière leçon ouverte par cet élève : l'Accueil en lit le titre et la progression en direct. */
+    fun saveLastLessonId(studentId: String, lessonId: String) {
+        prefs.edit().putString("$KEY_LAST_LESSON_ID.$studentId", lessonId).apply()
+    }
+
+    fun lastLessonId(studentId: String): String? = prefs.getString("$KEY_LAST_LESSON_ID.$studentId", null)
+
     val lastLessonSubjectName: String? get() = prefs.getString(KEY_LAST_LESSON_SUBJECT, null)
     val lastLessonSubjectEmoji: String? get() = prefs.getString(KEY_LAST_LESSON_EMOJI, null)
     val lastLessonChapterTitle: String? get() = prefs.getString(KEY_LAST_LESSON_CHAPTER, null)
@@ -79,6 +86,7 @@ class AppPrefs(context: Context) {
         const val KEY_LAST_LESSON_EMOJI = "last_lesson_emoji"
         const val KEY_LAST_LESSON_CHAPTER = "last_lesson_chapter"
         const val KEY_LAST_LESSON_PROGRESS = "last_lesson_progress"
+        const val KEY_LAST_LESSON_ID = "last_lesson_id"
         const val KEY_OPENED_LESSONS = "opened_lessons"
         const val KEY_FIRST_SHARE = "first_share_done"
     }

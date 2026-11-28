@@ -1,8 +1,6 @@
 package ci.kalyno.app.ui.main
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,7 +9,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -22,29 +19,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.rememberModalBottomSheetState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalHapticFeedback
-import ci.kalyno.app.data.dashboard.DailyQuote
 import ci.kalyno.app.data.dashboard.LastLessonUi
-import ci.kalyno.app.data.dashboard.MasteredCard
 import ci.kalyno.app.data.dashboard.MasteredNotion
 import ci.kalyno.app.data.dashboard.MasteryTier
 import ci.kalyno.app.data.dashboard.UrgentTopic
@@ -52,14 +33,12 @@ import ci.kalyno.app.ui.components.KalynoCard
 import ci.kalyno.app.ui.components.KalynoPrimaryButton
 import ci.kalyno.app.ui.components.KalynoProgressBar
 import ci.kalyno.app.ui.components.KalynoRing
+import ci.kalyno.app.ui.components.ShimmerBlock
 import ci.kalyno.app.ui.components.rememberCountUp
 import ci.kalyno.app.ui.components.rememberPulse
-import ci.kalyno.app.ui.components.ShimmerBlock
 import ci.kalyno.app.ui.icons.KalynoSvgIcon
-import ci.kalyno.app.ui.progress.MasteredCardsSection
 import ci.kalyno.app.ui.theme.KalynoAmberDeep
 import ci.kalyno.app.ui.theme.KalynoAmberSoft
-import ci.kalyno.app.ui.theme.KalynoBackground
 import ci.kalyno.app.ui.theme.KalynoBlue
 import ci.kalyno.app.ui.theme.KalynoBlueSoft
 import ci.kalyno.app.ui.theme.KalynoCorrectSoft
@@ -115,7 +94,7 @@ internal fun SkeletonLines() {
     ShimmerBlock(Modifier.fillMaxWidth(0.55f).height(14.dp))
 }
 
-// ---------- Bloc 2 : alerte de révision (moteur FSRS, ouvre le Dojo) ----------
+// ---------- Carte Révisions : ce qui t'attend au Dojo, matière par matière ----------
 
 @Composable
 internal fun UrgentReviewModule(
@@ -127,11 +106,13 @@ internal fun UrgentReviewModule(
 ) {
     val urgent = total > 0
     val shownTotal = rememberCountUp(total, durationMillis = 900)
+    // Le contour respire doucement tant que des révisions attendent
+    val glow = rememberPulse(min = 0f, max = 1f, durationMillis = 1400)
     KalynoCard(
         modifier = modifier,
         onClick = if (urgent) onReview else null,
         background = if (urgent) KalynoRetrySoft else Color.White,
-        borderColor = if (urgent) KalynoRetry.copy(alpha = 0.45f) else KalynoOutline
+        borderColor = if (urgent) KalynoRetry.copy(alpha = 0.3f + 0.3f * glow) else KalynoOutline
     ) {
         ModuleHeader(
             icon = "brain",
@@ -145,62 +126,64 @@ internal fun UrgentReviewModule(
             loading && total == 0 -> SkeletonLines()
             !urgent -> {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    KalynoSvgIcon(name = "check-circle", size = 22.dp, tint = KalynoCorrectText)
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        text = "Tout est à jour",
-                        color = KalynoCorrectText,
-                        fontSize = 17.sp,
-                        fontWeight = FontWeight.ExtraBold
-                    )
-                }
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    text = "Aucune notion à réviser pour l'instant.",
-                    color = KalynoMuted,
-                    fontSize = 13.sp,
-                    lineHeight = 18.sp
-                )
-            }
-            else -> {
-                Text(
-                    text = shownTotal.toString(),
-                    color = KalynoRetryText,
-                    fontSize = 36.sp,
-                    fontWeight = FontWeight.ExtraBold
-                )
-                Text(
-                    text = if (total == 1) "notion à réviser" else "notions à réviser",
-                    color = KalynoRetryText,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                topics.take(2).forEach { topic ->
-                    Spacer(Modifier.height(6.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(KalynoCorrectSoft),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        KalynoSvgIcon(name = "check-circle", size = 22.dp, tint = KalynoCorrectText)
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = topic.label,
-                            color = KalynoText,
-                            fontSize = 12.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f)
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            text = topic.count.toString(),
-                            color = KalynoRetryText,
-                            fontSize = 12.sp,
+                            text = "Tout est à jour",
+                            color = KalynoCorrectText,
+                            fontSize = 17.sp,
                             fontWeight = FontWeight.ExtraBold
+                        )
+                        Spacer(Modifier.height(2.dp))
+                        Text(
+                            text = "Aucune notion à réviser pour l'instant.",
+                            color = KalynoMuted,
+                            fontSize = 13.sp,
+                            lineHeight = 18.sp
                         )
                     }
                 }
-                Spacer(Modifier.height(12.dp))
-                Spacer(Modifier.weight(1f))
+            }
+            else -> {
+                Row(verticalAlignment = Alignment.Bottom) {
+                    Text(
+                        text = shownTotal.toString(),
+                        color = KalynoRetryText,
+                        fontSize = 44.sp,
+                        lineHeight = 46.sp,
+                        fontWeight = FontWeight.ExtraBold
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Text(
+                        text = if (total == 1) "notion à réviser" else "notions à réviser",
+                        color = KalynoRetryText,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(bottom = 7.dp)
+                    )
+                }
+                if (topics.isNotEmpty()) {
+                    val biggest = topics.maxOf { it.count }.coerceAtLeast(1)
+                    Spacer(Modifier.height(12.dp))
+                    topics.forEachIndexed { index, topic ->
+                        if (index > 0) Spacer(Modifier.height(10.dp))
+                        TopicBar(topic = topic, biggest = biggest)
+                    }
+                }
+                Spacer(Modifier.height(16.dp))
                 KalynoPrimaryButton(
-                    label = "Réviser",
+                    label = "Réviser maintenant",
                     onClick = onReview,
-                    height = 44.dp,
+                    height = 48.dp,
                     container = KalynoRetry,
                     content = KalynoText
                 )
@@ -209,64 +192,126 @@ internal fun UrgentReviewModule(
     }
 }
 
-// ---------- Bloc 3 : reprendre la dernière leçon ----------
+/** Une matière en attente : libellé, nombre de notions, barre proportionnelle à la plus chargée. */
+@Composable
+private fun TopicBar(topic: UrgentTopic, biggest: Int) {
+    Column {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = topic.label,
+                color = KalynoText,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = topic.count.toString(),
+                color = KalynoRetryText,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.ExtraBold
+            )
+        }
+        Spacer(Modifier.height(4.dp))
+        KalynoProgressBar(
+            progress = topic.count.toFloat() / biggest.toFloat(),
+            height = 5.dp,
+            color = KalynoRetry,
+            track = Color.White
+        )
+    }
+}
+
+// ---------- Carte Reprendre : la leçon réellement ouverte en dernier, progression calculée en direct ----------
 
 @Composable
 internal fun ResumeModule(lesson: LastLessonUi, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val progress = lesson.progress.coerceIn(0f, 1f)
+    val shownPercent = rememberCountUp((progress * 100).toInt(), durationMillis = 1000)
+    val detail = when {
+        lesson.completed -> "Leçon terminée"
+        lesson.totalCards == 0 -> "Leçon à lire"
+        else -> "${lesson.discoveredCards} / ${lesson.totalCards} questions découvertes"
+    }
+    val cta = when {
+        lesson.completed -> "Revoir la leçon"
+        progress > 0f -> "Reprendre"
+        else -> "Commencer"
+    }
     KalynoCard(modifier = modifier, onClick = onClick) {
         ModuleHeader(icon = "rocket", title = "Reprendre l'aventure", animateIcon = true)
         Spacer(Modifier.height(14.dp))
-        if (lesson.subjectName.isNotBlank()) {
-            Text(
-                text = lesson.subjectName,
-                color = KalynoBlue,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.ExtraBold,
-                letterSpacing = 0.4.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Spacer(Modifier.height(4.dp))
-        }
-        Text(
-            text = lesson.chapterTitle,
-            color = KalynoText,
-            fontSize = 16.sp,
-            lineHeight = 21.sp,
-            fontWeight = FontWeight.ExtraBold,
-            maxLines = 3,
-            overflow = TextOverflow.Ellipsis
-        )
-        Spacer(Modifier.height(12.dp))
-        Spacer(Modifier.weight(1f))
         Row(verticalAlignment = Alignment.CenterVertically) {
-            KalynoProgressBar(progress = progress, modifier = Modifier.weight(1f))
-            Spacer(Modifier.width(10.dp))
+            KalynoRing(progress = progress, diameter = 72.dp, strokeWidth = 8.dp) {
+                Text(
+                    text = "$shownPercent%",
+                    color = KalynoText,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.ExtraBold
+                )
+            }
+            Spacer(Modifier.width(14.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                if (lesson.subjectName.isNotBlank()) {
+                    Text(
+                        text = lesson.subjectName,
+                        color = KalynoBlue,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        letterSpacing = 0.4.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Spacer(Modifier.height(3.dp))
+                }
+                Text(
+                    text = lesson.chapterTitle,
+                    color = KalynoText,
+                    fontSize = 17.sp,
+                    lineHeight = 22.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = detail,
+                    color = if (lesson.completed) KalynoCorrectText else KalynoMuted,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+        }
+        Spacer(Modifier.height(14.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                text = "${(progress * 100).toInt()} %",
-                color = KalynoMuted,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold
+                text = cta,
+                color = KalynoBlue,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.ExtraBold
             )
+            Spacer(Modifier.width(4.dp))
+            KalynoSvgIcon(name = "chevron-right", size = 14.dp, tint = KalynoBlue)
         }
     }
 }
 
-// ---------- Bloc 4 : indicateurs de progression ----------
+// ---------- Carte Progression : maîtrise, paliers et rétention (moteur de révision) ----------
 
 @Composable
 internal fun ProgressModule(
     masteredCount: Int?,
     retentionScore: Float?,
     masteredNotions: List<MasteredNotion> = emptyList(),
-    urgentTopics: List<UrgentTopic>,
     loading: Boolean,
     modifier: Modifier = Modifier,
     onOpenDetail: () -> Unit = {}
 ) {
     val haptic = LocalHapticFeedback.current
     val hasData = masteredCount != null || retentionScore != null
+    val tiers = masteredNotions.groupingBy { it.tier }.eachCount()
 
     KalynoCard(
         modifier = modifier,
@@ -292,10 +337,27 @@ internal fun ProgressModule(
         } else {
             if (masteredCount != null) {
                 val shownMastered = rememberCountUp(masteredCount, durationMillis = 900)
-                StatValue(
-                    value = shownMastered.toString(),
-                    label = if (masteredCount == 1) "notion maîtrisée" else "notions maîtrisées"
+                Text(
+                    text = shownMastered.toString(),
+                    color = KalynoText,
+                    fontSize = 34.sp,
+                    lineHeight = 36.sp,
+                    fontWeight = FontWeight.ExtraBold
                 )
+                Text(
+                    text = if (masteredCount == 1) "notion maîtrisée" else "notions maîtrisées",
+                    color = KalynoMuted,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium
+                )
+                if (tiers.isNotEmpty()) {
+                    Spacer(Modifier.height(10.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        TierCount("check-circle", tiers[MasteryTier.SOLIDE] ?: 0, KalynoCorrectText, KalynoCorrectSoft)
+                        TierCount("target", tiers[MasteryTier.AVANCEE] ?: 0, KalynoBlue, KalynoBlueSoft)
+                        TierCount("trophy", tiers[MasteryTier.EXPERTE] ?: 0, KalynoAmberDeep, KalynoAmberSoft)
+                    }
+                }
             }
             if (masteredCount != null && retentionScore != null) {
                 Spacer(Modifier.height(14.dp))
@@ -304,15 +366,11 @@ internal fun ProgressModule(
                 val score = retentionScore.coerceIn(0f, 1f)
                 val shownPercent = rememberCountUp((score * 100).toInt(), durationMillis = 1100)
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    KalynoRing(
-                        progress = score,
-                        diameter = 64.dp,
-                        strokeWidth = 7.dp
-                    ) {
+                    KalynoRing(progress = score, diameter = 58.dp, strokeWidth = 7.dp) {
                         Text(
                             text = "$shownPercent%",
                             color = KalynoText,
-                            fontSize = 14.sp,
+                            fontSize = 13.sp,
                             fontWeight = FontWeight.ExtraBold
                         )
                     }
@@ -343,314 +401,25 @@ internal fun ProgressModule(
     }
 }
 
-/** Modal analytique : détail de la maîtrise et de la rétention FSRS, matière par matière. */
-@OptIn(ExperimentalMaterial3Api::class)
+/** Nombre de notions d'un palier de maîtrise (solide, avancée, experte) : icône + compte. */
 @Composable
-private fun ProgressDetailSheet(
-    masteredCount: Int?,
-    retentionScore: Float?,
-    masteredNotions: List<MasteredNotion> = emptyList(),
-    masteredCards: List<MasteredCard> = emptyList(),
-    urgentTopics: List<UrgentTopic>,
-    onDismiss: () -> Unit
-) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val shape = RoundedCornerShape(20.dp)
-
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        containerColor = Color.White,
-        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
-    ) {
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp)
-                .padding(bottom = 28.dp)
-        ) {
-            Text("Ma progression", color = KalynoText, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold)
-            Spacer(Modifier.height(4.dp))
-            Text(
-                text = "Basé sur ton moteur de révision (FSRS).",
-                color = KalynoMuted,
-                fontSize = 13.sp
-            )
-            Spacer(Modifier.height(18.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .clip(shape)
-                        .background(KalynoBlueSoft)
-                        .padding(16.dp)
-                ) {
-                    Text(
-                        text = masteredCount?.toString() ?: "—",
-                        color = KalynoText,
-                        fontSize = 26.sp,
-                        fontWeight = FontWeight.ExtraBold
-                    )
-                    Text("Notions maîtrisées", color = KalynoMuted, fontSize = 12.sp, fontWeight = FontWeight.Medium)
-                }
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .clip(shape)
-                        .background(KalynoBlueSoft)
-                        .padding(16.dp)
-                ) {
-                    Text(
-                        text = retentionScore?.let { "${(it.coerceIn(0f, 1f) * 100).toInt()} %" } ?: "—",
-                        color = KalynoText,
-                        fontSize = 26.sp,
-                        fontWeight = FontWeight.ExtraBold
-                    )
-                    Text("Rétention estimée", color = KalynoMuted, fontSize = 12.sp, fontWeight = FontWeight.Medium)
-                }
-            }
-
-            Spacer(Modifier.height(22.dp))
-            Text(
-                text = "Révisions en attente par matière",
-                color = KalynoText,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.ExtraBold
-            )
-            Spacer(Modifier.height(10.dp))
-
-            if (urgentTopics.isEmpty()) {
-                Text(
-                    text = "Aucune matière en attente pour le moment.",
-                    color = KalynoMuted,
-                    fontSize = 13.sp,
-                    lineHeight = 18.sp,
-                    modifier = Modifier.padding(vertical = 8.dp)
-                )
-            } else {
-                LazyColumn(
-                    modifier = Modifier.heightIn(max = 280.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    contentPadding = PaddingValues(vertical = 4.dp)
-                ) {
-                    items(urgentTopics, key = { it.label }) { topic ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(14.dp))
-                                .background(KalynoBackground)
-                                .padding(horizontal = 14.dp, vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = topic.label,
-                                color = KalynoText,
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.weight(1f)
-                            )
-                            Text(
-                                text = topic.count.toString(),
-                                color = KalynoRetryText,
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.ExtraBold
-                            )
-                        }
-                    }
-                }
-            }
-
-            Spacer(Modifier.height(22.dp))
-            MasteredNotionsSection(notions = masteredNotions)
-
-            Spacer(Modifier.height(22.dp))
-            MasteredCardsSection(cards = masteredCards)
-        }
-    }
-}
-
-/**
- * Section "Notions maîtrisées" : liste pilotée entièrement par le moteur SRS (aucune saisie
- * manuelle). Chaque carte affiche le libellé de la notion, sa matière et le palier de
- * maîtrise calculé par le moteur. État vide sobre tant qu'aucune notion n'est validée.
- */
-@Composable
-private fun MasteredNotionsSection(notions: List<MasteredNotion>) {
+private fun TierCount(icon: String, count: Int, tint: Color, soft: Color) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(
-            text = "Notions maîtrisées",
-            color = KalynoText,
-            fontSize = 15.sp,
-            fontWeight = FontWeight.ExtraBold,
-            modifier = Modifier.weight(1f)
-        )
-        if (notions.isNotEmpty()) {
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(KalynoCorrectSoft)
-                    .padding(horizontal = 10.dp, vertical = 4.dp)
-            ) {
-                Text(
-                    text = notions.size.toString(),
-                    color = KalynoCorrectText,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.ExtraBold
-                )
-            }
-        }
-    }
-    Spacer(Modifier.height(10.dp))
-
-    if (notions.isEmpty()) {
-        MasteredNotionsEmptyState()
-    } else {
-        LazyColumn(
-            modifier = Modifier.heightIn(max = 360.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-            contentPadding = PaddingValues(vertical = 4.dp)
-        ) {
-            items(notions, key = { it.key }) { notion ->
-                MasteredNotionCard(notion)
-            }
-        }
-    }
-}
-
-/** État vide élégant : incite sans alourdir, sans emoji, icône vectorielle uniquement. */
-@Composable
-private fun MasteredNotionsEmptyState() {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(KalynoBackground)
-            .padding(horizontal = 18.dp, vertical = 22.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
         Box(
             modifier = Modifier
-                .size(44.dp)
-                .clip(RoundedCornerShape(14.dp))
-                .background(KalynoBlueSoft),
+                .size(22.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(soft),
             contentAlignment = Alignment.Center
         ) {
-            KalynoSvgIcon(name = "target", size = 22.dp, tint = KalynoBlue)
+            KalynoSvgIcon(name = icon, size = 13.dp, tint = tint)
         }
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.width(4.dp))
         Text(
-            text = "Aucune notion maîtrisée pour l'instant",
-            color = KalynoText,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.ExtraBold,
-            textAlign = TextAlign.Center
+            text = count.toString(),
+            color = tint,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.ExtraBold
         )
-        Spacer(Modifier.height(4.dp))
-        Text(
-            text = "Enchaîne tes révisions dans le Dojo : le moteur valide une notion dès qu'elle est bien ancrée.",
-            color = KalynoMuted,
-            fontSize = 12.sp,
-            lineHeight = 17.sp,
-            textAlign = TextAlign.Center
-        )
-    }
-}
-
-/** Palier de maîtrise -> icône vectorielle, couleurs et libellé (jamais d'emoji). */
-private data class TierStyle(val icon: String, val label: String, val tint: Color, val soft: Color)
-
-private fun MasteryTier.style(): TierStyle = when (this) {
-    MasteryTier.SOLIDE -> TierStyle("check-circle", "Solide", KalynoCorrectText, KalynoCorrectSoft)
-    MasteryTier.AVANCEE -> TierStyle("target", "Avancée", KalynoBlue, KalynoBlueSoft)
-    MasteryTier.EXPERTE -> TierStyle("trophy", "Experte", KalynoAmberDeep, KalynoAmberSoft)
-}
-
-@Composable
-private fun MasteredNotionCard(notion: MasteredNotion) {
-    val style = notion.tier.style()
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(Color.White)
-            .border(BorderStroke(1.dp, KalynoOutline), RoundedCornerShape(16.dp))
-            .padding(horizontal = 14.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(
-            modifier = Modifier
-                .size(38.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(style.soft),
-            contentAlignment = Alignment.Center
-        ) {
-            KalynoSvgIcon(name = style.icon, size = 18.dp, tint = style.tint)
-        }
-        Spacer(Modifier.width(12.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = notion.label,
-                color = KalynoText,
-                fontSize = 14.sp,
-                lineHeight = 18.sp,
-                fontWeight = FontWeight.Bold,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-            Spacer(Modifier.height(3.dp))
-            Text(
-                text = notion.domain,
-                color = KalynoMuted,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Medium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Spacer(Modifier.height(4.dp))
-            Text(
-                text = if (notion.masteredCards == 1) "1 fiche maîtrisée" else "${notion.masteredCards} fiches maîtrisées",
-                color = style.tint,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold
-            )
-        }
-        Spacer(Modifier.width(10.dp))
-        Column(horizontalAlignment = Alignment.End) {
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(style.soft)
-                    .padding(horizontal = 8.dp, vertical = 3.dp)
-            ) {
-                Text(
-                    text = style.label,
-                    color = style.tint,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.ExtraBold
-                )
-            }
-            notion.score?.let { score ->
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    text = "${(score.coerceIn(0f, 1f) * 100).toInt()} % rétention",
-                    color = KalynoMuted,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Medium
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun StatValue(value: String, label: String) {
-    Column {
-        Text(text = value, color = KalynoText, fontSize = 26.sp, fontWeight = FontWeight.ExtraBold)
-        Text(text = label, color = KalynoMuted, fontSize = 12.sp, fontWeight = FontWeight.Medium)
     }
 }

@@ -118,6 +118,20 @@ fun ExplorerScreen(
     // Hissé ici pour retrouver la même position de scroll en revenant de la liste des leçons
     val homeScroll = rememberScrollState()
 
+    // Leçon demandée par l'Accueil (« Reprendre l'aventure ») : ouverte dès que les leçons sont chargées
+    val requestedLessonId by ExplorerDeepLink.openLessonId
+    LaunchedEffect(requestedLessonId, ui.chapters, ui.loading) {
+        val id = requestedLessonId ?: return@LaunchedEffect
+        val chapter = ui.chapters.firstOrNull { it.id == id }
+        if (chapter != null) {
+            viewModel.onLessonClick(chapter)
+            ExplorerDeepLink.openLessonId.value = null
+        } else if (!ui.loading) {
+            // Leçon introuvable (dépubliée) : on abandonne la demande
+            ExplorerDeepLink.openLessonId.value = null
+        }
+    }
+
     LaunchedEffect(levelId) {
         viewModel.load(levelId)
         while (true) {

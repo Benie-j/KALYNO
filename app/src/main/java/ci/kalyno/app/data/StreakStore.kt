@@ -78,6 +78,14 @@ class StreakStore(context: Context) {
         StreakLogic.current(read(owner), StreakLogic.dayOf(System.currentTimeMillis()))
     }
 
+    /** Vrai si une session a déjà été terminée aujourd'hui (sans rien modifier). */
+    fun doneToday(): Boolean = synchronized(LOCK) {
+        val owner = owner()
+        migrate(owner)
+        val state = read(owner)
+        !state.isEmpty && state.lastDay == StreakLogic.dayOf(System.currentTimeMillis())
+    }
+
     /** Série telle qu'elle sera une fois la session du jour enregistrée, sans rien modifier (bilan de fin de session). */
     fun projectedAfterCompletion(): Int = synchronized(LOCK) {
         val owner = owner()
