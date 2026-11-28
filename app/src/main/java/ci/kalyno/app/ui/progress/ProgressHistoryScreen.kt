@@ -1,5 +1,6 @@
 package ci.kalyno.app.ui.progress
 
+import ci.kalyno.app.ui.theme.KalynoSurface
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
@@ -958,7 +959,7 @@ internal fun FlipCard(card: LearnedCardUi) {
                 modifier = Modifier
                     .fillMaxSize()
                     .clip(shape)
-                    .background(Color.White)
+                    .background(KalynoSurface)
                     .border(1.dp, KalynoOutline, shape)
                     .padding(16.dp)
             ) {

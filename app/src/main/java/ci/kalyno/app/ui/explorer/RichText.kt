@@ -1,5 +1,7 @@
 package ci.kalyno.app.ui.explorer
 
+import ci.kalyno.app.ui.theme.KalynoHighlight
+import ci.kalyno.app.ui.theme.KalynoDanger
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -315,7 +317,7 @@ private fun parseRich(html: String): List<RBlock> {
             "s", "strike", "del" -> push(SpanStyle(textDecoration = TextDecoration.LineThrough))
             "sup" -> push(SpanStyle(baselineShift = BaselineShift.Superscript, fontSize = 0.75.em))
             "sub" -> push(SpanStyle(baselineShift = BaselineShift.Subscript, fontSize = 0.75.em))
-            "mark" -> push(SpanStyle(background = Color(0xFFFFF0B3)))
+            "mark" -> push(SpanStyle(background = KalynoHighlight))
             "span", "font" -> {
                 val color = COLOR_RE.find(raw)?.let { hexColor(it.groupValues[1]) }
                 val bg = BG_RE.find(raw)?.let { hexColor(it.groupValues[1]) }
@@ -462,7 +464,7 @@ private fun buildInline(
             ) {
                 Column {
                     Text(tex, color = color, fontSize = fontSize, fontFamily = FontFamily.Monospace, maxLines = 1, softWrap = false)
-                    Text("⚠ " + reason, color = Color(0xFFB91C1C), fontSize = (fontSize.value * 0.6f).sp, maxLines = 1, softWrap = false)
+                    Text("⚠ " + reason, color = KalynoDanger, fontSize = (fontSize.value * 0.6f).sp, maxLines = 1, softWrap = false)
                 }
             }
         }

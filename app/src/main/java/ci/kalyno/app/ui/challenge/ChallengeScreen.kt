@@ -563,9 +563,9 @@ private fun ChallengeQuestionCard(
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                 keyboardActions = KeyboardActions(onDone = { onSubmit() }),
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedContainerColor = Color.White,
-                    unfocusedContainerColor = Color.White,
-                    disabledContainerColor = Color.White,
+                    focusedContainerColor = KalynoSurface,
+                    unfocusedContainerColor = KalynoSurface,
+                    disabledContainerColor = KalynoSurface,
                     focusedBorderColor = KalynoBlue,
                     unfocusedBorderColor = KalynoOutline,
                     disabledBorderColor = if (outcome == OUTCOME_CORRECT) KalynoCorrect else KalynoDangerBorder,

@@ -1,5 +1,6 @@
 package ci.kalyno.app.ui.dojo
 
+import ci.kalyno.app.ui.theme.KalynoSurface
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -159,7 +160,7 @@ fun ScientificCalculatorDialog(
                 .padding(horizontal = 12.dp, vertical = 24.dp)
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(28.dp))
-                .background(Color.White)
+                .background(KalynoSurface)
                 .padding(16.dp)
                 .verticalScroll(rememberScrollState())
         ) {

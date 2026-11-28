@@ -1,5 +1,6 @@
 package ci.kalyno.app.ui.ai
 
+import ci.kalyno.app.ui.theme.KalynoSurface
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -144,8 +145,8 @@ private fun ChatPane(vm: KalynoAssistantViewModel, modifier: Modifier, suggestio
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                 keyboardActions = KeyboardActions(onSend = { vm.send() }),
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedContainerColor = Color.White,
-                    unfocusedContainerColor = Color.White,
+                    focusedContainerColor = KalynoSurface,
+                    unfocusedContainerColor = KalynoSurface,
                     focusedBorderColor = KalynoBlue,
                     unfocusedBorderColor = KalynoOutline
                 )
@@ -172,7 +173,7 @@ private fun Bubble(fromUser: Boolean, text: String) {
             modifier = Modifier
                 .widthIn(max = 320.dp)
                 .clip(RoundedCornerShape(18.dp))
-                .background(if (fromUser) KalynoBlue else Color.White)
+                .background(if (fromUser) KalynoBlue else KalynoSurface)
                 .border(BorderStroke(1.dp, if (fromUser) KalynoBlue else KalynoOutline), RoundedCornerShape(18.dp))
                 .padding(horizontal = 14.dp, vertical = 10.dp)
         ) {

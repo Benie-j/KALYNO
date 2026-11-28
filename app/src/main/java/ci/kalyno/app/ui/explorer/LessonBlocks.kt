@@ -1,5 +1,6 @@
 package ci.kalyno.app.ui.explorer
 
+import ci.kalyno.app.ui.theme.KalynoSurface
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.tween
@@ -187,7 +188,7 @@ fun ExplorerBackButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
         modifier = modifier
             .size(44.dp)
             .clip(CircleShape)
-            .background(Color.White)
+            .background(KalynoSurface)
             .border(1.dp, KalynoOutline, CircleShape)
             .clickable {
                 haptic()
@@ -265,7 +266,7 @@ private fun TextBlock(block: LessonBlock, modifier: Modifier = Modifier) {
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .background(Color.White, shape)
+            .background(KalynoSurface, shape)
             .border(1.dp, KalynoOutline, shape)
             .padding(horizontal = 20.dp, vertical = 22.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)

@@ -1,5 +1,6 @@
 package ci.kalyno.app.ui.progress
 
+import ci.kalyno.app.ui.theme.KalynoSurface
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -136,7 +137,7 @@ internal fun MasteredCardItem(card: MasteredCard, modifier: Modifier = Modifier)
         modifier = modifier
             .fillMaxWidth()
             .clip(shape)
-            .background(Color.White)
+            .background(KalynoSurface)
             .border(1.dp, KalynoOutline, shape)
             .drawBehind {
                 drawRect(

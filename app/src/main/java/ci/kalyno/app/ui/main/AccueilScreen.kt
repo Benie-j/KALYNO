@@ -1,5 +1,6 @@
 package ci.kalyno.app.ui.main
 
+import ci.kalyno.app.ui.theme.KalynoSurface
 import ci.kalyno.app.ui.components.rememberHaptic
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.Role
@@ -490,7 +491,7 @@ private fun SessionHero(
                 label = cta,
                 onClick = action,
                 height = 52.dp,
-                container = Color.White,
+                container = KalynoSurface,
                 content = KalynoBlue
             )
         }
@@ -512,7 +513,7 @@ private fun ExamStrip(
         modifier = modifier
             .fillMaxWidth()
             .clip(shape)
-            .background(Color.White)
+            .background(KalynoSurface)
             .border(1.dp, KalynoOutline, shape)
             .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -564,7 +565,7 @@ private fun CoachNote(text: String, modifier: Modifier = Modifier) {
         modifier = modifier
             .fillMaxWidth()
             .clip(shape)
-            .background(Color.White)
+            .background(KalynoSurface)
             .border(1.dp, KalynoOutline, shape)
             .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically

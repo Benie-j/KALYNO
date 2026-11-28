@@ -1,5 +1,6 @@
 package ci.kalyno.app.ui.explorer
 
+import ci.kalyno.app.ui.theme.KalynoSurface
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -121,7 +122,7 @@ fun ExplorerHeroBanner(
                 fontWeight = FontWeight.ExtraBold,
                 modifier = Modifier
                     .clip(CircleShape)
-                    .background(Color.White)
+                    .background(KalynoSurface)
                     .padding(horizontal = 16.dp, vertical = 8.dp)
             )
         }

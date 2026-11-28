@@ -1,5 +1,9 @@
 package ci.kalyno.app.ui.share
 
+import ci.kalyno.app.ui.theme.KalynoSurfaceVariant
+import ci.kalyno.app.ui.theme.KalynoSurface
+import ci.kalyno.app.ui.theme.KalynoPurpleSoft
+import ci.kalyno.app.ui.theme.KalynoBlueChipSoft
 import android.Manifest
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
@@ -74,10 +78,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
-private val NeutralChip = Color(0xFFF1F5F9)
+private val NeutralChip: Color get() = KalynoSurfaceVariant
 private val FacebookBlue = Color(0xFF2563EB)
-private val FacebookSoft = Color(0xFFDBEAFE)
-private val PurpleSoft = Color(0xFFEDE9FE)
+private val FacebookSoft: Color get() = KalynoBlueChipSoft
+private val PurpleSoft: Color get() = KalynoPurpleSoft
 
 private data class ShareAction(
     val id: String,
@@ -206,7 +210,7 @@ internal fun QuoteShareSheet(quote: DailyQuote, onDismiss: () -> Unit) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = Color.White,
+        containerColor = KalynoSurface,
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
     ) {
         Column(

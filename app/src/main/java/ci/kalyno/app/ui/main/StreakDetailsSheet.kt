@@ -1,5 +1,6 @@
 package ci.kalyno.app.ui.main
 
+import ci.kalyno.app.ui.theme.KalynoSurface
 import java.time.format.DateTimeFormatter
 import java.time.ZoneId
 import java.time.Instant
@@ -160,7 +161,7 @@ internal fun StreakDetailsSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = Color.White
+        containerColor = KalynoSurface
     ) {
         Column(
             modifier = Modifier
@@ -307,7 +308,7 @@ private fun GoalRow(
         modifier = modifier
             .fillMaxWidth()
             .clip(shape)
-            .background(if (goal.reached) KalynoAmberSoft else Color.White)
+            .background(if (goal.reached) KalynoAmberSoft else KalynoSurface)
             .border(if (isNext) 2.dp else 1.dp, borderColor, shape)
             .padding(14.dp)
     ) {

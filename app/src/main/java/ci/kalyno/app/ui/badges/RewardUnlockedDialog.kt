@@ -1,5 +1,6 @@
 package ci.kalyno.app.ui.badges
 
+import ci.kalyno.app.ui.theme.KalynoSurface
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -37,7 +38,7 @@ fun RewardUnlockedDialog(
     onDismiss: () -> Unit
 ) {
     Dialog(onDismissRequest = onDismiss) {
-        Surface(shape = RoundedCornerShape(28.dp), color = Color.White) {
+        Surface(shape = RoundedCornerShape(28.dp), color = KalynoSurface) {
             Column(
                 modifier = Modifier.padding(28.dp).fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally

@@ -1,5 +1,7 @@
 package ci.kalyno.app.ui.review
 
+import ci.kalyno.app.ui.theme.KalynoSurface
+import ci.kalyno.app.ui.theme.KalynoAmberBorder
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
@@ -433,8 +435,8 @@ private fun FrontFace(
                     placeholder = { Text("Écris ton résultat ici...", color = KalynoMuted) },
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedContainerColor = Color.White,
-                        unfocusedContainerColor = Color.White,
+                        focusedContainerColor = KalynoSurface,
+                        unfocusedContainerColor = KalynoSurface,
                         focusedBorderColor = KalynoBlue,
                         unfocusedBorderColor = KalynoOutline,
                         cursorColor = KalynoBlue,
@@ -470,7 +472,7 @@ private fun ChoiceButton(
 ) {
     val shape = RoundedCornerShape(16.dp)
     val container by animateColorAsState(
-        targetValue = if (selected) KalynoBlueSoft else Color.White,
+        targetValue = if (selected) KalynoBlueSoft else KalynoSurface,
         label = "choiceBg"
     )
     val border by animateColorAsState(
@@ -671,7 +673,7 @@ private fun SrsPanel(onRate: (ReviewRating) -> Unit) {
                 label = "Hésité",
                 container = KalynoAmberSoft,
                 content = KalynoAmberDeep,
-                border = Color(0xFFFDE68A),
+                border = KalynoAmberBorder,
                 modifier = Modifier.weight(1f)
             ) {
                 haptic()

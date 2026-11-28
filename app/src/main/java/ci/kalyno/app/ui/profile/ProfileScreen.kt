@@ -1,5 +1,8 @@
 package ci.kalyno.app.ui.profile
 
+import ci.kalyno.app.ui.theme.KalynoSurfaceVariant
+import ci.kalyno.app.ui.theme.KalynoSurface
+import ci.kalyno.app.ui.theme.KalynoSkySoft
 import ci.kalyno.app.data.badges.StreakGoalState
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
@@ -82,8 +85,8 @@ import ci.kalyno.app.ui.theme.KalynoYellow
 import androidx.compose.material.icons.filled.Flag
 import ci.kalyno.app.ui.report.ReportUnreadBadge
 
-private val SkyBubble = Color(0xFFE0F2FE)
-private val SlateBubble = Color(0xFFF1F5F9)
+private val SkyBubble: Color get() = KalynoSkySoft
+private val SlateBubble: Color get() = KalynoSurfaceVariant
 
 private const val NICKNAME_MIN = 2
 private const val NICKNAME_MAX = 16
@@ -277,7 +280,7 @@ fun ProfileScreen(
     if (showLogoutDialog) {
         AlertDialog(
             onDismissRequest = { showLogoutDialog = false },
-            containerColor = Color.White,
+            containerColor = KalynoSurface,
             title = { Text("Se déconnecter ?", fontWeight = FontWeight.ExtraBold, color = KalynoText) },
             text = {
                 Text(
@@ -379,7 +382,7 @@ private fun NicknameEditDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = Color.White,
+        containerColor = KalynoSurface,
         title = {
             Text("Modifier ton pseudo", fontWeight = FontWeight.ExtraBold, color = KalynoText)
         },
@@ -399,8 +402,8 @@ private fun NicknameEditDialog(
                     cursorColor = KalynoBlue,
                     focusedTextColor = KalynoText,
                     unfocusedTextColor = KalynoText,
-                    focusedContainerColor = Color.White,
-                    unfocusedContainerColor = Color.White
+                    focusedContainerColor = KalynoSurface,
+                    unfocusedContainerColor = KalynoSurface
                 )
             )
         },
@@ -436,7 +439,7 @@ private fun LogoutButton(label: String, onClick: () -> Unit) {
             .height(54.dp)
             .pressScale(interaction)
             .clip(shape)
-            .background(Color.White)
+            .background(KalynoSurface)
             .border(1.5.dp, KalynoDangerBorder, shape)
             .clickable(
                 interactionSource = interaction,

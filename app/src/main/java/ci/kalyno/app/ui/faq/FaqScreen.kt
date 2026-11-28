@@ -1,5 +1,6 @@
 package ci.kalyno.app.ui.faq
 
+import ci.kalyno.app.ui.theme.KalynoSurface
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -259,8 +260,8 @@ private fun SearchField(
         keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None, imeAction = ImeAction.Search),
         keyboardActions = KeyboardActions(onSearch = { onSearch() }),
         colors = OutlinedTextFieldDefaults.colors(
-            focusedContainerColor = Color.White,
-            unfocusedContainerColor = Color.White,
+            focusedContainerColor = KalynoSurface,
+            unfocusedContainerColor = KalynoSurface,
             focusedBorderColor = KalynoBlue,
             unfocusedBorderColor = KalynoOutline,
             cursorColor = KalynoBlue,

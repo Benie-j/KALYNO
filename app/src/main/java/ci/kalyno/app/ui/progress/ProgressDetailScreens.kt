@@ -1,5 +1,6 @@
 package ci.kalyno.app.ui.progress
 
+import ci.kalyno.app.ui.theme.KalynoSurface
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -539,7 +540,7 @@ private fun LessonHeader(
         modifier = modifier
             .fillMaxWidth()
             .clip(shape)
-            .background(Color.White)
+            .background(KalynoSurface)
             .border(1.dp, KalynoOutline, shape)
             .clickable {
                 haptic()
@@ -632,7 +633,7 @@ private fun StatusSegment(
         modifier = modifier
             .fillMaxWidth()
             .clip(shape)
-            .background(Color.White)
+            .background(KalynoSurface)
             .border(1.dp, KalynoOutline, shape)
             .padding(4.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -750,7 +751,7 @@ private fun NotionRow(title: String, subtitle: String, count: Int, modifier: Mod
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
-            .background(Color.White)
+            .background(KalynoSurface)
             .border(1.dp, KalynoOutline, RoundedCornerShape(16.dp))
             .padding(horizontal = 14.dp, vertical = 12.dp)
     ) {

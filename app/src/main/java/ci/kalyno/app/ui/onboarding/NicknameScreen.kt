@@ -65,8 +65,8 @@ fun NicknameScreen(onConfirm: (String) -> Unit) {
                 cursorColor = KalynoBlue,
                 focusedTextColor = KalynoText,
                 unfocusedTextColor = KalynoText,
-                focusedContainerColor = Color.White,
-                unfocusedContainerColor = Color.White
+                focusedContainerColor = KalynoSurface,
+                unfocusedContainerColor = KalynoSurface
             )
         )
 

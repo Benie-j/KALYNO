@@ -1,5 +1,6 @@
 package ci.kalyno.app.ui.explorer
 
+import ci.kalyno.app.ui.theme.KalynoSurface
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -320,7 +321,7 @@ private fun LessonJumpBar(
             Box(
                 modifier = Modifier
                     .clip(shape)
-                    .background(if (active) KalynoBlue else Color.White)
+                    .background(if (active) KalynoBlue else KalynoSurface)
                     .run { if (!active) border(1.dp, KalynoOutline, shape) else this }
                     .clickable {
                         haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)

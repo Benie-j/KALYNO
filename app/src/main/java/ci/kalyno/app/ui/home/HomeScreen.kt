@@ -1,5 +1,6 @@
 package ci.kalyno.app.ui.home
 
+import ci.kalyno.app.ui.theme.KalynoSurface
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -271,7 +272,7 @@ private fun cardModifier(onClick: () -> Unit): Modifier =
         .fillMaxWidth()
         .shadow(2.dp, CardShape, ambientColor = KalynoShadow, spotColor = KalynoShadow)
         .clip(CardShape)
-        .background(Color.White)
+        .background(KalynoSurface)
         .border(BorderStroke(1.dp, KalynoOutline), CardShape)
         .clickable(onClick = onClick)
 

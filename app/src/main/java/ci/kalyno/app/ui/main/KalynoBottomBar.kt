@@ -1,5 +1,6 @@
 package ci.kalyno.app.ui.main
 
+import ci.kalyno.app.ui.theme.KalynoSurface
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -87,7 +88,7 @@ fun KalynoBottomBar(
                     spotColor = KalynoShadow
                 )
                 .clip(shape)
-                .background(Color.White)
+                .background(KalynoSurface)
                 .border(1.dp, KalynoOutline, shape)
                 .padding(6.dp),
             verticalAlignment = Alignment.CenterVertically,

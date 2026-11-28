@@ -1,5 +1,6 @@
 package ci.kalyno.app.ui.report
 
+import ci.kalyno.app.ui.theme.KalynoSurface
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -283,7 +284,7 @@ fun ReportBottomSheet(
     ModalBottomSheet(
         onDismissRequest = { if (!viewModel.state.value.sending) onDismiss() },
         sheetState = sheetState,
-        containerColor = Color.White
+        containerColor = KalynoSurface
     ) {
         Column(
             modifier = Modifier
@@ -361,7 +362,7 @@ fun ReportBottomSheet(
                         onClick = { if (!form.sending) categoryCode = item.name },
                         label = { Text(item.label, fontWeight = FontWeight.Bold, fontSize = 13.sp) },
                         colors = FilterChipDefaults.filterChipColors(
-                            containerColor = Color.White,
+                            containerColor = KalynoSurface,
                             labelColor = KalynoText,
                             selectedContainerColor = KalynoBlueSoft,
                             selectedLabelColor = KalynoBlue
@@ -401,9 +402,9 @@ fun ReportBottomSheet(
                     )
                 },
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedContainerColor = Color.White,
-                    unfocusedContainerColor = Color.White,
-                    disabledContainerColor = Color.White,
+                    focusedContainerColor = KalynoSurface,
+                    unfocusedContainerColor = KalynoSurface,
+                    disabledContainerColor = KalynoSurface,
                     focusedBorderColor = KalynoBlue,
                     unfocusedBorderColor = KalynoOutline,
                     cursorColor = KalynoBlue,

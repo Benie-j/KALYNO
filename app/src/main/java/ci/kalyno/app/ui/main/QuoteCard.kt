@@ -1,5 +1,7 @@
 package ci.kalyno.app.ui.main
 
+import ci.kalyno.app.ui.theme.KalynoSurfaceVariant
+import ci.kalyno.app.ui.theme.KalynoSurface
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
@@ -94,7 +96,7 @@ import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-private val NeutralChip = Color(0xFFF1F5F9)
+private val NeutralChip: Color get() = KalynoSurfaceVariant
 private val QuoteSerif = FontFamily.Serif
 
 /**
@@ -184,7 +186,7 @@ internal fun QuoteModule(
                 scaleY = pressScale
             }
             .shadow(4.dp, shape, ambientColor = KalynoShadow, spotColor = KalynoShadow)
-            .background(Color.White, shape)
+            .background(KalynoSurface, shape)
             .border(1.dp, KalynoOutline, shape)
             .clip(shape)
             .combinedClickable(
@@ -376,7 +378,7 @@ private fun QuoteHistorySheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = Color.White,
+        containerColor = KalynoSurface,
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
     ) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {

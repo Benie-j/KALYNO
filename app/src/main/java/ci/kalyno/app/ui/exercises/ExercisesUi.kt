@@ -1,5 +1,6 @@
 package ci.kalyno.app.ui.exercises
 
+import ci.kalyno.app.ui.theme.KalynoSurface
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
@@ -149,8 +150,8 @@ private fun kalynoFieldColors() = OutlinedTextFieldDefaults.colors(
     cursorColor = KalynoBlue,
     focusedTextColor = KalynoText,
     unfocusedTextColor = KalynoText,
-    focusedContainerColor = Color.White,
-    unfocusedContainerColor = Color.White
+    focusedContainerColor = KalynoSurface,
+    unfocusedContainerColor = KalynoSurface
 )
 
 // ---------------------------------------------------------------------------
@@ -368,7 +369,7 @@ internal fun ExerciseListContent(
                         haptic()
                         onRefresh()
                     }
-                    .background(Color.White)
+                    .background(KalynoSurface)
                     .border(1.dp, KalynoOutline, CircleShape),
                 contentAlignment = Alignment.Center
             ) {
@@ -468,7 +469,7 @@ internal fun ExerciseListContent(
                                 haptic()
                                 onOpen(next)
                             }
-                            .background(Color.White)
+                            .background(KalynoSurface)
                             .sheen(color = KalynoBlue.copy(alpha = 0.16f))
                             .padding(horizontal = 18.dp, vertical = 10.dp)
                     )
@@ -549,7 +550,7 @@ private fun SegmentedFilter(
             .fillMaxWidth()
             .height(46.dp)
             .clip(shape)
-            .background(Color.White)
+            .background(KalynoSurface)
             .border(1.dp, KalynoOutline, shape)
     ) {
         val segment = maxWidth / options.size
@@ -844,7 +845,7 @@ internal fun ExerciseSolveContent(
                                 haptic()
                                 onBack()
                             }
-                            .background(Color.White)
+                            .background(KalynoSurface)
                             .border(1.dp, KalynoOutline, CircleShape),
                         contentAlignment = Alignment.Center
                     ) {
@@ -1095,7 +1096,7 @@ private fun ChoiceOption(
     val haptic = rememberHaptic()
     val shape = RoundedCornerShape(16.dp)
     val container by animateColorAsState(
-        targetValue = if (checked) KalynoBlueSoft else Color.White,
+        targetValue = if (checked) KalynoBlueSoft else KalynoSurface,
         animationSpec = tween(160),
         label = "choiceContainer"
     )
@@ -1199,7 +1200,7 @@ private fun TableAnswer(
                     fontWeight = FontWeight.ExtraBold
                 )
             }
-            KalynoProgressBar(progress = tableProgress, height = 7.dp, track = Color.White)
+            KalynoProgressBar(progress = tableProgress, height = 7.dp, track = KalynoSurface)
         }
 
         for (r in 0 until rows.length()) {
@@ -1227,7 +1228,7 @@ private fun TableAnswer(
                             modifier = Modifier
                                 .weight(1f)
                                 .clip(RoundedCornerShape(12.dp))
-                                .background(Color.White)
+                                .background(KalynoSurface)
                                 .border(1.dp, KalynoOutline, RoundedCornerShape(12.dp))
                                 .padding(12.dp),
                             contentAlignment = Alignment.CenterStart
@@ -1345,7 +1346,7 @@ private fun SolveFooter(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .background(Color.White)
+            .background(KalynoSurface)
     ) {
         Box(
             modifier = Modifier
@@ -1565,7 +1566,7 @@ private fun ColumnScope.ExerciseResultBlocks(
             InfoBox(
                 title = "ÉTAPES DE TON RAISONNEMENT",
                 icon = "layers",
-                container = Color.White,
+                container = KalynoSurface,
                 accent = KalynoBlue,
                 bordered = true,
                 modifier = Modifier.entrance(3)

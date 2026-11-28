@@ -1,5 +1,6 @@
 package ci.kalyno.app.ui.dojo
 
+import ci.kalyno.app.ui.theme.KalynoSurface
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
@@ -262,7 +263,7 @@ private fun DojoHero(state: DashboardUiState, onReview: () -> Unit) {
                 KalynoPrimaryButton(
                     label = "RÉVISER MAINTENANT",
                     onClick = onReview,
-                    container = Color.White,
+                    container = KalynoSurface,
                     content = KalynoBlue,
                     modifier = Modifier
                         .fillMaxWidth()

@@ -1,5 +1,7 @@
 package ci.kalyno.app.ui.components
 
+import ci.kalyno.app.ui.theme.KalynoShimmerHighlight
+import ci.kalyno.app.ui.theme.KalynoShimmerBase
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.Spring
@@ -302,7 +304,7 @@ fun Modifier.shimmer(): Modifier = composed {
     )
     background(
         Brush.linearGradient(
-            colors = listOf(Color(0xFFE2E8F0), Color(0xFFF1F5F9), Color(0xFFE2E8F0)),
+            colors = listOf(KalynoShimmerBase, KalynoShimmerHighlight, KalynoShimmerBase),
             start = Offset(offset, 0f),
             end = Offset(offset + 400f, 200f)
         )

@@ -1,5 +1,6 @@
 package ci.kalyno.app.ui.explorer
 
+import ci.kalyno.app.ui.theme.KalynoSurface
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
@@ -246,7 +247,7 @@ fun ExplorerScreen(
                         "Continue à t'entraîner : ta progression comptera !"
                 )
             },
-            containerColor = Color.White
+            containerColor = KalynoSurface
         )
     }
 }
@@ -425,8 +426,8 @@ private fun SearchField(
         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
         keyboardActions = KeyboardActions(onSearch = { keyboard?.hide() }),
         colors = OutlinedTextFieldDefaults.colors(
-            focusedContainerColor = Color.White,
-            unfocusedContainerColor = Color.White,
+            focusedContainerColor = KalynoSurface,
+            unfocusedContainerColor = KalynoSurface,
             focusedBorderColor = KalynoBlue,
             unfocusedBorderColor = KalynoOutline,
             cursorColor = KalynoBlue,
@@ -533,7 +534,7 @@ private fun CommunityBanner(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(16.dp))
-                .background(Color.White)
+                .background(KalynoSurface)
                 .clickable {
                     haptic()
                     onOpenLeaderboard()

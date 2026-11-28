@@ -1,5 +1,6 @@
 package ci.kalyno.app.ui.badges
 
+import ci.kalyno.app.ui.theme.KalynoSurfaceVariant
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -50,7 +51,7 @@ fun BadgeCard(state: BadgeUiState, modifier: Modifier = Modifier) {
                 modifier = Modifier
                     .size(56.dp)
                     .background(
-                        if (unlocked) KalynoAmberSoft else Color(0xFFF1F5F9),
+                        if (unlocked) KalynoAmberSoft else KalynoSurfaceVariant,
                         CircleShape
                     ),
                 contentAlignment = Alignment.Center

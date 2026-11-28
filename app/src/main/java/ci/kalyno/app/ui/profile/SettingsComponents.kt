@@ -1,5 +1,7 @@
 package ci.kalyno.app.ui.profile
 
+import ci.kalyno.app.ui.theme.kc
+import ci.kalyno.app.ui.theme.KalynoSurface
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
@@ -60,7 +62,7 @@ import ci.kalyno.app.ui.theme.KalynoOutline
 import ci.kalyno.app.ui.theme.KalynoText
 
 // Ombre très diffuse (elevation 1.dp)
-private val CardShadow = Color(0x140F172A)
+private val CardShadow: Color get() = kc(0x140F172A, 0x66000000)
 
 // ---------------------------------------------------------------------------
 // Micro-interactions
@@ -131,7 +133,7 @@ fun SettingsCard(
         modifier = modifier
             .fillMaxWidth()
             .shadow(1.dp, shape, ambientColor = CardShadow, spotColor = CardShadow)
-            .background(Color.White, shape)
+            .background(KalynoSurface, shape)
             .border(1.dp, KalynoOutline, shape)
             .clip(shape),
         content = content

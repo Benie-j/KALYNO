@@ -1,5 +1,6 @@
 package ci.kalyno.app.ui.explorer
 
+import ci.kalyno.app.ui.theme.KalynoSurface
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
@@ -116,7 +117,7 @@ internal fun ExplorerTopBar(onOpenLeaderboard: () -> Unit, modifier: Modifier = 
             modifier = Modifier
                 .size(46.dp)
                 .clip(CircleShape)
-                .background(Color.White)
+                .background(KalynoSurface)
                 .border(1.dp, KalynoOutline, CircleShape)
                 .clickable {
                     haptic()
@@ -292,7 +293,7 @@ internal fun DailyMissionHero(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(18.dp))
-                        .background(Color.White)
+                        .background(KalynoSurface)
                         .clickable {
                             haptic()
                             onAction()
@@ -413,7 +414,7 @@ private fun DisciplineRow(
     modifier: Modifier = Modifier
 ) {
     val haptic = rememberHaptic()
-    val container by animateColorAsState(if (selected) KalynoBlue else Color.White, tween(120), label = "rowBg")
+    val container by animateColorAsState(if (selected) KalynoBlue else KalynoSurface, tween(120), label = "rowBg")
     val border by animateColorAsState(if (selected) KalynoBlue else KalynoOutline, tween(120), label = "rowBorder")
     val title by animateColorAsState(if (selected) Color.White else KalynoText, tween(120), label = "rowTitle")
     val meta by animateColorAsState(

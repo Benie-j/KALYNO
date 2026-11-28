@@ -1,5 +1,6 @@
 package ci.kalyno.app.ui.auth
 
+import ci.kalyno.app.ui.theme.KalynoSurface
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -122,8 +123,8 @@ private fun EmailEntryStep(
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = KalynoBlue,
                 unfocusedBorderColor = KalynoOutline,
-                focusedContainerColor = Color.White,
-                unfocusedContainerColor = Color.White
+                focusedContainerColor = KalynoSurface,
+                unfocusedContainerColor = KalynoSurface
             )
         )
         Spacer(Modifier.height(14.dp))
@@ -178,8 +179,8 @@ private fun EmailCodeStep(
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = KalynoBlue,
                 unfocusedBorderColor = KalynoOutline,
-                focusedContainerColor = Color.White,
-                unfocusedContainerColor = Color.White
+                focusedContainerColor = KalynoSurface,
+                unfocusedContainerColor = KalynoSurface
             )
         )
         Spacer(Modifier.height(14.dp))
@@ -224,7 +225,7 @@ private fun GoogleButton(label: String, isLoading: Boolean, onClick: () -> Unit)
             .fillMaxWidth()
             .height(52.dp)
             .clip(shape)
-            .background(Color.White)
+            .background(KalynoSurface)
             .border(1.5.dp, KalynoOutline, shape)
             .clickable(enabled = !isLoading, onClick = onClick),
         verticalAlignment = Alignment.CenterVertically,
@@ -253,7 +254,7 @@ private fun SecondaryButton(
             .fillMaxWidth()
             .height(52.dp)
             .clip(shape)
-            .background(Color.White)
+            .background(KalynoSurface)
             .border(1.5.dp, KalynoOutline, shape)
             .clickable(enabled = enabled, onClick = onClick),
         verticalAlignment = Alignment.CenterVertically,

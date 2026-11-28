@@ -1,5 +1,6 @@
 package ci.kalyno.app.ui.main
 
+import ci.kalyno.app.ui.theme.KalynoSurface
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -111,7 +112,7 @@ internal fun UrgentReviewModule(
     KalynoCard(
         modifier = modifier,
         onClick = if (urgent) onReview else null,
-        background = if (urgent) KalynoRetrySoft else Color.White,
+        background = if (urgent) KalynoRetrySoft else KalynoSurface,
         borderColor = if (urgent) KalynoRetry.copy(alpha = 0.3f + 0.3f * glow) else KalynoOutline
     ) {
         ModuleHeader(
@@ -219,7 +220,7 @@ private fun TopicBar(topic: UrgentTopic, biggest: Int) {
             progress = topic.count.toFloat() / biggest.toFloat(),
             height = 5.dp,
             color = KalynoRetry,
-            track = Color.White
+            track = KalynoSurface
         )
     }
 }

@@ -1,5 +1,6 @@
 package ci.kalyno.app.ui.dojo
 
+import ci.kalyno.app.ui.theme.KalynoSurfaceVariant
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
@@ -129,7 +130,7 @@ private fun columnWidths(table: TableExercise): List<Dp> = List(table.columnCoun
 private fun FixedCell(text: String, modifier: Modifier) {
     Box(
         modifier = modifier
-            .background(Color(0xFFF1F5F9))
+            .background(KalynoSurfaceVariant)
             .border(0.5.dp, QuizColors.Border)
             .padding(horizontal = 10.dp, vertical = 8.dp),
         contentAlignment = Alignment.CenterStart

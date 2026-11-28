@@ -1,5 +1,6 @@
 package ci.kalyno.app.ui.explorer
 
+import ci.kalyno.app.ui.theme.KalynoSurface
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -219,7 +220,7 @@ private fun ThemeHeader(overline: String?, title: String, lessons: List<Explorer
         KalynoProgressBar(
             progress = if (lessons.isEmpty()) 0f else done.toFloat() / lessons.size,
             color = KalynoBlue,
-            track = Color.White
+            track = KalynoSurface
         )
         Spacer(Modifier.height(6.dp))
         Text(
@@ -288,7 +289,7 @@ private fun RoadmapStep(
 
                 isCurrent -> Box(
                     modifier = nodeModifier
-                        .background(Color.White)
+                        .background(KalynoSurface)
                         .border(3.dp, KalynoBlue, CircleShape),
                     contentAlignment = Alignment.Center
                 ) {

@@ -1,5 +1,6 @@
 package ci.kalyno.app.ui.quiz
 
+import ci.kalyno.app.ui.theme.kc
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
@@ -61,23 +62,23 @@ import androidx.compose.material.icons.rounded.AutoAwesome
 
 /** Palette exacte du quiz (fond global #F8FAFC, cartes #FFFFFF + bordure #E2E8F0, vert pétrole #0F766E). */
 object QuizColors {
-    val Background = Color(0xFFF8FAFC)
-    val Surface = Color(0xFFFFFFFF)
-    val Border = Color(0xFFE2E8F0)
-    val Primary = Color(0xFF0F766E)
-    val Ink = Color(0xFF0F172A)
-    val Muted = Color(0xFF64748B)
+    val Background: Color get() = kc(0xFFF8FAFC, 0xFF0B1220)
+    val Surface: Color get() = kc(0xFFFFFFFF, 0xFF141E30)
+    val Border: Color get() = kc(0xFFE2E8F0, 0xFF263349)
+    val Primary: Color get() = kc(0xFF0F766E, 0xFF0D9488)
+    val Ink: Color get() = kc(0xFF0F172A, 0xFFF1F5F9)
+    val Muted: Color get() = kc(0xFF64748B, 0xFF94A3B8)
 
-    val SelectedBg = Color(0xFFF0FDFA)
-    val CorrectBg = Color(0xFFECFDF5)
-    val CorrectBorder = Color(0xFF10B981)
-    val CorrectText = Color(0xFF047857)
-    val WrongBg = Color(0xFFFEF2F2)
-    val WrongBorder = Color(0xFFEF4444)
-    val WrongText = Color(0xFFB91C1C)
-    val PartialBg = Color(0xFFFFFBEB)
-    val PartialBorder = Color(0xFFF59E0B)
-    val PartialText = Color(0xFFB45309)
+    val SelectedBg: Color get() = kc(0xFFF0FDFA, 0xFF12332F)
+    val CorrectBg: Color get() = kc(0xFFECFDF5, 0xFF0F2E24)
+    val CorrectBorder: Color get() = kc(0xFF10B981, 0xFF10B981)
+    val CorrectText: Color get() = kc(0xFF047857, 0xFF6EE7B7)
+    val WrongBg: Color get() = kc(0xFFFEF2F2, 0xFF3B1618)
+    val WrongBorder: Color get() = kc(0xFFEF4444, 0xFFEF4444)
+    val WrongText: Color get() = kc(0xFFB91C1C, 0xFFF87171)
+    val PartialBg: Color get() = kc(0xFFFFFBEB, 0xFF3A2A0B)
+    val PartialBorder: Color get() = kc(0xFFF59E0B, 0xFFF59E0B)
+    val PartialText: Color get() = kc(0xFFB45309, 0xFFFBBF24)
 }
 
 // ---------------------------------------------------------------------------
