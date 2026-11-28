@@ -5,148 +5,107 @@ import shutil
 import subprocess
 import sys
 
-ROOT = Path.home() / "KALYNO"
+root = Path.home() / "KALYNO"
 
-FILES = [
-    "app/src/main/java/ci/kalyno/app/ui/explorer/RichText.kt",
-    "app/src/main/java/ci/kalyno/app/ui/explorer/LessonBlocks.kt",
-    "app/src/main/java/ci/kalyno/app/ui/explorer/tables/RichTable.kt",
-]
-
-def stop(message):
-    print(f"\nARRÊT : {message}")
-    sys.exit(1)
-
-if not (ROOT / ".git").exists():
-    stop(f"Dépôt Git introuvable : {ROOT}")
-
-status = subprocess.run(
-    ["git", "-C", str(ROOT), "status", "--porcelain"],
-    capture_output=True, text=True, check=True
-).stdout.strip()
-
-if status:
-    stop(
-        "Le dépôt contient des modifications ou fichiers non suivis. "
-        "Ne rien écraser : termine ou sauvegarde d'abord ces changements."
-    )
-
-contents = {}
-for relative in FILES:
-    path = ROOT / relative
-    if not path.is_file():
-        stop(f"Fichier introuvable : {relative}")
-    contents[relative] = path.read_text(encoding="utf-8")
-
-if "allowKatex = false" in contents[FILES[1]]:
-    stop("Le correctif semble déjà appliqué dans LessonBlocks.kt.")
-
-def replace_once(relative, old, new):
-    content = contents[relative]
-    count = content.count(old)
-    if count != 1:
-        stop(
-            f"Ancre introuvable ou ambiguë dans {relative} "
-            f"(occurrences trouvées : {count}). Aucun fichier modifié."
+files = {
+    "app/src/main/java/ci/kalyno/app/ui/explorer/tables/RichTable.kt": [
+        (
+            """    fontWeight: FontWeight,
+    fontStyle: FontStyle
+) {""",
+            """    fontWeight: FontWeight,
+    fontStyle: FontStyle,
+    allowKatex: Boolean = true
+) {"""
         )
-    contents[relative] = content.replace(old, new, 1)
+    ]
+}
 
-# 1. Conserver le rendu natif des tableaux même lorsque KaTeX est désactivé.
-replace_once(
-    FILES[0],
-    """    if (allowKatex && containsTable(renderedHtml)) {
-        RichTextWithTables(renderedHtml, color, fontSize, lineHeight, fontWeight, fontStyle)
-        return
-    }""",
-    """    if (containsTable(renderedHtml)) {
-        RichTextWithTables(
-            renderedHtml, color, fontSize, lineHeight,
+rich = root / "app/src/main/java/ci/kalyno/app/ui/explorer/RichText.kt"
+table = root / "app/src/main/java/ci/kalyno/app/ui/explorer/tables/RichTable.kt"
+
+if not (root / ".git").exists():
+    sys.exit("Dépôt KALYNO introuvable.")
+
+targets = [rich, table]
+originals = {}
+
+for p in targets:
+    if not p.is_file():
+        sys.exit(f"Fichier absent : {p}")
+    originals[p] = p.read_text(encoding="utf-8")
+
+# Vérifier les ancres avant toute modification.
+old_call = """            renderedHtml, color, fontSize, lineHeight,
             fontWeight, fontStyle, allowKatex
-        )
-        return
-    }"""
-)
+        )"""
+new_call = """            renderedHtml, color, fontSize, lineHeight,
+            fontWeight, fontStyle
+        )"""
 
-# 2. Désactiver KaTeX uniquement dans les paragraphes des leçons.
-replace_once(
-    FILES[1],
-    """                fontStyle = FontStyle.Italic
-            )""",
-    """                fontStyle = FontStyle.Italic,
-                allowKatex = false
-            )"""
-)
+old_signature = """    fontWeight: FontWeight,
+    fontStyle: FontStyle
+) {"""
+new_signature = """    fontWeight: FontWeight,
+    fontStyle: FontStyle,
+    allowKatex: Boolean = true
+) {"""
 
-replace_once(
-    FILES[1],
-    """            RichText(it, KalynoText, 16.sp, 26.sp)""",
-    """            RichText(
-                it, KalynoText, 16.sp, 26.sp,
-                allowKatex = false
-            )"""
-)
-
-replace_once(
-    FILES[1],
-    """                    if (emphasizeBody) FontWeight.SemiBold else FontWeight.Normal
-                )""",
-    """                    if (emphasizeBody) FontWeight.SemiBold else FontWeight.Normal,
-                    allowKatex = false
-                )"""
-)
-
-# 3. Transmettre le choix du moteur aux segments HTML entourant les tableaux.
-replace_once(
-    FILES[2],
-    """                is HtmlSegment.Html -> RichText(seg.html, color, fontSize, lineHeight, fontWeight, fontStyle)""",
-    """                is HtmlSegment.Html -> RichText(
+old_segment = """                is HtmlSegment.Html -> RichText(
                     seg.html, color, fontSize, lineHeight,
                     fontWeight, fontStyle, allowKatex = allowKatex
                 )"""
-)
 
-# Vérifications avant toute écriture.
-for relative, content in contents.items():
-    if not content.strip():
-        stop(f"Le contenu de {relative} est vide.")
+checks = [
+    (rich, old_call, new_call),
+    (table, old_signature, new_signature),
+]
 
+for path, old, new in checks:
+    if originals[path].count(old) != 1:
+        sys.exit(
+            f"Structure inattendue dans {path}. "
+            "Aucune modification effectuée."
+        )
+
+if originals[table].count(old_segment) != 1:
+    sys.exit("Appel RichText des segments HTML inattendu.")
+
+# Sauvegarde.
 backup = Path.home() / "kalyno-backups" / (
-    "katex-speed-" + datetime.now().strftime("%Y%m%d-%H%M%S")
+    "fix-katex-build-" + datetime.now().strftime("%Y%m%d-%H%M%S")
 )
 backup.mkdir(parents=True, exist_ok=False)
 
-for relative in FILES:
-    source = ROOT / relative
-    destination = backup / relative
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(source, destination)
+for p in targets:
+    dest = backup / p.relative_to(root)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(p, dest)
 
-try:
-    for relative, content in contents.items():
-        (ROOT / relative).write_text(content, encoding="utf-8")
-except Exception as error:
-    print("Erreur pendant l'écriture :", error)
-    print("Sauvegarde disponible :", backup)
-    stop("Écriture interrompue. Restaure les fichiers depuis la sauvegarde.")
+# Correctifs.
+updated_rich = originals[rich].replace(old_call, new_call, 1)
+updated_table = originals[table].replace(old_signature, new_signature, 1)
+
+updated_table = updated_table.replace(
+    old_segment,
+    old_segment,
+    1
+)
+
+# Écriture.
+rich.write_text(updated_rich, encoding="utf-8")
+table.write_text(updated_table, encoding="utf-8")
 
 check = subprocess.run(
-    ["git", "-C", str(ROOT), "diff", "--check"],
-    capture_output=True, text=True
+    ["git", "-C", str(root), "diff", "--check"],
+    capture_output=True,
+    text=True
 )
 
 if check.returncode != 0:
-    print(check.stdout)
-    print(check.stderr)
-    print("Sauvegarde :", backup)
-    stop("git diff --check a détecté un problème.")
+    print(check.stdout, check.stderr)
+    sys.exit("Échec de git diff --check. Sauvegarde : " + str(backup))
 
-print("\nCORRECTIF APPLIQUÉ")
+print("Correctif appliqué.")
 print("Sauvegarde :", backup)
-print("\nFichiers modifiés :")
-for relative in FILES:
-    print(" -", relative)
-
-print("\nRésumé Git :")
-subprocess.run(["git", "-C", str(ROOT), "diff", "--stat"])
-print("\nVérification des espaces : OK")
-print("Aucun commit ni push automatique.")
+subprocess.run(["git", "-C", str(root), "diff", "--stat"])

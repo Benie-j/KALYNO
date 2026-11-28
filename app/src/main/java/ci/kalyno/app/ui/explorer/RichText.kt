@@ -479,7 +479,7 @@ fun RichText(
     if (containsTable(renderedHtml)) {
         RichTextWithTables(
             renderedHtml, color, fontSize, lineHeight,
-            fontWeight, fontStyle, allowKatex
+            fontWeight, fontStyle
         )
         return
     }

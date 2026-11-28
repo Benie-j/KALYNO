@@ -39,7 +39,8 @@ internal fun RichTextWithTables(
     fontSize: TextUnit,
     lineHeight: TextUnit,
     fontWeight: FontWeight,
-    fontStyle: FontStyle
+    fontStyle: FontStyle,
+    allowKatex: Boolean = true
 ) {
     val segments = remember(html) { splitTables(html) }
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
