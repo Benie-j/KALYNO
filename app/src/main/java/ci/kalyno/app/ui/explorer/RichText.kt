@@ -435,7 +435,7 @@ private fun buildInline(
         }
     }
 
-    val sizePx = with(density) { fontSize.toPx() } * (if (block.kind == RKind.DISPLAY) 1.15f else 1f)
+    val sizePx = with(density) { fontSize.toPx() } * (if (block.kind == RKind.DISPLAY) 1.45f else 1.25f)
     for ((id, tex) in block.maths) {
         val (drawable, failure) = buildDrawable(tex, sizePx, color.toArgb())
         val w = drawable?.intrinsicWidth ?: 0

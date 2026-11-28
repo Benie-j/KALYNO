@@ -1,0 +1,26 @@
+diff --git a/app/src/main/assets/katex/lesson.html b/app/src/main/assets/katex/lesson.html
+index a301085..25ae53f 100644
+--- a/app/src/main/assets/katex/lesson.html
++++ b/app/src/main/assets/katex/lesson.html
+@@ -16,7 +16,7 @@ blockquote{border-left:3px solid #0F766E;padding-left:10px}
+ ul,ol{padding-left:22px}
+ sup,sub{font-size:.75em}
+ b,strong{font-weight:700}
+-.katex{font-size:1.08em;text-indent:0}
++.katex{font-size:1.25em;text-indent:0}
+ .katex-display{margin:.5em 0;overflow:visible}
+ .frac{display:inline-flex;flex-direction:column;vertical-align:middle;text-align:center}
+ .frac .fn{border-bottom:1px solid currentColor;padding:0 .2em}
+diff --git a/app/src/main/java/ci/kalyno/app/ui/explorer/RichText.kt b/app/src/main/java/ci/kalyno/app/ui/explorer/RichText.kt
+index ecda218..742329c 100644
+--- a/app/src/main/java/ci/kalyno/app/ui/explorer/RichText.kt
++++ b/app/src/main/java/ci/kalyno/app/ui/explorer/RichText.kt
+@@ -435,7 +435,7 @@ private fun buildInline(
+         }
+     }
+ 
+-    val sizePx = with(density) { fontSize.toPx() } * (if (block.kind == RKind.DISPLAY) 1.15f else 1f)
++    val sizePx = with(density) { fontSize.toPx() } * (if (block.kind == RKind.DISPLAY) 1.45f else 1.25f)
+     for ((id, tex) in block.maths) {
+         val (drawable, failure) = buildDrawable(tex, sizePx, color.toArgb())
+         val w = drawable?.intrinsicWidth ?: 0
