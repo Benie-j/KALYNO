@@ -23,6 +23,8 @@ import androidx.compose.ui.graphics.Color
 import ci.kalyno.app.ui.theme.KalynoLightBlue
 import ci.kalyno.app.ui.theme.KalynoYellow
 
+import ci.kalyno.app.data.SupabaseLearningRepository
+import ci.kalyno.app.ui.explorer.LearningContentCache
 import ci.kalyno.app.ui.explorer.RichText
 import android.content.Context
 import ci.kalyno.app.data.SupabaseConfig
@@ -143,7 +145,7 @@ private class GeneratedExerciseApi(private val context: Context) {
 }
 
 @Composable
-fun GeneratedExercisesScreen() {
+fun GeneratedExercisesScreen(levelId: String? = null) {
     val context = LocalContext.current
     val api = remember { GeneratedExerciseApi(context) }
     val scope = rememberCoroutineScope()
@@ -206,6 +208,26 @@ fun GeneratedExercisesScreen() {
     LaunchedEffect(Unit) {
         exercises = loadCache()
         refresh()
+    }
+
+    // Noms des disciplines, leçons et séances : cache local d'abord, réseau seulement si une leçon reste inconnue
+    var catalog by remember { mutableStateOf(ExerciseCatalog.EMPTY) }
+    var catalogFetched by remember { mutableStateOf(false) }
+
+    LaunchedEffect(levelId) {
+        val level = levelId ?: return@LaunchedEffect
+        val cached = withContext(Dispatchers.IO) { LearningContentCache(context).read(level) }
+        if (!cached.isNullOrEmpty()) catalog = ExerciseCatalog(cached)
+    }
+
+    LaunchedEffect(levelId, exercises, catalog) {
+        val level = levelId ?: return@LaunchedEffect
+        if (catalogFetched || exercises.isEmpty() || exercises.all { catalog.knows(it) }) return@LaunchedEffect
+        catalogFetched = true
+        val fresh = withContext(Dispatchers.IO) {
+            runCatching { SupabaseLearningRepository().loadPublishedContent(level) }.getOrNull()
+        }
+        if (!fresh.isNullOrEmpty()) catalog = ExerciseCatalog(fresh)
     }
 
     fun openExercise(exercise: JSONObject) {
@@ -310,7 +332,8 @@ fun GeneratedExercisesScreen() {
             onFilterChange = { filter = it },
             isCompleted = { isCompleted(it) },
             onRefresh = { refresh() },
-            onOpen = { openExercise(it) }
+            onOpen = { openExercise(it) },
+            catalog = catalog
         )
     } else {
         val currentId = current.optString("id")

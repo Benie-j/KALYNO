@@ -294,7 +294,8 @@ internal fun ExerciseListContent(
     onFilterChange: (String) -> Unit,
     isCompleted: (JSONObject) -> Boolean,
     onRefresh: () -> Unit,
-    onOpen: (JSONObject) -> Unit
+    onOpen: (JSONObject) -> Unit,
+    catalog: ExerciseCatalog = ExerciseCatalog.EMPTY
 ) {
     val haptic = rememberHaptic()
     val completedCount = exercises.count { isCompleted(it) }
@@ -498,17 +499,13 @@ internal fun ExerciseListContent(
                 onRefresh = onRefresh
             )
 
-            else -> Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                visible.forEachIndexed { index, exercise ->
-                    ExerciseCard(
-                        number = exercises.indexOf(exercise) + 1,
-                        exercise = exercise,
-                        done = isCompleted(exercise),
-                        onClick = { onOpen(exercise) },
-                        modifier = Modifier.entrance(index + 3, stepMillis = 60)
-                    )
-                }
-            }
+            else -> GroupedExerciseList(
+                groups = catalog.group(exercises, visible, isCompleted),
+                filter = filter,
+                numberOf = { exercises.indexOf(it) + 1 },
+                isCompleted = isCompleted,
+                onOpen = onOpen
+            )
         }
     }
 }
@@ -585,7 +582,7 @@ private fun SegmentedFilter(
 
 /** Un défi présenté comme un ticket : numéro, type, titre, aperçu de l'énoncé, difficulté. */
 @Composable
-private fun ExerciseCard(
+internal fun ExerciseCard(
     number: Int,
     exercise: JSONObject,
     done: Boolean,

@@ -199,7 +199,7 @@ fun MainScreen(
                         onRetry = viewModel::retry,
                         onStartFreeExercises = viewModel::startFreeExercises
                     )
-                    2 -> GeneratedExercisesScreen()
+                    2 -> GeneratedExercisesScreen(levelId = levelId)
                     3 -> ExplorerScreen(
                         levelId = levelId,
                         onStartChapter = viewModel::startCustomSession
