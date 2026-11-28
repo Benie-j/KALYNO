@@ -1,0 +1,35 @@
+diff --git a/app/src/main/java/ci/kalyno/app/ui/explorer/RichText.kt b/app/src/main/java/ci/kalyno/app/ui/explorer/RichText.kt
+index ca3e7eb..ecda218 100644
+--- a/app/src/main/java/ci/kalyno/app/ui/explorer/RichText.kt
++++ b/app/src/main/java/ci/kalyno/app/ui/explorer/RichText.kt
+@@ -29,6 +29,7 @@ import androidx.compose.runtime.remember
+ import androidx.compose.ui.Alignment
+ import androidx.compose.ui.Modifier
+ import androidx.compose.ui.graphics.Color
++import androidx.compose.ui.graphics.toArgb
+ import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+ import androidx.compose.ui.graphics.nativeCanvas
+ import androidx.compose.ui.platform.LocalDensity
+@@ -391,11 +392,11 @@ private fun texVariants(tex: String): List<String> {
+     return list.distinct()
+ }
+ 
+-private fun buildDrawable(tex: String, sizePx: Float): Pair<JLatexMathDrawable?, Throwable?> {
++private fun buildDrawable(tex: String, sizePx: Float, argb: Int): Pair<JLatexMathDrawable?, Throwable?> {
+     var error: Throwable? = null
+     for (variant in texVariants(tex)) {
+         try {
+-            return Pair(JLatexMathDrawable.builder(variant).textSize(sizePx).padding(1).build(), null)
++            return Pair(JLatexMathDrawable.builder(variant).textSize(sizePx).color(argb).padding(1).build(), null)
+         } catch (e: Throwable) {
+             if (error == null) error = e
+         }
+@@ -436,7 +437,7 @@ private fun buildInline(
+ 
+     val sizePx = with(density) { fontSize.toPx() } * (if (block.kind == RKind.DISPLAY) 1.15f else 1f)
+     for ((id, tex) in block.maths) {
+-        val (drawable, failure) = buildDrawable(tex, sizePx)
++        val (drawable, failure) = buildDrawable(tex, sizePx, color.toArgb())
+         val w = drawable?.intrinsicWidth ?: 0
+         val h = drawable?.intrinsicHeight ?: 0
+         result[id] = if (drawable != null && w > 0 && h > 0) {
