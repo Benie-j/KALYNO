@@ -252,7 +252,7 @@ fun ExplorerScreen(
 }
 
 // ===========================================================================
-// ACCUEIL EXPLORER v3 : Mission du jour -> Disciplines -> Recherche -> Onglets -> Contenu
+// ACCUEIL EXPLORER v3 : Mission du jour -> Recherche -> Disciplines (liste verticale) -> Résultats
 // ===========================================================================
 
 @Composable
@@ -322,28 +322,21 @@ private fun ExplorerHome(
             )
         }
 
+        // Recherche : au-dessus des disciplines, pour retrouver un cours ou une leçon
+        SearchField(
+            value = ui.query,
+            onValueChange = viewModel::onQueryChange,
+            modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 18.dp).entrance(index = 2)
+        )
+
         AnimatedVisibility(visible = !searching && (ui.loading || ui.disciplines.isNotEmpty())) {
-            DisciplineCarousel(
+            DisciplineList(
                 disciplines = ui.disciplines,
                 progressById = progressByDiscipline,
                 pressedId = ui.pressedDisciplineId,
                 loading = ui.loading && ui.disciplines.isEmpty(),
                 onClick = viewModel::onDisciplineClick,
-                modifier = Modifier.padding(bottom = 18.dp).entrance(index = 2)
-            )
-        }
-
-        SearchField(
-            value = ui.query,
-            onValueChange = viewModel::onQueryChange,
-            modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 14.dp).entrance(index = 3)
-        )
-
-        AnimatedVisibility(visible = !searching) {
-            ExplorerSegmented(
-                selected = ui.filter,
-                onSelect = viewModel::onFilterChange,
-                modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 18.dp).entrance(index = 4)
+                modifier = Modifier.padding(bottom = 18.dp)
             )
         }
 
@@ -370,7 +363,8 @@ private fun ExplorerHome(
         val visible = ui.visibleChapters
 
         when {
-            ui.loading -> ExplorerSkeleton()
+            // Le chargement est déjà montré par la liste des disciplines
+            ui.loading -> Unit
 
             ui.error != null -> KalynoErrorCard(
                 message = ui.error ?: "",
@@ -384,13 +378,6 @@ private fun ExplorerHome(
                 text = "Tes profs préparent de nouveaux parcours pour toi. Reviens vite, on est ensemble."
             )
 
-            ui.filter == ExplorerFilter.COMMUNITY -> CommunityBanner(
-                progress = ui.subjectProgress,
-                levelLabel = Levels.label(levelId),
-                onOpenLeaderboard = onOpenLeaderboard,
-                modifier = Modifier.padding(horizontal = 16.dp)
-            )
-
             visible.isEmpty() -> KalynoIconEmptyState(
                 icon = "search",
                 title = "Rien trouvé",
@@ -399,30 +386,7 @@ private fun ExplorerHome(
 
             searching -> SearchResultsBlock(chapters = visible, onStart = onStart, onOpen = onOpenLesson)
 
-            else -> AnimatedContent(
-                targetState = ui.filter,
-                transitionSpec = {
-                    (fadeIn(tween(240)) + slideInVertically(tween(280)) { it / 24 }) togetherWith
-                        fadeOut(tween(120))
-                },
-                label = "explorerFilter"
-            ) { filter ->
-                Column(verticalArrangement = Arrangement.spacedBy(22.dp)) {
-                    when (filter) {
-                        ExplorerFilter.FOR_YOU -> FreshBlock(chapters = visible, onOpen = onOpenLesson)
-
-                        ExplorerFilter.CHALLENGES -> ChallengesBlock(
-                            chapters = visible,
-                            onStart = onStart,
-                            onOpen = onOpenLesson
-                        )
-
-                        ExplorerFilter.PATHS -> PathsBlock(chapters = visible, onOpen = onOpenLesson)
-
-                        ExplorerFilter.COMMUNITY -> Unit
-                    }
-                }
-            }
+            else -> Unit
         }
     }
 }
@@ -445,7 +409,7 @@ private fun SearchField(
         singleLine = true,
         textStyle = androidx.compose.ui.text.TextStyle(fontSize = 14.sp),
         shape = RoundedCornerShape(18.dp),
-        placeholder = { Text("Rechercher un cours, une matière…", color = KalynoMuted, fontSize = 14.sp) },
+        placeholder = { Text("Rechercher un cours ou une leçon…", color = KalynoMuted, fontSize = 14.sp) },
         leadingIcon = { KalynoSvgIcon(name = "search", size = 18.dp, tint = KalynoMuted) },
         trailingIcon = {
             if (value.isNotEmpty()) {

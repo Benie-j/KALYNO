@@ -78,7 +78,6 @@ import kotlin.math.roundToInt
 // Aucune donnée inventée : tout vient de l'état réel (progression, FSRS, série).
 // ===========================================================================
 
-private val PATH_ICON_KEYS = listOf("book-open", "brain", "rocket", "dumbbell", "radio-tower", "flame")
 
 /** Une leçon est terminée quand toutes ses cartes ont été découvertes. */
 internal fun ExplorerChapter.isFinished(): Boolean = questionCount > 0 && discovered >= questionCount
@@ -358,11 +357,11 @@ internal fun ExplorerSectionTitle(
 }
 
 // ---------------------------------------------------------------------------
-// Disciplines : tuiles avec progression
+// Disciplines : liste verticale, une carte par matière
 // ---------------------------------------------------------------------------
 
 @Composable
-internal fun DisciplineCarousel(
+internal fun DisciplineList(
     disciplines: List<Discipline>,
     progressById: Map<String, Float>,
     pressedId: String?,
@@ -372,35 +371,32 @@ internal fun DisciplineCarousel(
 ) {
     if (!loading && disciplines.isEmpty()) return
 
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
         ExplorerSectionTitle(
             title = "Disciplines",
             subtitle = "Touche une matière pour ouvrir son parcours",
-            modifier = Modifier.padding(horizontal = 16.dp)
+            modifier = Modifier.padding(horizontal = 16.dp),
+            trailing = if (loading) null else plural(disciplines.size, "matière", "matières")
         )
-        if (loading) {
-            Row(
-                modifier = Modifier.padding(horizontal = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            if (loading) {
                 repeat(3) {
                     ShimmerBlock(
-                        modifier = Modifier.width(138.dp).height(150.dp),
+                        modifier = Modifier.fillMaxWidth().height(92.dp),
                         shape = RoundedCornerShape(22.dp)
                     )
                 }
-            }
-        } else {
-            LazyRow(
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                items(disciplines, key = { it.id }) { discipline ->
-                    DisciplineTile(
+            } else {
+                disciplines.forEachIndexed { index, discipline ->
+                    DisciplineRow(
                         discipline = discipline,
                         progress = progressById[discipline.id] ?: 0f,
                         selected = discipline.id == pressedId,
-                        onClick = { onClick(discipline.id) }
+                        onClick = { onClick(discipline.id) },
+                        modifier = Modifier.entrance(index = index, stepMillis = 50)
                     )
                 }
             }
@@ -409,30 +405,31 @@ internal fun DisciplineCarousel(
 }
 
 @Composable
-private fun DisciplineTile(
+private fun DisciplineRow(
     discipline: Discipline,
     progress: Float,
     selected: Boolean,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val haptic = rememberHaptic()
-    val container by animateColorAsState(if (selected) KalynoBlue else Color.White, tween(120), label = "tileBg")
-    val border by animateColorAsState(if (selected) KalynoBlue else KalynoOutline, tween(120), label = "tileBorder")
-    val title by animateColorAsState(if (selected) Color.White else KalynoText, tween(120), label = "tileTitle")
+    val container by animateColorAsState(if (selected) KalynoBlue else Color.White, tween(120), label = "rowBg")
+    val border by animateColorAsState(if (selected) KalynoBlue else KalynoOutline, tween(120), label = "rowBorder")
+    val title by animateColorAsState(if (selected) Color.White else KalynoText, tween(120), label = "rowTitle")
     val meta by animateColorAsState(
         if (selected) Color.White.copy(alpha = 0.85f) else KalynoMuted,
         tween(120),
-        label = "tileMeta"
+        label = "rowMeta"
     )
     val iconBg by animateColorAsState(
         if (selected) Color.White.copy(alpha = 0.2f) else KalynoBlueSoft,
         tween(120),
-        label = "tileIconBg"
+        label = "rowIconBg"
     )
-    val iconTint by animateColorAsState(if (selected) Color.White else KalynoBlue, tween(120), label = "tileIcon")
+    val iconTint by animateColorAsState(if (selected) Color.White else KalynoBlue, tween(120), label = "rowIcon")
 
     KalynoCard(
-        modifier = Modifier.width(138.dp),
+        modifier = modifier.fillMaxWidth(),
         onClick = {
             haptic()
             onClick()
@@ -442,282 +439,60 @@ private fun DisciplineTile(
         borderColor = border,
         contentPadding = 14.dp
     ) {
-        Box(
-            modifier = Modifier
-                .size(42.dp)
-                .clip(RoundedCornerShape(14.dp))
-                .background(iconBg),
-            contentAlignment = Alignment.Center
-        ) {
-            KalynoSvgIcon(name = iconAssetFor(discipline.iconKey), size = 22.dp, tint = iconTint)
-        }
-        Spacer(Modifier.height(12.dp))
-        Text(
-            text = discipline.name,
-            color = title,
-            fontSize = 15.sp,
-            lineHeight = 19.sp,
-            fontWeight = FontWeight.ExtraBold,
-            minLines = 2,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis
-        )
-        Spacer(Modifier.height(10.dp))
-        KalynoProgressBar(
-            progress = progress,
-            height = 5.dp,
-            color = if (selected) Color.White else KalynoBlue,
-            track = if (selected) Color.White.copy(alpha = 0.25f) else KalynoBlueSoft
-        )
-        Spacer(Modifier.height(6.dp))
-        Text(
-            text = "${plural(discipline.lessonCount, "leçon", "leçons")} · ${(progress * 100).roundToInt()}%",
-            color = meta,
-            fontSize = 11.5.sp,
-            fontWeight = FontWeight.Medium,
-            maxLines = 1
-        )
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Sélecteur segmenté à pastille glissante
-// ---------------------------------------------------------------------------
-
-@Composable
-internal fun ExplorerSegmented(
-    selected: ExplorerFilter,
-    onSelect: (ExplorerFilter) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val haptic = rememberHaptic()
-    val options = remember { ExplorerFilter.entries.filter { it != ExplorerFilter.COMMUNITY } }
-    val index = options.indexOf(selected).coerceAtLeast(0)
-    val trackShape = RoundedCornerShape(18.dp)
-    val pillShape = RoundedCornerShape(14.dp)
-
-    BoxWithConstraints(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(trackShape)
-            .background(KalynoBlueSoft)
-            .padding(4.dp)
-    ) {
-        val segment: Dp = maxWidth / options.size
-        val pillX by animateDpAsState(
-            targetValue = segment * index,
-            animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessMedium),
-            label = "segmentX"
-        )
-        Box(
-            modifier = Modifier
-                .offset(x = pillX)
-                .width(segment)
-                .height(40.dp)
-                .shadow(2.dp, pillShape, ambientColor = KalynoShadow, spotColor = KalynoShadow)
-                .background(KalynoBlue, pillShape)
-        )
-        Row(modifier = Modifier.fillMaxWidth()) {
-            options.forEach { filter ->
-                val isSelected = filter == selected
-                val textColor by animateColorAsState(
-                    if (isSelected) Color.White else KalynoBlue,
-                    tween(160),
-                    label = "segmentText"
-                )
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(40.dp)
-                        .clip(pillShape)
-                        .clickable {
-                            if (!isSelected) {
-                                haptic()
-                                onSelect(filter)
-                            }
-                        },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = filter.label,
-                        color = textColor,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        maxLines = 1
-                    )
-                }
-            }
-        }
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Nouveaux parcours
-// ---------------------------------------------------------------------------
-
-@Composable
-internal fun FreshBlock(chapters: List<ExplorerChapter>, onOpen: (ExplorerChapter) -> Unit) {
-    val latest = remember(chapters) { chapters.takeLast(6).reversed() }
-    if (latest.isEmpty()) return
-
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        ExplorerSectionTitle(
-            title = "Nouveaux parcours",
-            subtitle = "Publiés en direct par tes profs",
-            modifier = Modifier.padding(horizontal = 16.dp)
-        )
-        LazyRow(
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            items(latest, key = { it.id }) { chapter ->
-                FreshCard(chapter = chapter, onClick = { onOpen(chapter) })
-            }
-        }
-    }
-}
-
-@Composable
-private fun FreshCard(chapter: ExplorerChapter, onClick: () -> Unit) {
-    val index = (chapter.id.hashCode() and Int.MAX_VALUE) % PATH_ICON_KEYS.size
-    val warm = index % 2 == 1
-    val gradient = if (warm) listOf(KalynoAmberSoft, Color.White) else listOf(KalynoBlueSoft, Color.White)
-    val tint = if (warm) KalynoYellow else KalynoBlue
-
-    KalynoCard(
-        modifier = Modifier.width(190.dp),
-        onClick = onClick,
-        shape = RoundedCornerShape(24.dp),
-        contentPadding = 0.dp
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(88.dp)
-                .background(Brush.linearGradient(gradient))
-        ) {
-            DriftingBlob(
-                modifier = Modifier
-                    .size(80.dp)
-                    .align(Alignment.TopEnd)
-                    .offset(x = 24.dp, y = (-20).dp),
-                color = tint.copy(alpha = 0.12f)
-            )
+        Row(verticalAlignment = Alignment.CenterVertically) {
             Box(
                 modifier = Modifier
-                    .padding(14.dp)
-                    .size(46.dp)
-                    .clip(RoundedCornerShape(15.dp))
-                    .background(Color.White)
-                    .align(Alignment.BottomStart),
+                    .size(52.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(iconBg),
                 contentAlignment = Alignment.Center
             ) {
-                KalynoSvgIcon(name = PATH_ICON_KEYS[index], size = 24.dp, tint = tint)
+                KalynoSvgIcon(name = iconAssetFor(discipline.iconKey), size = 26.dp, tint = iconTint)
             }
-        }
-        Column(modifier = Modifier.padding(14.dp)) {
-            Text(
-                text = chapter.title,
-                color = KalynoText,
-                fontSize = 15.sp,
-                lineHeight = 19.sp,
-                fontWeight = FontWeight.ExtraBold,
-                minLines = 2,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-            Spacer(Modifier.height(4.dp))
-            Text(
-                text = chapter.subjectName,
-                color = KalynoMuted,
-                fontSize = 12.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Spacer(Modifier.height(8.dp))
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            Spacer(Modifier.width(14.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = discipline.name,
+                    color = title,
+                    fontSize = 16.sp,
+                    lineHeight = 20.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = "${plural(discipline.lessonCount, "leçon", "leçons")} · ${(progress * 100).roundToInt()}%",
+                    color = meta,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1
+                )
+                Spacer(Modifier.height(8.dp))
+                KalynoProgressBar(
+                    progress = progress,
+                    height = 6.dp,
+                    color = if (selected) Color.White else KalynoBlue,
+                    track = if (selected) Color.White.copy(alpha = 0.25f) else KalynoBlueSoft
+                )
+            }
+            Spacer(Modifier.width(10.dp))
+            Box(
+                modifier = Modifier
+                    .size(32.dp)
+                    .clip(CircleShape)
+                    .background(iconBg),
+                contentAlignment = Alignment.Center
             ) {
-                KalynoPill(text = "Nouveau", container = KalynoBlueSoft, content = KalynoBlue, fontSize = 10)
-                SmartTagPill(chapter.tag)
+                KalynoSvgIcon(name = "chevron-right", size = 16.dp, tint = iconTint)
             }
         }
     }
 }
 
 // ---------------------------------------------------------------------------
-// Défis
+// Carte de leçon (résultats de recherche)
 // ---------------------------------------------------------------------------
-
-@Composable
-internal fun ChallengesBlock(
-    chapters: List<ExplorerChapter>,
-    onStart: (ExplorerChapter) -> Unit,
-    onOpen: (ExplorerChapter) -> Unit
-) {
-    // Une rangée par discipline (ordre de l'admin), avec ses leçons dans l'ordre de l'admin
-    val groups = remember(chapters) {
-        chapters.filter { it.questionCount > 0 }.groupBy { it.subjectId }.values.toList()
-    }
-
-    Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
-        ExplorerSectionTitle(
-            title = "Défis",
-            subtitle = "Teste-toi discipline par discipline",
-            modifier = Modifier.padding(horizontal = 16.dp)
-        )
-        if (groups.isEmpty()) {
-            Text(
-                text = "Aucun défi disponible pour le moment.",
-                color = KalynoMuted,
-                fontSize = 14.sp,
-                modifier = Modifier.padding(horizontal = 20.dp)
-            )
-        }
-        groups.forEach { lessons ->
-            val first = lessons.first()
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(horizontal = 20.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(30.dp)
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(KalynoBlueSoft),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        KalynoSvgIcon(name = iconAssetFor(first.subjectIconKey), size = 16.dp, tint = KalynoBlue)
-                    }
-                    Spacer(Modifier.width(10.dp))
-                    Text(
-                        text = first.subjectName,
-                        color = KalynoText,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        modifier = Modifier.weight(1f)
-                    )
-                    KalynoPill(text = plural(lessons.size, "défi", "défis"), fontSize = 11)
-                }
-                LazyRow(
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    items(lessons, key = { it.id }) { chapter ->
-                        ChallengeCard(
-                            chapter = chapter,
-                            onStart = { onStart(chapter) },
-                            onOpen = { onOpen(chapter) },
-                            modifier = Modifier.width(280.dp)
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
 
 /** Carte de défi : anneau de progression, méta, et une action claire « S'entraîner ». */
 @Composable
@@ -812,194 +587,6 @@ internal fun ChallengeCard(
                     fontSize = 12.5.sp,
                     fontWeight = FontWeight.ExtraBold
                 )
-            }
-        }
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Parcours : frise verticale par discipline
-// ---------------------------------------------------------------------------
-
-@Composable
-internal fun PathsBlock(chapters: List<ExplorerChapter>, onOpen: (ExplorerChapter) -> Unit) {
-    val bySubject = remember(chapters) { chapters.groupBy { it.subjectId }.values.toList() }
-
-    Column(
-        modifier = Modifier.padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(22.dp)
-    ) {
-        bySubject.forEachIndexed { groupIndex, list ->
-            val currentId = list.firstOrNull { !it.isFinished() }?.id
-            val done = list.count { it.isFinished() }
-            Column(modifier = Modifier.entrance(index = groupIndex)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(36.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(KalynoBlueSoft),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        KalynoSvgIcon(
-                            name = iconAssetFor(list.first().subjectIconKey),
-                            size = 19.dp,
-                            tint = KalynoBlue
-                        )
-                    }
-                    Spacer(Modifier.width(10.dp))
-                    Text(
-                        text = list.first().subjectName,
-                        color = KalynoText,
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        modifier = Modifier.weight(1f)
-                    )
-                    KalynoPill(text = "$done/${list.size}", fontSize = 11)
-                }
-                Spacer(Modifier.height(10.dp))
-                list.forEachIndexed { index, chapter ->
-                    PathStep(
-                        chapter = chapter,
-                        number = index + 1,
-                        isCurrent = chapter.id == currentId,
-                        isFirst = index == 0,
-                        isLast = index == list.lastIndex,
-                        aboveDone = index > 0 && list[index - 1].isFinished(),
-                        onClick = { onOpen(chapter) }
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun PathStep(
-    chapter: ExplorerChapter,
-    number: Int,
-    isCurrent: Boolean,
-    isFirst: Boolean,
-    isLast: Boolean,
-    aboveDone: Boolean,
-    onClick: () -> Unit
-) {
-    val done = chapter.isFinished()
-    val pulse = rememberPulse(min = 1f, max = 1.14f, durationMillis = 900)
-    val nodeTop = 18.dp
-
-    Row(modifier = Modifier.height(IntrinsicSize.Min)) {
-        Box(
-            modifier = Modifier
-                .width(34.dp)
-                .fillMaxHeight()
-                .drawBehind {
-                    val x = size.width / 2f
-                    val stroke = 3.dp.toPx()
-                    val nodeY = nodeTop.toPx() + 14.dp.toPx()
-                    if (!isFirst) {
-                        drawLine(
-                            color = if (aboveDone) KalynoBlue else KalynoOutline,
-                            start = Offset(x, 0f),
-                            end = Offset(x, nodeY),
-                            strokeWidth = stroke,
-                            cap = StrokeCap.Round
-                        )
-                    }
-                    if (!isLast) {
-                        drawLine(
-                            color = if (done) KalynoBlue else KalynoOutline,
-                            start = Offset(x, nodeY),
-                            end = Offset(x, size.height),
-                            strokeWidth = stroke,
-                            cap = StrokeCap.Round
-                        )
-                    }
-                },
-            contentAlignment = Alignment.TopCenter
-        ) {
-            Box(
-                modifier = Modifier
-                    .padding(top = nodeTop)
-                    .size(28.dp)
-                    .graphicsLayer {
-                        val s = if (isCurrent) pulse else 1f
-                        scaleX = s
-                        scaleY = s
-                    }
-                    .clip(CircleShape)
-                    .background(if (done) KalynoBlue else Color.White)
-                    .then(
-                        // Une largeur de 0.dp dessinerait un trait fin : pas de bordure quand c'est terminé
-                        if (done) Modifier
-                        else Modifier.border(2.dp, if (isCurrent) KalynoBlue else KalynoOutline, CircleShape)
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                if (done) {
-                    KalynoSvgIcon(name = "check", size = 14.dp, tint = Color.White)
-                } else {
-                    Text(
-                        text = "$number",
-                        color = if (isCurrent) KalynoBlue else KalynoMuted,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.ExtraBold
-                    )
-                }
-            }
-        }
-
-        Box(modifier = Modifier.weight(1f).padding(bottom = 10.dp)) {
-            KalynoCard(
-                modifier = Modifier.fillMaxWidth(),
-                onClick = onClick,
-                shape = RoundedCornerShape(20.dp),
-                borderColor = if (isCurrent) KalynoBlue else KalynoOutline,
-                contentPadding = 14.dp
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        if (isCurrent) {
-                            KalynoPill(
-                                text = "EN COURS",
-                                container = KalynoAmberSoft,
-                                content = KalynoAmberDeep,
-                                fontSize = 10
-                            )
-                            Spacer(Modifier.height(6.dp))
-                        }
-                        Text(
-                            text = chapter.title,
-                            color = KalynoText,
-                            fontSize = 15.sp,
-                            lineHeight = 19.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Spacer(Modifier.height(3.dp))
-                        Text(
-                            text = if (chapter.questionCount > 0) {
-                                "${plural(chapter.questionCount, "question", "questions")} · ${chapter.minutes} min"
-                            } else {
-                                "Leçon à lire"
-                            },
-                            color = KalynoMuted,
-                            fontSize = 12.sp
-                        )
-                    }
-                    if (chapter.questionCount > 0) {
-                        Spacer(Modifier.width(10.dp))
-                        KalynoRing(progress = chapter.progress, diameter = 42.dp, strokeWidth = 4.dp) {
-                            Text(
-                                text = "${(chapter.progress * 100).roundToInt()}",
-                                color = KalynoBlue,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.ExtraBold
-                            )
-                        }
-                    }
-                }
             }
         }
     }
