@@ -1,0 +1,1029 @@
+diff --git a/app/src/main/java/ci/kalyno/app/ui/components/KalynoMotion.kt b/app/src/main/java/ci/kalyno/app/ui/components/KalynoMotion.kt
+index 5ae358c..4f6892a 100644
+--- a/app/src/main/java/ci/kalyno/app/ui/components/KalynoMotion.kt
++++ b/app/src/main/java/ci/kalyno/app/ui/components/KalynoMotion.kt
+@@ -5,6 +5,7 @@ import androidx.compose.animation.core.FastOutSlowInEasing
+ import androidx.compose.animation.core.RepeatMode
+ import androidx.compose.animation.core.animateFloat
+ import androidx.compose.animation.core.infiniteRepeatable
++import androidx.compose.animation.core.keyframes
+ import androidx.compose.animation.core.rememberInfiniteTransition
+ import androidx.compose.animation.core.tween
+ import androidx.compose.foundation.Canvas
+@@ -23,8 +24,10 @@ import androidx.compose.ui.Alignment
+ import androidx.compose.ui.Modifier
+ import androidx.compose.ui.composed
+ import androidx.compose.ui.draw.clip
++import androidx.compose.ui.draw.drawWithContent
+ import androidx.compose.ui.geometry.Offset
+ import androidx.compose.ui.geometry.Size
++import androidx.compose.ui.graphics.Brush
+ import androidx.compose.ui.graphics.Color
+ import androidx.compose.ui.graphics.StrokeCap
+ import androidx.compose.ui.graphics.drawscope.Stroke
+@@ -187,3 +190,43 @@ fun DriftingBlob(
+             .background(color)
+     )
+ }
++
++/**
++ * Reflet lumineux qui balaie le composant à intervalles réguliers (bouton principal, barre de progression).
++ * À placer APRÈS le clip de la forme, pour que le reflet épouse les coins arrondis.
++ */
++fun Modifier.shineSweep(
++    periodMillis: Int = 3400,
++    sweepMillis: Int = 850,
++    color: Color = Color.White.copy(alpha = 0.38f)
++): Modifier = composed {
++    val transition = rememberInfiniteTransition(label = "shine")
++    val t by transition.animateFloat(
++        initialValue = 0f,
++        targetValue = 1f,
++        animationSpec = infiniteRepeatable(
++            animation = keyframes<Float> {
++                durationMillis = periodMillis
++                0f at 0 using FastOutSlowInEasing
++                1f at sweepMillis
++                1f at periodMillis
++            },
++            repeatMode = RepeatMode.Restart
++        ),
++        label = "shineT"
++    )
++    drawWithContent {
++        drawContent()
++        if (t > 0f && t < 1f) {
++            val band = size.width * 0.4f
++            val x = -band + (size.width + band * 2f) * t
++            drawRect(
++                brush = Brush.linearGradient(
++                    colors = listOf(Color.Transparent, color, Color.Transparent),
++                    start = Offset(x - band / 2f, 0f),
++                    end = Offset(x + band / 2f, size.height)
++                )
++            )
++        }
++    }
++}
+diff --git a/app/src/main/java/ci/kalyno/app/ui/dojo/DojoScreen.kt b/app/src/main/java/ci/kalyno/app/ui/dojo/DojoScreen.kt
+index 16c4dce..5a8b950 100644
+--- a/app/src/main/java/ci/kalyno/app/ui/dojo/DojoScreen.kt
++++ b/app/src/main/java/ci/kalyno/app/ui/dojo/DojoScreen.kt
+@@ -1,15 +1,8 @@
+ package ci.kalyno.app.ui.dojo
+ 
+-import ci.kalyno.app.ui.theme.KalynoCorrectText
+-import ci.kalyno.app.ui.theme.KalynoCorrectSoft
+-import ci.kalyno.app.ui.theme.KalynoCorrect
+-import ci.kalyno.app.ui.components.rememberPulse
+-import ci.kalyno.app.ui.components.rememberCountUp
+-import ci.kalyno.app.ui.components.entrance
+-import ci.kalyno.app.ui.components.KalynoRing
+-import ci.kalyno.app.ui.components.DriftingBlob
+-import androidx.compose.ui.graphics.graphicsLayer
+-import androidx.compose.foundation.layout.offset
++import androidx.compose.animation.core.Animatable
++import androidx.compose.animation.core.FastOutSlowInEasing
++import androidx.compose.animation.core.tween
+ import androidx.compose.foundation.background
+ import androidx.compose.foundation.layout.Arrangement
+ import androidx.compose.foundation.layout.Box
+@@ -19,48 +12,64 @@ import androidx.compose.foundation.layout.Spacer
+ import androidx.compose.foundation.layout.fillMaxSize
+ import androidx.compose.foundation.layout.fillMaxWidth
+ import androidx.compose.foundation.layout.height
++import androidx.compose.foundation.layout.offset
+ import androidx.compose.foundation.layout.padding
+ import androidx.compose.foundation.layout.size
+ import androidx.compose.foundation.layout.width
+ import androidx.compose.foundation.rememberScrollState
++import androidx.compose.foundation.shape.CircleShape
+ import androidx.compose.foundation.shape.RoundedCornerShape
+ import androidx.compose.foundation.verticalScroll
+ import androidx.compose.material3.Text
+ import androidx.compose.runtime.Composable
++import androidx.compose.runtime.LaunchedEffect
++import androidx.compose.runtime.remember
+ import androidx.compose.ui.Alignment
+ import androidx.compose.ui.Modifier
+ import androidx.compose.ui.draw.clip
+ import androidx.compose.ui.graphics.Brush
+ import androidx.compose.ui.graphics.Color
++import androidx.compose.ui.graphics.graphicsLayer
+ import androidx.compose.ui.text.font.FontWeight
++import androidx.compose.ui.text.style.TextOverflow
+ import androidx.compose.ui.unit.dp
+ import androidx.compose.ui.unit.sp
+ import ci.kalyno.app.data.Levels
+ import ci.kalyno.app.data.dashboard.DashboardUiState
+ import ci.kalyno.app.data.dashboard.MissionStatus
++import ci.kalyno.app.ui.components.DriftingBlob
+ import ci.kalyno.app.ui.components.KalynoCard
+ import ci.kalyno.app.ui.components.KalynoErrorCard
+-import ci.kalyno.app.ui.icons.KalynoSvgIcon
+ import ci.kalyno.app.ui.components.KalynoPill
+ import ci.kalyno.app.ui.components.KalynoPrimaryButton
+-import ci.kalyno.app.ui.components.KalynoProgressBar
+-import ci.kalyno.app.ui.components.SectionHeader
++import ci.kalyno.app.ui.components.KalynoRing
+ import ci.kalyno.app.ui.components.ShimmerBlock
+ import ci.kalyno.app.ui.components.StreakBadge
++import ci.kalyno.app.ui.components.entrance
++import ci.kalyno.app.ui.components.rememberCountUp
++import ci.kalyno.app.ui.components.rememberPulse
++import ci.kalyno.app.ui.components.shineSweep
++import ci.kalyno.app.ui.icons.KalynoSvgIcon
+ import ci.kalyno.app.ui.theme.KalynoAmberDeep
+ import ci.kalyno.app.ui.theme.KalynoAmberSoft
+ import ci.kalyno.app.ui.theme.KalynoBlue
+ import ci.kalyno.app.ui.theme.KalynoBlueSoft
+-import ci.kalyno.app.ui.theme.KalynoDanger
+-import ci.kalyno.app.ui.theme.KalynoDangerSoft
++import ci.kalyno.app.ui.theme.KalynoCorrect
++import ci.kalyno.app.ui.theme.KalynoCorrectSoft
++import ci.kalyno.app.ui.theme.KalynoCorrectText
+ import ci.kalyno.app.ui.theme.KalynoMuted
++import ci.kalyno.app.ui.theme.KalynoOutline
+ import ci.kalyno.app.ui.theme.KalynoTealDark
+ import ci.kalyno.app.ui.theme.KalynoText
++import ci.kalyno.app.ui.theme.KalynoYellow
++import kotlin.math.roundToInt
+ 
+ /**
+  * Onglet Dojo : point d'entrée de la répétition espacée.
+  * Les données viennent du [DashboardUiState] (moteur SRS + contenu en ligne, cache Room en secours).
+- * La session de cartes (flip 3D) est [ci.kalyno.app.ui.review.ReviewSessionScreen].
++ * La session de cartes est [DojoSessionScreen].
++ *
++ * Tout ce qui est affiché est réel : aucune statistique inventée (une valeur inconnue s'affiche « — »).
+  */
+ @Composable
+ fun DojoScreen(
+@@ -71,34 +80,18 @@ fun DojoScreen(
+     onRetry: () -> Unit,
+     onStartFreeExercises: () -> Unit = {}
+ ) {
+-    val brainPulse = rememberPulse(min = 1f, max = 1.07f, durationMillis = 1400)
+     Column(
+         modifier = Modifier
+             .fillMaxSize()
+             .verticalScroll(rememberScrollState())
+             .padding(horizontal = 20.dp, vertical = 16.dp),
+-        verticalArrangement = Arrangement.spacedBy(18.dp)
++        verticalArrangement = Arrangement.spacedBy(16.dp)
+     ) {
+-        Row(
+-            modifier = Modifier.fillMaxWidth().entrance(0),
+-            verticalAlignment = Alignment.CenterVertically,
+-            horizontalArrangement = Arrangement.SpaceBetween
+-        ) {
+-            Column(modifier = Modifier.weight(1f)) {
+-                Text(
+-                    text = "Le Dojo 🧠",
+-                    color = KalynoText,
+-                    fontSize = 26.sp,
+-                    fontWeight = FontWeight.ExtraBold
+-                )
+-                Text(
+-                    text = "Répétition espacée · ${Levels.label(levelId)}",
+-                    color = KalynoMuted,
+-                    fontSize = 13.sp
+-                )
+-            }
+-            StreakBadge(count = state.streak)
+-        }
++        DojoHeader(
++            levelLabel = Levels.label(levelId),
++            streak = state.streak,
++            modifier = Modifier.entrance(0)
++        )
+ 
+         when {
+             state.loading && state.mission == null && state.urgentTotal == 0 -> DojoSkeleton()
+@@ -109,20 +102,19 @@ fun DojoScreen(
+             )
+ 
+             else -> {
+-                Box(Modifier.entrance(1)) {
+-                    UrgentHero(state = state, onReview = onReviewUrgent)
+-                }
++                Box(Modifier.entrance(1)) { DojoHero(state = state, onReview = onReviewUrgent) }
+                 Box(Modifier.entrance(2)) {
+-                    DojoSectionLabel(step = 1, text = "MISSION DU JOUR")
++                    DojoStats(
++                        streak = state.streak,
++                        mastered = state.masteredCount,
++                        retention = state.retentionScore
++                    )
+                 }
+                 Box(Modifier.entrance(3)) {
+                     MissionBlock(state = state, onStart = onStartMission, onReview = onReviewUrgent)
+                 }
+                 if (state.freeTotal > 0) {
+                     Box(Modifier.entrance(4)) {
+-                        DojoSectionLabel(step = 2, text = "EXERCICES LIBRES")
+-                    }
+-                    Box(Modifier.entrance(5)) {
+                         FreeExercisesBlock(state = state, onStart = onStartFreeExercises)
+                     }
+                 }
+@@ -131,13 +123,62 @@ fun DojoScreen(
+     }
+ }
+ 
++// ---------------------------------------------------------------------------
++// En-tête
+ // ---------------------------------------------------------------------------
+ 
+ @Composable
+-private fun UrgentHero(state: DashboardUiState, onReview: () -> Unit) {
+-    val shape = RoundedCornerShape(24.dp)
++private fun DojoHeader(levelLabel: String, streak: Int, modifier: Modifier = Modifier) {
++    // Le cerveau respire doucement : le Dojo est « vivant »
++    val breath = rememberPulse(min = 1f, max = 1.08f, durationMillis = 1500)
++    Row(
++        modifier = modifier.fillMaxWidth(),
++        verticalAlignment = Alignment.CenterVertically
++    ) {
++        Box(
++            modifier = Modifier
++                .graphicsLayer {
++                    scaleX = breath
++                    scaleY = breath
++                }
++                .size(46.dp)
++                .clip(RoundedCornerShape(15.dp))
++                .background(Brush.linearGradient(listOf(KalynoBlue, KalynoTealDark))),
++            contentAlignment = Alignment.Center
++        ) {
++            KalynoSvgIcon(name = "brain", size = 26.dp, tint = Color.White)
++        }
++        Spacer(Modifier.width(12.dp))
++        Column(modifier = Modifier.weight(1f)) {
++            Text(
++                text = "Le Dojo",
++                color = KalynoText,
++                fontSize = 26.sp,
++                lineHeight = 30.sp,
++                fontWeight = FontWeight.ExtraBold
++            )
++            Text(
++                text = "Répétition espacée · $levelLabel",
++                color = KalynoMuted,
++                fontSize = 13.sp,
++                maxLines = 1,
++                overflow = TextOverflow.Ellipsis
++            )
++        }
++        Spacer(Modifier.width(8.dp))
++        StreakBadge(count = streak)
++    }
++}
++
++// ---------------------------------------------------------------------------
++// Héros : les notions à sauver (ou la mémoire au beau fixe)
++// ---------------------------------------------------------------------------
++
++@Composable
++private fun DojoHero(state: DashboardUiState, onReview: () -> Unit) {
++    val shape = RoundedCornerShape(28.dp)
+     val urgent = state.urgentTotal > 0
+-    val shownUrgent = rememberCountUp(state.urgentTotal, durationMillis = 900)
++    val shownUrgent = rememberCountUp(state.urgentTotal, durationMillis = 1000)
+ 
+     Box(
+         modifier = Modifier
+@@ -145,104 +186,361 @@ private fun UrgentHero(state: DashboardUiState, onReview: () -> Unit) {
+             .clip(shape)
+             .background(Brush.linearGradient(listOf(KalynoBlue, KalynoTealDark)))
+     ) {
+-    DriftingBlob(
+-        modifier = Modifier
+-            .align(Alignment.TopEnd)
+-            .offset(x = 50.dp, y = (-50).dp)
+-            .size(170.dp)
+-    )
+-    Column(modifier = Modifier.padding(22.dp)) {
+-        KalynoPill(
+-            text = "🧠 ACTIVE RECALL",
+-            container = Color.White.copy(alpha = 0.18f),
+-            content = Color.White
++        DriftingBlob(
++            modifier = Modifier
++                .align(Alignment.TopEnd)
++                .offset(x = 56.dp, y = (-56).dp)
++                .size(190.dp)
+         )
+-        Spacer(Modifier.height(14.dp))
+-        Text(
+-            text = when {
+-                urgent && state.urgentTotal == 1 -> "1 notion à sauver"
+-                urgent -> "$shownUrgent notions à sauver"
+-                state.loading -> "Analyse de tes révisions…"
+-                else -> "Tout est à jour 🎉"
+-            },
+-            color = Color.White,
+-            fontSize = 26.sp,
+-            lineHeight = 32.sp,
+-            fontWeight = FontWeight.ExtraBold
+-        )
+-        Spacer(Modifier.height(6.dp))
+-        Text(
+-            text = if (urgent) {
+-                "Révise-les maintenant : chaque rappel actif ancre la notion plus longtemps."
+-            } else {
+-                "Rien d'urgent. Lance ta mission du jour pour découvrir de nouvelles cartes."
+-            },
+-            color = Color.White.copy(alpha = 0.88f),
+-            fontSize = 14.sp,
+-            lineHeight = 20.sp
++        DriftingBlob(
++            modifier = Modifier
++                .align(Alignment.BottomStart)
++                .offset(x = (-40).dp, y = 46.dp)
++                .size(130.dp),
++            color = Color.White.copy(alpha = 0.06f),
++            durationMillis = 6400
+         )
+ 
+-        if (state.urgentTopics.isNotEmpty()) {
+-            Spacer(Modifier.height(14.dp))
+-            state.urgentTopics.forEach { topic ->
+-                Row(
+-                    modifier = Modifier
+-                        .fillMaxWidth()
+-                        .padding(vertical = 3.dp),
+-                    verticalAlignment = Alignment.CenterVertically
+-                ) {
++        Column(modifier = Modifier.padding(22.dp)) {
++            Row(verticalAlignment = Alignment.CenterVertically) {
++                KalynoPill(
++                    text = "ACTIVE RECALL",
++                    container = Color.White.copy(alpha = 0.18f),
++                    content = Color.White,
++                    fontSize = 11
++                )
++                if (urgent) {
++                    Spacer(Modifier.width(8.dp))
++                    UrgentDot()
++                }
++            }
++            Spacer(Modifier.height(16.dp))
++
++            if (urgent) {
++                Row(verticalAlignment = Alignment.Bottom) {
+                     Text(
+-                        text = topic.label,
++                        text = shownUrgent.toString(),
+                         color = Color.White,
+-                        fontSize = 14.sp,
+-                        fontWeight = FontWeight.Medium,
+-                        modifier = Modifier.weight(1f)
+-                    )
+-                    Text(
+-                        text = "×${topic.count}",
+-                        color = KalynoAmberSoft,
+-                        fontSize = 14.sp,
++                        fontSize = 64.sp,
++                        lineHeight = 64.sp,
+                         fontWeight = FontWeight.ExtraBold
+                     )
++                    Spacer(Modifier.width(12.dp))
++                    Column(modifier = Modifier.padding(bottom = 8.dp)) {
++                        Text(
++                            text = if (state.urgentTotal == 1) "notion" else "notions",
++                            color = Color.White,
++                            fontSize = 22.sp,
++                            lineHeight = 24.sp,
++                            fontWeight = FontWeight.ExtraBold
++                        )
++                        Text(
++                            text = "à sauver",
++                            color = KalynoAmberSoft,
++                            fontSize = 15.sp,
++                            fontWeight = FontWeight.Bold
++                        )
++                    }
++                }
++                Spacer(Modifier.height(8.dp))
++                Text(
++                    text = "Révise-les maintenant : chaque rappel actif ancre la notion plus longtemps.",
++                    color = Color.White.copy(alpha = 0.88f),
++                    fontSize = 14.sp,
++                    lineHeight = 20.sp
++                )
++
++                val topics = state.urgentTopics.take(4)
++                if (topics.isNotEmpty()) {
++                    val maxCount = topics.maxOf { it.count }.coerceAtLeast(1)
++                    Spacer(Modifier.height(12.dp))
++                    topics.forEachIndexed { index, topic ->
++                        TopicRow(
++                            label = topic.label,
++                            count = topic.count,
++                            fraction = topic.count.toFloat() / maxCount,
++                            index = index
++                        )
++                    }
+                 }
++
++                Spacer(Modifier.height(18.dp))
++                KalynoPrimaryButton(
++                    label = "RÉVISER MAINTENANT",
++                    onClick = onReview,
++                    container = Color.White,
++                    content = KalynoBlue,
++                    modifier = Modifier
++                        .fillMaxWidth()
++                        .clip(RoundedCornerShape(16.dp))
++                        .shineSweep(color = KalynoBlue.copy(alpha = 0.16f))
++                )
++            } else {
++                CalmHero(loading = state.loading, retention = state.retentionScore)
+             }
+         }
++    }
++}
+ 
+-        if (urgent) {
+-            Spacer(Modifier.height(18.dp))
+-            KalynoPrimaryButton(
+-                label = "RÉVISER MAINTENANT",
+-                onClick = onReview,
+-                container = Color.White,
+-                content = KalynoBlue
++/** Petit point ambré qui pulse : « ça demande ton attention », sans agresser. */
++@Composable
++private fun UrgentDot() {
++    val pulse = rememberPulse(min = 0.6f, max = 1.25f, durationMillis = 800)
++    Row(
++        verticalAlignment = Alignment.CenterVertically,
++        modifier = Modifier
++            .clip(CircleShape)
++            .background(Color.White.copy(alpha = 0.14f))
++            .padding(horizontal = 10.dp, vertical = 6.dp)
++    ) {
++        Box(
++            modifier = Modifier
++                .graphicsLayer {
++                    scaleX = pulse
++                    scaleY = pulse
++                }
++                .size(8.dp)
++                .clip(CircleShape)
++                .background(KalynoYellow)
++        )
++        Spacer(Modifier.width(6.dp))
++        Text(
++            text = "URGENT",
++            color = KalynoAmberSoft,
++            fontSize = 11.sp,
++            fontWeight = FontWeight.ExtraBold,
++            letterSpacing = 0.6.sp
++        )
++    }
++}
++
++@Composable
++private fun TopicRow(label: String, count: Int, fraction: Float, index: Int) {
++    val fill = remember { Animatable(0f) }
++    LaunchedEffect(fraction) {
++        fill.animateTo(
++            targetValue = fraction.coerceIn(0f, 1f),
++            animationSpec = tween(800, delayMillis = 300 + index * 90, easing = FastOutSlowInEasing)
++        )
++    }
++    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp)) {
++        Row(verticalAlignment = Alignment.CenterVertically) {
++            Text(
++                text = label,
++                color = Color.White,
++                fontSize = 14.sp,
++                fontWeight = FontWeight.Medium,
++                maxLines = 1,
++                overflow = TextOverflow.Ellipsis,
++                modifier = Modifier.weight(1f)
++            )
++            Spacer(Modifier.width(8.dp))
++            Text(
++                text = "×$count",
++                color = KalynoAmberSoft,
++                fontSize = 14.sp,
++                fontWeight = FontWeight.ExtraBold
++            )
++        }
++        Spacer(Modifier.height(5.dp))
++        Box(
++            modifier = Modifier
++                .fillMaxWidth()
++                .height(5.dp)
++                .clip(CircleShape)
++                .background(Color.White.copy(alpha = 0.18f))
++        ) {
++            Box(
++                modifier = Modifier
++                    .fillMaxWidth(fill.value)
++                    .height(5.dp)
++                    .clip(CircleShape)
++                    .background(KalynoAmberSoft)
+             )
+         }
+     }
++}
++
++/** Rien d'urgent : l'anneau montre la rétention réelle (ou une coche tant qu'elle n'est pas calculée). */
++@Composable
++private fun CalmHero(loading: Boolean, retention: Float?) {
++    val percent = retention?.let { (it * 100).roundToInt().coerceIn(0, 100) }
++    Row(verticalAlignment = Alignment.CenterVertically) {
++        KalynoRing(
++            progress = retention ?: 1f,
++            diameter = 96.dp,
++            strokeWidth = 10.dp,
++            color = Color.White,
++            track = Color.White.copy(alpha = 0.22f)
++        ) {
++            if (percent != null) {
++                Text(
++                    text = "$percent%",
++                    color = Color.White,
++                    fontSize = 22.sp,
++                    fontWeight = FontWeight.ExtraBold
++                )
++            } else {
++                KalynoSvgIcon(name = "check-circle", size = 34.dp, tint = Color.White)
++            }
++        }
++        Spacer(Modifier.width(16.dp))
++        Column(modifier = Modifier.weight(1f)) {
++            Text(
++                text = if (loading) "Analyse de tes révisions…" else "Tout est à jour",
++                color = Color.White,
++                fontSize = 24.sp,
++                lineHeight = 28.sp,
++                fontWeight = FontWeight.ExtraBold
++            )
++            Spacer(Modifier.height(4.dp))
++            Text(
++                text = if (percent != null) {
++                    "Voici la rétention actuelle de ta mémoire. Lance ta mission du jour pour la nourrir."
++                } else {
++                    "Rien d'urgent. Lance ta mission du jour pour découvrir de nouvelles cartes."
++                },
++                color = Color.White.copy(alpha = 0.88f),
++                fontSize = 14.sp,
++                lineHeight = 20.sp
++            )
++        }
++    }
++}
++
++// ---------------------------------------------------------------------------
++// Bandeau de statistiques réelles
++// ---------------------------------------------------------------------------
++
++@Composable
++private fun DojoStats(streak: Int, mastered: Int?, retention: Float?) {
++    val shownStreak = rememberCountUp(streak, durationMillis = 900)
++    val shownMastered = rememberCountUp(mastered ?: 0, durationMillis = 900)
++    val retentionPercent = retention?.let { (it * 100).roundToInt().coerceIn(0, 100) }
++    val shownRetention = rememberCountUp(retentionPercent ?: 0, durationMillis = 900)
++
++    KalynoCard(modifier = Modifier.fillMaxWidth(), contentPadding = 14.dp) {
++        Row(
++            modifier = Modifier.fillMaxWidth(),
++            verticalAlignment = Alignment.CenterVertically
++        ) {
++            StatCell(
++                icon = "flame",
++                tint = KalynoAmberDeep,
++                container = KalynoAmberSoft,
++                value = shownStreak.toString(),
++                label = if (streak <= 1) "jour de série" else "jours de série",
++                modifier = Modifier.weight(1f)
++            )
++            StatDivider()
++            StatCell(
++                icon = "trophy",
++                tint = KalynoBlue,
++                container = KalynoBlueSoft,
++                value = if (mastered != null) shownMastered.toString() else "—",
++                label = "maîtrisées",
++                modifier = Modifier.weight(1f)
++            )
++            StatDivider()
++            StatCell(
++                icon = "brain",
++                tint = KalynoCorrectText,
++                container = KalynoCorrectSoft,
++                value = if (retentionPercent != null) "$shownRetention%" else "—",
++                label = "rétention",
++                modifier = Modifier.weight(1f)
++            )
++        }
+     }
+ }
+ 
+-/**
+- * Métadonnées propres à L'EXERCICE (pas à la leçon dont il est issu) : nombre de cartes
+- * et durée estimée de résolution. [difficultyLevel] n'existe pas encore côté admin —
+- * cette carte est prête à l'afficher dès qu'il sera publié, mais ne l'invente pas.
+- */
+ @Composable
+-private fun DojoSectionLabel(step: Int, text: String) {
+-    Text(
+-        text = "$step. $text",
+-        color = KalynoMuted,
+-        fontSize = 12.sp,
+-        fontWeight = FontWeight.Bold
++private fun StatCell(
++    icon: String,
++    tint: Color,
++    container: Color,
++    value: String,
++    label: String,
++    modifier: Modifier = Modifier
++) {
++    Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
++        Box(
++            modifier = Modifier
++                .size(34.dp)
++                .clip(RoundedCornerShape(11.dp))
++                .background(container),
++            contentAlignment = Alignment.Center
++        ) {
++            KalynoSvgIcon(name = icon, size = 18.dp, tint = tint)
++        }
++        Spacer(Modifier.height(6.dp))
++        Text(
++            text = value,
++            color = KalynoText,
++            fontSize = 20.sp,
++            lineHeight = 22.sp,
++            fontWeight = FontWeight.ExtraBold,
++            maxLines = 1
++        )
++        Text(
++            text = label,
++            color = KalynoMuted,
++            fontSize = 11.sp,
++            fontWeight = FontWeight.Medium,
++            maxLines = 1
++        )
++    }
++}
++
++@Composable
++private fun StatDivider() {
++    Box(
++        modifier = Modifier
++            .width(1.dp)
++            .height(48.dp)
++            .background(KalynoOutline)
+     )
+ }
+ 
++// ---------------------------------------------------------------------------
++// Sections
++// ---------------------------------------------------------------------------
++
+ @Composable
+-private fun ExerciseHeaderStats(questionCount: Int, estimatedMinutes: Int?) {
++private fun SectionTitle(icon: String, title: String, subtitle: String? = null) {
++    Row(verticalAlignment = Alignment.CenterVertically) {
++        Box(
++            modifier = Modifier
++                .size(38.dp)
++                .clip(RoundedCornerShape(12.dp))
++                .background(KalynoBlueSoft),
++            contentAlignment = Alignment.Center
++        ) {
++            KalynoSvgIcon(name = icon, size = 20.dp, tint = KalynoBlue)
++        }
++        Spacer(Modifier.width(12.dp))
++        Column {
++            Text(
++                text = title,
++                color = KalynoText,
++                fontSize = 18.sp,
++                lineHeight = 22.sp,
++                fontWeight = FontWeight.ExtraBold
++            )
++            if (subtitle != null) {
++                Text(text = subtitle, color = KalynoMuted, fontSize = 12.sp)
++            }
++        }
++    }
++}
++
++@Composable
++private fun MetaLine(questionCount: Int, estimatedMinutes: Int?) {
+     Row(verticalAlignment = Alignment.CenterVertically) {
+         KalynoSvgIcon(name = "layers", size = 15.dp, tint = KalynoMuted)
+         Spacer(Modifier.width(6.dp))
+         Text(
+-            text = if (questionCount == 1) "1 carte à découvrir" else "$questionCount cartes à découvrir",
++            text = if (questionCount == 1) "1 carte" else "$questionCount cartes",
+             color = KalynoMuted,
+             fontSize = 13.sp,
+             fontWeight = FontWeight.Medium
+@@ -269,91 +567,120 @@ private fun MissionBlock(
+ ) {
+     val mission = state.mission
+ 
+-    KalynoCard(modifier = Modifier.fillMaxWidth()) {
+-        Row(verticalAlignment = Alignment.CenterVertically) {
+-            KalynoSvgIcon(name = "target", size = 18.dp, tint = KalynoBlue)
+-            Spacer(Modifier.width(8.dp))
+-            SectionHeader(title = "Mission du jour")
++    when {
++        // Retard : carte ambrée, douce, jamais punitive
++        state.missionStatus == MissionStatus.BACKLOG -> KalynoCard(
++            modifier = Modifier.fillMaxWidth(),
++            background = KalynoAmberSoft,
++            borderColor = KalynoYellow.copy(alpha = 0.45f)
++        ) {
++            SectionTitle(icon = "target", title = "Mission du jour")
++            Spacer(Modifier.height(12.dp))
++            Text(
++                text = "Tes révisions en retard d'abord ! Tes nouvelles cartes se débloquent dès que tu les as rattrapées.",
++                color = KalynoAmberDeep,
++                fontSize = 15.sp,
++                lineHeight = 22.sp,
++                fontWeight = FontWeight.Medium
++            )
++            if (state.urgentTotal > 0) {
++                Spacer(Modifier.height(14.dp))
++                KalynoPrimaryButton(label = "VOIR MES RÉVISIONS", onClick = onReview)
++            }
+         }
+-        Spacer(Modifier.height(12.dp))
+ 
+-        when {
+-            state.missionStatus == MissionStatus.BACKLOG -> {
+-                Text(
+-                    text = "Tes révisions en retard d'abord ! Tes nouvelles cartes se débloquent dès que tu les as rattrapées.",
+-                    color = KalynoText,
+-                    fontSize = 15.sp,
+-                    lineHeight = 22.sp
+-                )
+-                if (state.urgentTotal > 0) {
+-                    Spacer(Modifier.height(14.dp))
+-                    KalynoPrimaryButton(label = "VOIR MES RÉVISIONS", onClick = onReview)
++        mission != null && mission.items.isNotEmpty() -> KalynoCard(modifier = Modifier.fillMaxWidth()) {
++            SectionTitle(icon = "target", title = "Mission du jour", subtitle = "Découvre de nouvelles cartes")
++            Spacer(Modifier.height(16.dp))
++            Row(verticalAlignment = Alignment.CenterVertically) {
++                KalynoRing(
++                    progress = mission.progress,
++                    diameter = 84.dp,
++                    strokeWidth = 9.dp
++                ) {
++                    Text(
++                        text = "${mission.doneToday}/${mission.targetToday}",
++                        color = KalynoBlue,
++                        fontSize = 17.sp,
++                        fontWeight = FontWeight.ExtraBold
++                    )
+                 }
+-            }
+-
+-            mission != null && mission.items.isNotEmpty() -> {
+-                if (mission.subjectName.isNotBlank()) {
+-                    KalynoPill(text = "${mission.subjectEmoji} ${mission.subjectName}".trim())
+-                    Spacer(Modifier.height(10.dp))
++                Spacer(Modifier.width(16.dp))
++                Column(modifier = Modifier.weight(1f)) {
++                    if (mission.subjectName.isNotBlank()) {
++                        KalynoPill(
++                            text = "${mission.subjectEmoji} ${mission.subjectName}".trim(),
++                            fontSize = 11
++                        )
++                        Spacer(Modifier.height(8.dp))
++                    }
++                    Text(
++                        text = mission.chapterTitle,
++                        color = KalynoText,
++                        fontSize = 18.sp,
++                        lineHeight = 23.sp,
++                        fontWeight = FontWeight.ExtraBold,
++                        maxLines = 3,
++                        overflow = TextOverflow.Ellipsis
++                    )
++                    Spacer(Modifier.height(8.dp))
++                    MetaLine(
++                        questionCount = mission.questionCount,
++                        estimatedMinutes = mission.estimatedMinutes
++                    )
+                 }
+-                Text(
+-                    text = mission.chapterTitle,
+-                    color = KalynoText,
+-                    fontSize = 20.sp,
+-                    lineHeight = 26.sp,
+-                    fontWeight = FontWeight.ExtraBold
+-                )
+-                Spacer(Modifier.height(10.dp))
+-                ExerciseHeaderStats(
+-                    questionCount = mission.questionCount,
+-                    estimatedMinutes = mission.estimatedMinutes
+-                )
+-                Spacer(Modifier.height(14.dp))
+-                KalynoProgressBar(progress = mission.progress)
+-                Spacer(Modifier.height(6.dp))
+-                Text(
+-                    text = "${mission.doneToday}/${mission.targetToday} cartes découvertes aujourd'hui",
+-                    color = KalynoMuted,
+-                    fontSize = 12.sp
+-                )
+-                Spacer(Modifier.height(16.dp))
+-                KalynoPrimaryButton(label = "DÉMARRER MA MISSION", onClick = onStart)
+             }
++            Spacer(Modifier.height(10.dp))
++            Text(
++                text = "${mission.doneToday}/${mission.targetToday} cartes découvertes aujourd'hui",
++                color = KalynoMuted,
++                fontSize = 12.sp
++            )
++            Spacer(Modifier.height(14.dp))
++            KalynoPrimaryButton(
++                label = "DÉMARRER MA MISSION",
++                onClick = onStart,
++                modifier = Modifier
++                    .fillMaxWidth()
++                    .clip(RoundedCornerShape(16.dp))
++                    .shineSweep()
++            )
++        }
+ 
+-            state.missionStatus == MissionStatus.DONE_TODAY -> {
+-                Row(verticalAlignment = Alignment.CenterVertically) {
+-                    KalynoRing(
+-                        progress = 1f,
+-                        diameter = 64.dp,
+-                        strokeWidth = 7.dp,
+-                        color = KalynoCorrect,
+-                        track = KalynoCorrectSoft
+-                    ) {
+-                        KalynoSvgIcon(name = "check-circle", size = 26.dp, tint = KalynoCorrectText)
+-                    }
+-                    Spacer(Modifier.width(14.dp))
+-                    Column(modifier = Modifier.weight(1f)) {
+-                        Text(
+-                            text = "Mission accomplie !",
+-                            color = KalynoText,
+-                            fontSize = 20.sp,
+-                            fontWeight = FontWeight.ExtraBold
+-                        )
+-                        Spacer(Modifier.height(4.dp))
+-                        Text(
+-                            text = "Reviens demain pour de nouvelles cartes.",
+-                            color = KalynoMuted,
+-                            fontSize = 14.sp
+-                        )
+-                    }
++        state.missionStatus == MissionStatus.DONE_TODAY -> KalynoCard(modifier = Modifier.fillMaxWidth()) {
++            Row(verticalAlignment = Alignment.CenterVertically) {
++                KalynoRing(
++                    progress = 1f,
++                    diameter = 72.dp,
++                    strokeWidth = 8.dp,
++                    color = KalynoCorrect,
++                    track = KalynoCorrectSoft
++                ) {
++                    KalynoSvgIcon(name = "check-circle", size = 30.dp, tint = KalynoCorrectText)
+                 }
+-                if (mission != null) {
+-                    Spacer(Modifier.height(14.dp))
+-                    KalynoProgressBar(progress = mission.progress)
++                Spacer(Modifier.width(16.dp))
++                Column(modifier = Modifier.weight(1f)) {
++                    Text(
++                        text = "Mission accomplie !",
++                        color = KalynoText,
++                        fontSize = 20.sp,
++                        fontWeight = FontWeight.ExtraBold
++                    )
++                    Spacer(Modifier.height(4.dp))
++                    Text(
++                        text = "Reviens demain pour de nouvelles cartes.",
++                        color = KalynoMuted,
++                        fontSize = 14.sp,
++                        lineHeight = 20.sp
++                    )
+                 }
+             }
++        }
+ 
+-            else -> Text(
++        else -> KalynoCard(modifier = Modifier.fillMaxWidth()) {
++            SectionTitle(icon = "target", title = "Mission du jour")
++            Spacer(Modifier.height(12.dp))
++            Text(
+                 text = "Pas de mission pour l'instant. Termine une leçon dans Explorer (bouton « Terminer ») pour débloquer ses exercices.",
+                 color = KalynoMuted,
+                 fontSize = 14.sp,
+@@ -363,39 +690,53 @@ private fun MissionBlock(
+     }
+ }
+ 
+-/** Exercices libres : une banque d'entrainement qui ne depend d'aucune lecon. */
++/** Exercices libres : une banque d'entraînement qui ne dépend d'aucune leçon. */
+ @Composable
+ private fun FreeExercisesBlock(state: DashboardUiState, onStart: () -> Unit) {
+     KalynoCard(modifier = Modifier.fillMaxWidth()) {
+-        Row(verticalAlignment = Alignment.CenterVertically) {
+-            KalynoSvgIcon(name = "dumbbell", size = 18.dp, tint = KalynoBlue)
+-            Spacer(Modifier.width(8.dp))
+-            SectionHeader(title = "Exercices libres")
+-        }
+-        Spacer(Modifier.height(10.dp))
++        SectionTitle(
++            icon = "dumbbell",
++            title = "Exercices libres",
++            subtitle = "Sans passer par une leçon"
++        )
++        Spacer(Modifier.height(12.dp))
+         Text(
+-            text = "Entraîne-toi quand tu veux, sans passer par une leçon.",
++            text = "Entraîne-toi quand tu veux, à ton rythme.",
+             color = KalynoText,
+             fontSize = 15.sp,
+             lineHeight = 22.sp
+         )
+         Spacer(Modifier.height(6.dp))
+-        Text(
+-            text = if (state.freeNew > 0) "${state.freeTotal} exercice(s), dont ${state.freeNew} à découvrir"
+-            else "${state.freeTotal} exercice(s) à refaire quand tu veux",
+-            color = KalynoMuted,
+-            fontSize = 12.sp
+-        )
++        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
++            KalynoPill(
++                text = if (state.freeTotal == 1) "1 exercice" else "${state.freeTotal} exercices",
++                fontSize = 11
++            )
++            if (state.freeNew > 0) {
++                KalynoPill(
++                    text = if (state.freeNew == 1) "1 à découvrir" else "${state.freeNew} à découvrir",
++                    container = KalynoAmberSoft,
++                    content = KalynoAmberDeep,
++                    fontSize = 11
++                )
++            }
++        }
+         Spacer(Modifier.height(14.dp))
+-        KalynoPrimaryButton(label = "M'ENTRAÎNER", onClick = onStart)
++        // Action secondaire : la mission du jour reste le bouton principal de l'écran
++        KalynoPrimaryButton(
++            label = "M'ENTRAÎNER",
++            onClick = onStart,
++            container = KalynoBlueSoft,
++            content = KalynoBlue
++        )
+     }
+ }
+ 
+ @Composable
+ private fun DojoSkeleton() {
+     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+-        ShimmerBlock(Modifier.fillMaxWidth().height(190.dp), RoundedCornerShape(24.dp))
+-        ShimmerBlock(Modifier.fillMaxWidth().height(170.dp), RoundedCornerShape(24.dp))
+-        ShimmerBlock(Modifier.fillMaxWidth().height(60.dp), RoundedCornerShape(16.dp))
++        ShimmerBlock(Modifier.fillMaxWidth().height(230.dp), RoundedCornerShape(28.dp))
++        ShimmerBlock(Modifier.fillMaxWidth().height(96.dp), RoundedCornerShape(24.dp))
++        ShimmerBlock(Modifier.fillMaxWidth().height(200.dp), RoundedCornerShape(24.dp))
+     }
+ }
+diff --git a/app/src/main/java/ci/kalyno/app/ui/dojo/DojoSessionScreen.kt b/app/src/main/java/ci/kalyno/app/ui/dojo/DojoSessionScreen.kt
+index c919636..c3df1cc 100644
+--- a/app/src/main/java/ci/kalyno/app/ui/dojo/DojoSessionScreen.kt
++++ b/app/src/main/java/ci/kalyno/app/ui/dojo/DojoSessionScreen.kt
+@@ -81,6 +81,7 @@ import ci.kalyno.app.ui.components.KalynoCelebration
+ import ci.kalyno.app.ui.components.KalynoPrimaryButton
+ import ci.kalyno.app.ui.components.StreakBadge
+ import ci.kalyno.app.ui.components.rememberHaptic
++import ci.kalyno.app.ui.components.shineSweep
+ import ci.kalyno.app.ui.quiz.FeedbackTone
+ import ci.kalyno.app.data.dojo.FeynmanParser
+ import ci.kalyno.app.ui.quiz.KalynoChoiceCard
+@@ -246,16 +247,17 @@ private fun TopBar(
+         Box(
+             modifier = Modifier
+                 .fillMaxWidth()
+-                .height(4.dp)
++                .height(8.dp)
+                 .clip(CircleShape)
+                 .background(KalynoBlueSoft)
+         ) {
+             Box(
+                 modifier = Modifier
+                     .fillMaxWidth(progress)
+-                    .height(4.dp)
++                    .height(8.dp)
+                     .clip(CircleShape)
+                     .background(KalynoBlue)
++                    .shineSweep(periodMillis = 3000)
+             )
+         }
+ 

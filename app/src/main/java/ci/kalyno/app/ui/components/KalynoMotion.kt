@@ -5,6 +5,7 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.keyframes
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
@@ -23,8 +24,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -186,4 +189,44 @@ fun DriftingBlob(
             .clip(CircleShape)
             .background(color)
     )
+}
+
+/**
+ * Reflet lumineux qui balaie le composant à intervalles réguliers (bouton principal, barre de progression).
+ * À placer APRÈS le clip de la forme, pour que le reflet épouse les coins arrondis.
+ */
+fun Modifier.shineSweep(
+    periodMillis: Int = 3400,
+    sweepMillis: Int = 850,
+    color: Color = Color.White.copy(alpha = 0.38f)
+): Modifier = composed {
+    val transition = rememberInfiniteTransition(label = "shine")
+    val t by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = keyframes<Float> {
+                durationMillis = periodMillis
+                0f at 0 using FastOutSlowInEasing
+                1f at sweepMillis
+                1f at periodMillis
+            },
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "shineT"
+    )
+    drawWithContent {
+        drawContent()
+        if (t > 0f && t < 1f) {
+            val band = size.width * 0.4f
+            val x = -band + (size.width + band * 2f) * t
+            drawRect(
+                brush = Brush.linearGradient(
+                    colors = listOf(Color.Transparent, color, Color.Transparent),
+                    start = Offset(x - band / 2f, 0f),
+                    end = Offset(x + band / 2f, size.height)
+                )
+            )
+        }
+    }
 }

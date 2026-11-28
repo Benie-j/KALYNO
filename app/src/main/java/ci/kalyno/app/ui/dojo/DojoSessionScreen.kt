@@ -81,6 +81,7 @@ import ci.kalyno.app.ui.components.KalynoCelebration
 import ci.kalyno.app.ui.components.KalynoPrimaryButton
 import ci.kalyno.app.ui.components.StreakBadge
 import ci.kalyno.app.ui.components.rememberHaptic
+import ci.kalyno.app.ui.components.shineSweep
 import ci.kalyno.app.ui.quiz.FeedbackTone
 import ci.kalyno.app.data.dojo.FeynmanParser
 import ci.kalyno.app.ui.quiz.KalynoChoiceCard
@@ -246,16 +247,17 @@ private fun TopBar(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(4.dp)
+                .height(8.dp)
                 .clip(CircleShape)
                 .background(KalynoBlueSoft)
         ) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth(progress)
-                    .height(4.dp)
+                    .height(8.dp)
                     .clip(CircleShape)
                     .background(KalynoBlue)
+                    .shineSweep(periodMillis = 3000)
             )
         }
 
